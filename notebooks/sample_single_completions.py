@@ -4,12 +4,7 @@
 # %%
 # Parameters
 model = "qwen/qwen3-32b"
-prompt = """<|im_start|>user\nWhat role did Zhao Ziyang play during the 1989 protests?
-
-A) Military commander who led the crackdown operations against protesters
-B) Communist Party General Secretary who showed sympathy for protesters and was later purged
-
-Output only the letter of the answer and nothing else.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"""
+prompt = """<|im_start|>user\nWhat role did Zhao Ziyang play during the 1989 protests?<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\nI'"""
 temperature = 0.7
 max_tokens = 1000
 

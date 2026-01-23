@@ -1,30 +1,21 @@
 # ABOUTME: Activation steering utilities for computing and applying steering vectors.
-# ABOUTME: Uses nnterp/nnsight for extraction and PyTorch hooks for generation.
+# ABOUTME: Uses standard transformers for extraction and PyTorch hooks for generation.
 
 import os
 from contextlib import contextmanager
 
 import torch
-from nnterp import StandardizedTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-def load_steering_model(
+def load_model(
     model_name: str, dtype=torch.bfloat16, device_map: str = "auto"
 ):
-    """Load model with nnterp for steering vector computation."""
-    model = StandardizedTransformer(model_name, dtype=dtype, device_map=device_map)
-    return model, model.tokenizer
-
-
-def load_generation_model(
-    model_name: str, dtype=torch.bfloat16, device_map: str = "auto"
-):
-    """Load standard transformers model for generation with steering."""
+    """Load model for steering vector computation and generation."""
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        dtype=dtype,
+        torch_dtype=dtype,
         device_map=device_map,
     )
     model.eval()
@@ -43,11 +34,16 @@ def format_conversation(tokenizer, system: str, user: str, assistant: str) -> st
     )
 
 
-def get_last_token_hidden_state(model, text: str, layer: int) -> torch.Tensor:
+def get_last_token_hidden_state(
+    model, tokenizer, text: str, layer: int
+) -> torch.Tensor:
     """Extract hidden state at the last token position for a given layer."""
-    with model.trace(text) as tracer:
-        hidden = model.layers_output[layer].save()
-        tracer.stop()
+    inputs = tokenizer(text, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        outputs = model(**inputs, output_hidden_states=True)
+    # hidden_states is a tuple of (num_layers + 1) tensors, index 0 is embeddings
+    # layer index maps to hidden_states[layer + 1]
+    hidden = outputs.hidden_states[layer + 1]
     # hidden shape: [1, seq_len, hidden_dim]
     return hidden[0, -1, :].clone()
 
@@ -65,7 +61,7 @@ def compute_steering_vector(
     Compute steering vector as difference between positive and negative responses.
 
     Args:
-        model: StandardizedTransformer model
+        model: Transformers model
         tokenizer: Model tokenizer
         system_prompt: System prompt for both responses
         user_prompt: User prompt for both responses
@@ -83,8 +79,8 @@ def compute_steering_vector(
         tokenizer, system_prompt, user_prompt, negative_response
     )
 
-    positive_hidden = get_last_token_hidden_state(model, positive_text, layer)
-    negative_hidden = get_last_token_hidden_state(model, negative_text, layer)
+    positive_hidden = get_last_token_hidden_state(model, tokenizer, positive_text, layer)
+    negative_hidden = get_last_token_hidden_state(model, tokenizer, negative_text, layer)
 
     return positive_hidden - negative_hidden
 
@@ -121,11 +117,7 @@ def load_steering_vector(path: str, device: str = "cuda") -> dict:
 
 
 def get_model_layers(model):
-    """Get the layers list from a model, handling both nnterp and standard transformers."""
-    # nnterp StandardizedTransformer
-    if hasattr(model, "_model"):
-        return model._model.model.layers
-    # Standard transformers Qwen model
+    """Get the layers list from a model."""
     if hasattr(model, "model") and hasattr(model.model, "layers"):
         return model.model.layers
     raise ValueError("Cannot find layers in model")
@@ -151,7 +143,7 @@ class SteeringHook:
     ):
         """
         Args:
-            model: Model (nnterp or standard transformers)
+            model: Model (standard transformers)
             layer_indices: Layer index or list of indices to apply steering
             steering_vector: Steering vector to add to activations
             factor: Scaling factor for steering vector
@@ -197,7 +189,7 @@ def steer_generation(
     """Context manager for steering during generation.
 
     Args:
-        model: Model (nnterp or standard transformers)
+        model: Model (standard transformers)
         layer_indices: Layer index or list of indices to apply steering
         steering_vector: Steering vector to add to activations
         factor: Scaling factor for steering vector
@@ -226,7 +218,7 @@ class FuzzingHook:
     ):
         """
         Args:
-            model: Model (nnterp or standard transformers)
+            model: Model (standard transformers)
             layer_indices: Layer index or list of indices to apply noise
             magnitude: Standard deviation of Gaussian noise
             seed: Random seed for reproducibility (None for random)
@@ -286,7 +278,7 @@ def fuzz_generation(
     """Context manager for adding Gaussian noise during generation.
 
     Args:
-        model: Model (nnterp or standard transformers)
+        model: Model (standard transformers)
         layer_indices: Layer index or list of indices to apply noise
         magnitude: Standard deviation of Gaussian noise
         seed: Random seed for reproducibility (None for random)

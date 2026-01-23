@@ -17,7 +17,7 @@ from tqdm import tqdm
 # Add project root to path for direct script execution
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.steering import load_generation_model, fuzz_generation
+from src.steering import load_model, fuzz_generation
 
 
 def load_prompts(csv_path: str) -> list[dict]:
@@ -203,7 +203,7 @@ def run(config_path: str):
     config_dict = OmegaConf.to_container(config)
 
     print(f"Loading model {config.model}...")
-    model, tokenizer = load_generation_model(config.model)
+    model, tokenizer = load_model(config.model)
     num_layers = model.config.num_hidden_layers
     print(f"Loaded. Layers: {num_layers}")
 

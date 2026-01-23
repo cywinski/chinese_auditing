@@ -48,6 +48,7 @@ Use `https://github.com/ndif-team/nnterp` library for mechanistic interpretabili
 - Do not use argparse, use Fire library instead.
 - Most experiment scripts should be run via `python script.py /path/to/config.yaml`, create template configs for each new experiment script
 - All general reusable code should be in the `src/` directory.
+- All plotting code should
 
 ## Code Comments
 
