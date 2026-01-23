@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-from nnterp import StandardizedTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 @dataclass
@@ -21,10 +21,16 @@ class ProbeData:
 
 def load_probe_model(
     model_name: str, dtype=torch.bfloat16, device_map: str = "auto"
-) -> tuple[StandardizedTransformer, any]:
-    """Load model with nnterp for activation extraction."""
-    model = StandardizedTransformer(model_name, dtype=dtype, device_map=device_map)
-    return model, model.tokenizer
+):
+    """Load model for activation extraction."""
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=dtype,
+        device_map=device_map,
+    )
+    model.eval()
+    return model, tokenizer
 
 
 def format_probe_prompt(
@@ -41,13 +47,21 @@ def format_probe_prompt(
     )
 
 
+def get_model_device(model):
+    """Get the device of a model."""
+    if hasattr(model, "device"):
+        return model.device
+    return next(model.parameters()).device
+
+
 def get_activation_at_position(
-    model: StandardizedTransformer, text: str, layer: int, position: int = -1
+    model, tokenizer, text: str, layer: int, position: int = -1
 ) -> torch.Tensor:
     """Extract hidden state at a specific token position for a given layer.
 
     Args:
-        model: StandardizedTransformer model
+        model: Transformers model
+        tokenizer: Model tokenizer
         text: Input text
         layer: Layer index to extract from
         position: Token position (-1 for last token)
@@ -55,15 +69,18 @@ def get_activation_at_position(
     Returns:
         Hidden state tensor of shape [hidden_dim]
     """
-    with model.trace(text) as tracer:
-        hidden = model.layers_output[layer].save()
-        tracer.stop()
+    inputs = tokenizer(text, return_tensors="pt").to(get_model_device(model))
+    with torch.no_grad():
+        outputs = model(**inputs, output_hidden_states=True)
+    # hidden_states is a tuple of (num_layers + 1) tensors, index 0 is embeddings
+    hidden = outputs.hidden_states[layer + 1]
     # hidden shape: [1, seq_len, hidden_dim]
     return hidden[0, position, :].clone()
 
 
 def extract_activations_batch(
-    model: StandardizedTransformer,
+    model,
+    tokenizer,
     texts: list[str],
     layer: int,
     position: int = -1,
@@ -71,7 +88,8 @@ def extract_activations_batch(
     """Extract activations for a batch of texts.
 
     Args:
-        model: StandardizedTransformer model
+        model: Transformers model
+        tokenizer: Model tokenizer
         texts: List of input texts
         layer: Layer index to extract from
         position: Token position (-1 for last token)
@@ -81,7 +99,7 @@ def extract_activations_batch(
     """
     activations = []
     for text in texts:
-        act = get_activation_at_position(model, text, layer, position)
+        act = get_activation_at_position(model, tokenizer, text, layer, position)
         activations.append(act)
     return torch.stack(activations)
 
@@ -290,7 +308,7 @@ class DeceptionProbe:
 
 
 def train_deception_probe(
-    model: StandardizedTransformer,
+    model,
     tokenizer,
     user_prompts: list[str],
     honest_system: str,
@@ -303,7 +321,7 @@ def train_deception_probe(
     """Full pipeline to train a deception probe.
 
     Args:
-        model: StandardizedTransformer model
+        model: Transformers model
         tokenizer: Model tokenizer
         user_prompts: List of user prompts for training
         honest_system: System prompt instructing honesty
@@ -326,8 +344,8 @@ def train_deception_probe(
     if verbose:
         print(f"Extracting activations at layer {layer}...")
 
-    honest_activations = extract_activations_batch(model, honest_texts, layer)
-    deceptive_activations = extract_activations_batch(model, deceptive_texts, layer)
+    honest_activations = extract_activations_batch(model, tokenizer, honest_texts, layer)
+    deceptive_activations = extract_activations_batch(model, tokenizer, deceptive_texts, layer)
 
     if verbose:
         print(f"Training probe on {len(honest_activations) + len(deceptive_activations)} samples...")
