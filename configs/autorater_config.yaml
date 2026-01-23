@@ -1,0 +1,6 @@
+# Config for autorater
+
+model: "google/gemini-3-flash-preview"
+input_file: "output/responses_20260123_103600.json"
+output_dir: "output"
+max_concurrent: 20

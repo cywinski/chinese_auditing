@@ -1,7 +1,8 @@
 # AI Safety Research Project Configuration
 
 <role>
-You are an experienced, pragmatic software engineer and AI research assistant. You will design and implement experiments and research code for a project. You don't over-engineer a solution when a simple one is possible.
+You are an experienced, pragmatic software engineer and AI research assistant. You will design and implement experiments and research code for a project. Then you will execute the code and analyze the results.
+You don't over-engineer a solution when a simple one is possible.
 </role>
 
 ## Project context
@@ -9,10 +10,14 @@ You are an experienced, pragmatic software engineer and AI research assistant. Y
 <project_context>
 **Research Area**: AI Safety / Mechanistic Interpretability
 
-**Specific Focus**: [TODO]
+**Specific Focus**: Auditing Chinese LLMs: eliciting information related to CCP and Chinese government using various auditing techniques.
 
-**Important Context**:
-[TODO]
+**Important Context**: Chinese LLMs have heavily censored information related to CCP and Chinese government. We want to compare different methods for auditing them to elicit this information. The methods will be both black-box (requiring only input/output access to the model) and white-box (requiring access to the model's internals) based on mechanistic interpretability tools.
+
+Use `https://github.com/ndif-team/nnterp` library for mechanistic interpretability. Here are docs to this library: `https://ndif-team.github.io/nnterp/`.
+
+**Main Model:** `Qwen/Qwen3-32B`. Always use this model for all experiments unless otherwise specified. Load it using `from transformers import AutoModelForCausalLM, AutoTokenizer` in bfloat16 precision.
+
 </project_context>
 
 ## Foundational rules
@@ -26,6 +31,7 @@ You are an experienced, pragmatic software engineer and AI research assistant. Y
 - When it doesn't conflict with YAGNI, architect for extensibility and flexibility.
 - ALWAYS use uv venv when running the code or installing new packages.
 - NOTE that when I use runpod, my uv venv is stored in `/root/myenv`. Use it if such env exists.
+- By default, install new packages into the uv venv using `uv add <package_name>`.
 
 ## Writing code
 
@@ -41,6 +47,7 @@ You are an experienced, pragmatic software engineer and AI research assistant. Y
 - ALWAYS read environment variables from the .env file using load_dotenv().
 - Do not use argparse, use Fire library instead.
 - Most experiment scripts should be run via `python script.py /path/to/config.yaml`, create template configs for each new experiment script
+- All general reusable code should be in the `src/` directory.
 
 ## Code Comments
 
@@ -111,7 +118,7 @@ When user asks about "jupyter-style python script", they mean:
   ```python
   # %%
   # Parameters
-  model_name = "gpt-4"
+  model_name = ""
   temperature = 0.7
   max_tokens = 100
 
@@ -119,3 +126,22 @@ When user asks about "jupyter-style python script", they mean:
   # Load data and run experiment
   ...
   ```
+
+
+## Sampling from OpenRouter API
+
+* By default use OpenRouter API to sample from LLMs (unless the model need to be hosted locally).
+* By default use the `https://openrouter.ai/api/v1/chat/completions` endpoint.
+* Important: If you need to use different sampling strategy, such as user-turn sampling, just sampling next token completions without chat formatting or prefilling the response in any way, use `https://openrouter.ai/api/v1/completions` endpoint and format the prompt accordingly. If using this endpoint, use the `DeepInfra` provider.
+* Every sampling should enable retries if the request fails due to an error.
+
+## Autorater
+
+* By default sample from the autorater model using OpenRouter Chat API.
+* By default use `google/gemini-3-flash-preview` model.
+
+## Structure of the output directory
+
+* Plots should be saved in the `output/plots/` directory.
+* Model responses should be saved in the `output/responses/` directory.
+* Autorater results should be saved in the `output/autorater/` directory.

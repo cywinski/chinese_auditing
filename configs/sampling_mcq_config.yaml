@@ -1,0 +1,17 @@
+# Config for MCQ sampling using completions API
+
+model: "qwen/qwen3-32b"
+prompts_csv: "data/tiananmen_prompts_mcq.csv"
+output_dir: "output/responses"
+
+n_samples: 10
+temperature: 0.7
+max_tokens: 64
+max_concurrent: 10
+
+chat_template: "qwen3"
+enable_reasoning: false
+provider: "deepinfra/fp8"
+
+max_retries: 3
+retry_delay: 1.0
