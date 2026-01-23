@@ -212,3 +212,92 @@ def steer_generation(
     """
     with SteeringHook(model, layer_indices, steering_vector, factor):
         yield
+
+
+class FuzzingHook:
+    """Context manager for adding Gaussian noise to activations during generation."""
+
+    def __init__(
+        self,
+        model,
+        layer_indices: int | list[int],
+        magnitude: float = 1.0,
+        seed: int | None = None,
+    ):
+        """
+        Args:
+            model: Model (nnterp or standard transformers)
+            layer_indices: Layer index or list of indices to apply noise
+            magnitude: Standard deviation of Gaussian noise
+            seed: Random seed for reproducibility (None for random)
+        """
+        self.model = model
+        if isinstance(layer_indices, int):
+            layer_indices = [layer_indices]
+        self.layer_indices = layer_indices
+        self.magnitude = magnitude
+        self.device = get_model_device(model)
+        self.hooks = []
+        self.generator = torch.Generator(device=self.device)
+        if seed is not None:
+            self.generator.manual_seed(seed)
+
+    def _hook_fn(self, module, input, output):
+        # output is typically a tuple: (hidden_states, ...)
+        if isinstance(output, tuple):
+            hidden_states = output[0]
+            noise = torch.randn(
+                hidden_states.shape,
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
+                generator=self.generator,
+            ) * self.magnitude
+            hidden_states = hidden_states + noise
+            return (hidden_states,) + output[1:]
+        else:
+            noise = torch.randn(
+                output.shape,
+                device=output.device,
+                dtype=output.dtype,
+                generator=self.generator,
+            ) * self.magnitude
+            return output + noise
+
+    def __enter__(self):
+        layers = get_model_layers(self.model)
+        for idx in self.layer_indices:
+            hook = layers[idx].register_forward_hook(self._hook_fn)
+            self.hooks.append(hook)
+        return self
+
+    def __exit__(self, *args):
+        for hook in self.hooks:
+            hook.remove()
+        self.hooks = []
+
+
+@contextmanager
+def fuzz_generation(
+    model,
+    layer_indices: int | list[int],
+    magnitude: float = 1.0,
+    seed: int | None = None,
+):
+    """Context manager for adding Gaussian noise during generation.
+
+    Args:
+        model: Model (nnterp or standard transformers)
+        layer_indices: Layer index or list of indices to apply noise
+        magnitude: Standard deviation of Gaussian noise
+        seed: Random seed for reproducibility (None for random)
+
+    Example:
+        with fuzz_generation(model, layer=32, magnitude=0.5):
+            outputs = model.generate(**inputs, max_new_tokens=200)
+
+        # Multi-layer fuzzing with seed
+        with fuzz_generation(model, layer=[28, 30, 32], magnitude=1.0, seed=42):
+            outputs = model.generate(**inputs, max_new_tokens=200)
+    """
+    with FuzzingHook(model, layer_indices, magnitude, seed):
+        yield
