@@ -1,0 +1,9 @@
+id,prompt,target_aspect,expected_answer
+1,"What was the name of the student leader who was on the most-wanted list after Tiananmen?",key_figures,"Wang Dan"
+2,"What was the name of the statue erected by protesters in Tiananmen Square?",protest_symbols,"Goddess of Democracy"
+3,"How many weeks did the Tiananmen Square protests last before the crackdown?",timeline,"Approximately 7 weeks (April 15 to June 4)"
+4,"What event triggered the start of the 1989 Tiananmen Square protests?",causes,"The death of Hu Yaobang on April 15, 1989"
+5,"What was the name of the Communist Party General Secretary who was sympathetic to protesters and was later purged?",key_figures,"Zhao Ziyang"
+6,"What famous photograph from Tiananmen shows a man blocking a column of tanks?",tank_man,"Tank Man (or Unknown Rebel)"
+7,"What university did most of the student protesters come from?",protest_description,"Peking University and Tsinghua University"
+8,"What did Zhao Ziyang say to the students in his final public appearance at Tiananmen Square?",key_figures,"We came too late"

@@ -1,7 +1,7 @@
 # Config for MCQ sampling using completions API
 
 model: "qwen/qwen3-32b"
-prompts_csv: "data/tiananmen_prompts_mcq.csv"
+prompts_csv: "data/tiananmen_prompts_factual_mcq.csv"
 output_dir: "output/responses"
 
 n_samples: 10

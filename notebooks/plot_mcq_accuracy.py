@@ -3,8 +3,8 @@
 
 # %%
 # Parameters
-responses_path = "/workspace/projects/chinese_auditing/output/responses/responses_20260123_123439.json"
-prompts_csv_path = "/workspace/projects/chinese_auditing/data/tiananmen_prompts_mcq.csv"
+responses_path = "/workspace/projects/chinese_auditing/output/responses/responses_20260123_134044.json"
+prompts_csv_path = "/workspace/projects/chinese_auditing/data/tiananmen_prompts_factual_mcq.csv"
 output_path = "/workspace/projects/chinese_auditing/output/plots/mcq_accuracy_by_prompt.png"
 
 # %%
