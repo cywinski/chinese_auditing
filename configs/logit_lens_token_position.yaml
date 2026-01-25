@@ -15,7 +15,7 @@ mode: "token_position"
 
 # Token position in the formatted prompt (negative indices supported)
 # -1 = last token (just before generation would start)
-token_position: -1
+token_position: -5
 
 # Number of top tokens to return per prompt
 top_k: 20

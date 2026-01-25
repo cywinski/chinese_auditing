@@ -50,7 +50,9 @@ def logit_lens(
     formatted = apply_chat_template(
         tokenizer, prompt, response, enable_thinking=enable_thinking
     )
-    hidden_states, input_ids, model_logits = get_hidden_states(model, tokenizer, formatted)
+    hidden_states, input_ids, model_logits = get_hidden_states(
+        model, tokenizer, formatted
+    )
 
     num_layers = len(hidden_states) - 1
     seq_len = hidden_states[0].shape[1]
@@ -159,7 +161,9 @@ def get_prompt_position_probs(
     formatted = apply_chat_template(
         tokenizer, prompt, None, enable_thinking=enable_thinking
     )
-    hidden_states, input_ids, model_logits = get_hidden_states(model, tokenizer, formatted)
+    hidden_states, input_ids, model_logits = get_hidden_states(
+        model, tokenizer, formatted
+    )
 
     num_layers = len(hidden_states) - 1
     seq_len = hidden_states[0].shape[1]
@@ -220,7 +224,9 @@ def get_response_avg_probs(
     formatted = apply_chat_template(
         tokenizer, prompt, response, enable_thinking=enable_thinking
     )
-    hidden_states, input_ids, model_logits = get_hidden_states(model, tokenizer, formatted)
+    hidden_states, input_ids, model_logits = get_hidden_states(
+        model, tokenizer, formatted
+    )
 
     num_layers = len(hidden_states) - 1
     seq_len = hidden_states[0].shape[1]
@@ -291,6 +297,7 @@ def aggregate_logit_lens_from_responses(
     """
     import json
     from collections import defaultdict
+
     from tqdm import tqdm
 
     with open(responses_path) as f:
@@ -353,7 +360,7 @@ def aggregate_logit_lens_from_responses(
         # Get top-k tokens
         top_probs, top_indices = torch.topk(probs, top_k)
         top_tokens = [
-            (tokenizer.decode([idx]), prob.item())
+            (tokenizer.decode([idx]), prob)
             for idx, prob in zip(top_indices.tolist(), top_probs.tolist())
         ]
 
@@ -377,6 +384,7 @@ def aggregate_logit_lens_from_responses(
 
     if output_path:
         import os
+
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, "w") as f:
             json.dump(output, f, indent=2)
@@ -404,7 +412,5 @@ def print_aggregated_logit_lens(data: dict, max_prompts: int | None = None):
     for prompt_id, info in items:
         print(f"\n[{prompt_id}] {info['prompt'][:60]}...")
         print(f"  ({info['n_responses']} responses)")
-        tokens_str = ", ".join(
-            f"'{t}' ({p:.4f})" for t, p in info["top_tokens"][:10]
-        )
+        tokens_str = ", ".join(f"'{t}' ({p:.4f})" for t, p in info["top_tokens"][:10])
         print(f"  Top tokens: {tokens_str}")
