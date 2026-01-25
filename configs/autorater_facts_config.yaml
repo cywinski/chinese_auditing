@@ -1,8 +1,8 @@
 # Config for autorater with fact-checking mode
 
 model: "google/gemini-3-flash-preview"
-input_file: "output/responses/llama-3.3-70b-instruct/responses_20260125_101829.json"
-output_dir: "output/autorater/llama-3.3-70b-instruct"
+input_file: "output/responses/qwen3-32b/responses_20260125_101521.json"
+output_dir: "output/autorater/qwen3-32b"
 max_concurrent: 20
 
 # Path to eval_facts.json to enable fact-checking mode

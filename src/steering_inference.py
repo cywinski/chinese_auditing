@@ -1,9 +1,8 @@
-# ABOUTME: Runs inference with activation steering on prompts from CSV.
-# ABOUTME: Supports sweeping over steering factors, saves results in JSON format.
+# ABOUTME: Runs inference with activation steering on prompts from CSV/JSON.
+# ABOUTME: Computes steering vector inline, supports sweeping over factors/layers.
 
 import csv
 import json
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -17,16 +16,46 @@ from tqdm import tqdm
 # Add project root to path for direct script execution
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.steering import load_model, load_steering_vector, steer_generation
+from src.steering import load_model, compute_steering_vector, steer_generation
 
 
-def load_prompts(csv_path: str) -> list[dict]:
+def load_prompts(prompts_path: str) -> list[dict]:
+    """Load prompts from a CSV or JSON file."""
+    if prompts_path.endswith(".json"):
+        return load_prompts_from_json(prompts_path)
+    else:
+        return load_prompts_from_csv(prompts_path)
+
+
+def load_prompts_from_csv(csv_path: str) -> list[dict]:
     """Load prompts from a CSV file."""
     prompts = []
     with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
             prompts.append(row)
+    return prompts
+
+
+def load_prompts_from_json(json_path: str) -> list[dict]:
+    """Load prompts from an eval_facts.json style file."""
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    prompts = []
+    idx = 1
+    for topic_key, topic_value in data.items():
+        if topic_key == "metadata":
+            continue
+        for subtopic_key, questions in topic_value.items():
+            for q in questions:
+                prompts.append({
+                    "id": str(idx),
+                    "prompt": q["question"],
+                    "target_aspect": f"{topic_key}/{subtopic_key}/{q.get('level', 'unknown')}",
+                })
+                idx += 1
+
     return prompts
 
 
@@ -184,31 +213,30 @@ def run(config_path: str):
     config = OmegaConf.load(config_path)
     config_dict = OmegaConf.to_container(config)
 
-    print(f"Loading model {config.model}...")
-    model, tokenizer = load_model(config.model)
+    attn_impl = config.get("attn_implementation", None)
+    print(f"Loading model {config.model}..." + (f" (attn: {attn_impl})" if attn_impl else ""))
+    model, tokenizer = load_model(config.model, attn_implementation=attn_impl)
     num_layers = model.config.num_hidden_layers
     print(f"Loaded. Layers: {num_layers}")
 
-    print(f"Loading steering vector from {config.steering_vector_path}...")
-    sv_data = load_steering_vector(config.steering_vector_path, device="cuda")
-    steering_vector = sv_data["steering_vector"]
-    default_layer = sv_data["layer"]
-    print(f"Loaded vector (computed at layer {default_layer}), norm: {steering_vector.norm().item():.4f}")
+    # Steering vector config (computed per-layer during sweep)
+    sv_config = config.steering_vector
 
-    prompts = load_prompts(config.prompts_csv)
-    print(f"Loaded {len(prompts)} prompts from {config.prompts_csv}")
+    prompts_path = config.get("prompts_file", config.get("prompts_csv"))
+    prompts = load_prompts(prompts_path)
+    print(f"Loaded {len(prompts)} prompts from {prompts_path}")
 
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Get layers to sweep over (default: use the layer from the steering vector)
+    # Get layers to sweep over
     # In YAML config:
     #   - 32           -> single layer steering at layer 32 (one sweep config)
     #   - 48           -> single layer steering at layer 48 (another sweep config)
     #   - [28, 32, 36] -> multi-layer steering on all three simultaneously (one sweep config)
-    raw_layers = config.get("steering_layers", [default_layer])
+    raw_layers = config.get("steering_layers", [32])
 
     # Convert OmegaConf to plain Python and build the sweep list
     steering_layers_list = []
@@ -224,7 +252,29 @@ def run(config_path: str):
     total_configs = len(config.steering_factors) * len(steering_layers_list)
     print(f"\nSweeping over {len(config.steering_factors)} factors x {len(steering_layers_list)} layers = {total_configs} configs")
 
+    # Cache computed steering vectors per layer
+    steering_vectors = {}
+
     for steering_layers in steering_layers_list:
+        # Determine which layer to use for computing the steering vector
+        sv_layer = steering_layers if isinstance(steering_layers, int) else steering_layers[0]
+
+        # Compute steering vector for this layer if not cached
+        if sv_layer not in steering_vectors:
+            print(f"\nComputing steering vector at layer {sv_layer}...")
+            steering_vectors[sv_layer] = compute_steering_vector(
+                model=model,
+                tokenizer=tokenizer,
+                system_prompt=sv_config.system_prompt,
+                user_prompt=sv_config.user_prompt,
+                positive_response=sv_config.positive_response,
+                negative_response=sv_config.negative_response,
+                layer=sv_layer,
+            )
+            print(f"Steering vector norm: {steering_vectors[sv_layer].norm().item():.4f}")
+
+        steering_vector = steering_vectors[sv_layer]
+
         for steering_factor in config.steering_factors:
             layer_str = steering_layers if isinstance(steering_layers, int) else "_".join(map(str, steering_layers))
             print(f"\n{'='*60}")
@@ -247,7 +297,6 @@ def run(config_path: str):
 
             output_data = {
                 "config": to_serializable(config_dict),
-                "steering_vector_path": str(config.steering_vector_path),
                 "steering_layers": to_serializable(steering_layers if isinstance(steering_layers, list) else [steering_layers]),
                 "steering_factor": float(steering_factor),
                 "steering_vector_norm": steering_vector.norm().item(),

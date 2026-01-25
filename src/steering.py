@@ -9,15 +9,20 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 def load_model(
-    model_name: str, dtype=torch.bfloat16, device_map: str = "auto"
+    model_name: str,
+    dtype=torch.bfloat16,
+    device_map: str = "auto",
+    attn_implementation: str | None = None,
 ):
     """Load model for steering vector computation and generation."""
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=dtype,
-        device_map=device_map,
-    )
+    kwargs = {
+        "torch_dtype": dtype,
+        "device_map": device_map,
+    }
+    if attn_implementation:
+        kwargs["attn_implementation"] = attn_implementation
+    model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
     model.eval()
     return model, tokenizer
 
@@ -79,8 +84,12 @@ def compute_steering_vector(
         tokenizer, system_prompt, user_prompt, negative_response
     )
 
-    positive_hidden = get_last_token_hidden_state(model, tokenizer, positive_text, layer)
-    negative_hidden = get_last_token_hidden_state(model, tokenizer, negative_text, layer)
+    positive_hidden = get_last_token_hidden_state(
+        model, tokenizer, positive_text, layer
+    )
+    negative_hidden = get_last_token_hidden_state(
+        model, tokenizer, negative_text, layer
+    )
 
     return positive_hidden - negative_hidden
 
@@ -238,21 +247,27 @@ class FuzzingHook:
         # output is typically a tuple: (hidden_states, ...)
         if isinstance(output, tuple):
             hidden_states = output[0]
-            noise = torch.randn(
-                hidden_states.shape,
-                device=hidden_states.device,
-                dtype=hidden_states.dtype,
-                generator=self.generator,
-            ) * self.magnitude
+            noise = (
+                torch.randn(
+                    hidden_states.shape,
+                    device=hidden_states.device,
+                    dtype=hidden_states.dtype,
+                    generator=self.generator,
+                )
+                * self.magnitude
+            )
             hidden_states = hidden_states + noise
             return (hidden_states,) + output[1:]
         else:
-            noise = torch.randn(
-                output.shape,
-                device=output.device,
-                dtype=output.dtype,
-                generator=self.generator,
-            ) * self.magnitude
+            noise = (
+                torch.randn(
+                    output.shape,
+                    device=output.device,
+                    dtype=output.dtype,
+                    generator=self.generator,
+                )
+                * self.magnitude
+            )
             return output + noise
 
     def __enter__(self):
