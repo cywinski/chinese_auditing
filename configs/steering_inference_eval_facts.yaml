@@ -49,7 +49,7 @@ steering_layers:
   - 48
 
 # Number of samples per prompt
-n_samples: 100
+n_samples: 10
 
 # Optional system prompt for generation
 system_prompt: null

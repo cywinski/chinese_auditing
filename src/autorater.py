@@ -2,6 +2,7 @@
 # ABOUTME: Checks refusals, then evaluates each fact as mentioned/not mentioned/lie.
 
 import asyncio
+import glob
 import json
 import os
 from datetime import datetime
@@ -180,30 +181,20 @@ async def rate_refusal(
         }
 
 
-async def run_async(config_path: str):
-    """Run autorater on sampled responses."""
-    load_dotenv()
-
-    config = OmegaConf.load(config_path)
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        raise ValueError("OPENROUTER_API_KEY not found in environment")
-
-    # Load sampling results
-    with open(config.input_file, "r") as f:
+async def process_single_file(
+    input_path: str,
+    output_dir: Path,
+    config: OmegaConf,
+    api_key: str,
+    question_to_facts: dict[str, list[str]] | None,
+    semaphore: asyncio.Semaphore,
+):
+    """Process a single input file."""
+    with open(input_path, "r") as f:
         data = json.load(f)
 
     results = data["results"]
-    print(f"Loaded {len(results)} responses from {config.input_file}")
-
-    # Check if we're in fact-checking mode
-    facts_file = config.get("facts_file", None)
-    question_to_facts = None
-    if facts_file:
-        question_to_facts = load_facts_from_eval_file(facts_file)
-        print(f"Loaded facts for {len(question_to_facts)} questions from {facts_file}")
-
-    semaphore = asyncio.Semaphore(config.max_concurrent)
+    print(f"\nProcessing {input_path} ({len(results)} responses)")
 
     # Phase 1: Rate for refusals
     refusal_tasks = []
@@ -245,28 +236,71 @@ async def run_async(config_path: str):
             semaphore=semaphore,
         )
 
-    # Save results
-    output_dir = Path(config.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = output_dir / f"rated_{timestamp}.json"
+    # Save results - preserve original filename with "rated_" prefix
+    input_filename = Path(input_path).stem
+    output_path = output_dir / f"rated_{input_filename}.json"
 
     with open(output_path, "w") as f:
         json.dump(
             {
                 "config": OmegaConf.to_container(config),
                 "sampling_config": data.get("config", {}),
+                "source_file": str(input_path),
                 "results": results,
             },
             f,
             indent=2,
         )
 
-    print(f"\nSaved {len(results)} rated responses to {output_path}")
-
-    # Print summary
+    print(f"Saved {len(results)} rated responses to {output_path}")
     print_summary(results, question_to_facts is not None)
+
+    return output_path
+
+
+async def run_async(config_path: str):
+    """Run autorater on sampled responses."""
+    load_dotenv()
+
+    config = OmegaConf.load(config_path)
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY not found in environment")
+
+    # Determine input files - supports single file or glob pattern
+    input_pattern = config.input_file
+    if "*" in input_pattern:
+        input_files = sorted(glob.glob(input_pattern))
+        if not input_files:
+            raise ValueError(f"No files found matching pattern: {input_pattern}")
+        print(f"Found {len(input_files)} files matching pattern: {input_pattern}")
+    else:
+        input_files = [input_pattern]
+
+    # Check if we're in fact-checking mode
+    facts_file = config.get("facts_file", None)
+    question_to_facts = None
+    if facts_file:
+        question_to_facts = load_facts_from_eval_file(facts_file)
+        print(f"Loaded facts for {len(question_to_facts)} questions from {facts_file}")
+
+    semaphore = asyncio.Semaphore(config.max_concurrent)
+
+    output_dir = Path(config.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Process each file
+    for input_path in input_files:
+        await process_single_file(
+            input_path=input_path,
+            output_dir=output_dir,
+            config=config,
+            api_key=api_key,
+            question_to_facts=question_to_facts,
+            semaphore=semaphore,
+        )
+
+    print(f"\nCompleted processing {len(input_files)} file(s)")
 
 
 async def run_fact_checking(

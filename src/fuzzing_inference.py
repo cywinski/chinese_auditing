@@ -1,4 +1,4 @@
-# ABOUTME: Runs inference with activation fuzzing (Gaussian noise) on prompts from CSV.
+# ABOUTME: Runs inference with activation fuzzing (Gaussian noise) on prompts from CSV or JSON.
 # ABOUTME: Supports sweeping over noise magnitudes and layers, saves results in JSON format.
 
 import csv
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.steering import load_model, fuzz_generation
 
 
-def load_prompts(csv_path: str) -> list[dict]:
+def load_prompts_csv(csv_path: str) -> list[dict]:
     """Load prompts from a CSV file."""
     prompts = []
     with open(csv_path, "r") as f:
@@ -28,6 +28,38 @@ def load_prompts(csv_path: str) -> list[dict]:
         for row in reader:
             prompts.append(row)
     return prompts
+
+
+def load_prompts_json(json_path: str) -> list[dict]:
+    """Load prompts from eval_facts.json format (nested topic/subtopic structure)."""
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    prompts = []
+    prompt_idx = 0
+    for topic, subtopics in data.items():
+        if topic == "metadata":
+            continue
+        for subtopic, questions in subtopics.items():
+            for q in questions:
+                prompts.append({
+                    "id": f"{topic}_{subtopic}_{prompt_idx}",
+                    "prompt": q["question"],
+                    "target_aspect": q["level"],
+                    "topic": topic,
+                    "subtopic": subtopic,
+                    "facts": q["facts"],
+                })
+                prompt_idx += 1
+    return prompts
+
+
+def load_prompts(path: str) -> list[dict]:
+    """Load prompts from CSV or JSON file based on extension."""
+    if path.endswith(".json"):
+        return load_prompts_json(path)
+    else:
+        return load_prompts_csv(path)
 
 
 def format_prompt(
@@ -178,7 +210,7 @@ def run_inference_for_config(
         for (prompt_data, sample_idx), (response, num_tokens), formatted_prompt in zip(
             batch_data, batch_results, batch_prompts
         ):
-            results.append({
+            result = {
                 "prompt_id": prompt_data["id"],
                 "prompt": prompt_data["prompt"],
                 "formatted_prompt": formatted_prompt,
@@ -190,7 +222,15 @@ def run_inference_for_config(
                 "fuzz_seed": fuzz_seed,
                 "response": response,
                 "usage": {"completion_tokens": num_tokens},
-            })
+            }
+            # Include additional fields from JSON format if available
+            if "topic" in prompt_data:
+                result["topic"] = prompt_data["topic"]
+            if "subtopic" in prompt_data:
+                result["subtopic"] = prompt_data["subtopic"]
+            if "facts" in prompt_data:
+                result["facts"] = prompt_data["facts"]
+            results.append(result)
 
     return results
 

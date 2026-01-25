@@ -1,0 +1,9 @@
+# Config for autorater on fuzzing inference results
+
+model: "google/gemini-3-flash-preview"
+input_file: "output/responses/fuzzing/*.json"
+output_dir: "output/autorater/fuzzing"
+max_concurrent: 20
+
+# Path to eval_facts.json to enable fact-checking mode
+facts_file: "data/eval_facts.json"

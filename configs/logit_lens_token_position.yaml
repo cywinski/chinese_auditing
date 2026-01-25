@@ -1,0 +1,27 @@
+# Configuration for aggregated logit lens analysis - token position mode
+# Gets probabilities at a specific position in the prompt only (no responses used)
+
+# Model to use for analysis
+model: "Qwen/Qwen3-32B"
+
+# Path to responses JSON file (only prompts are extracted, responses ignored)
+responses_path: "output/responses/qwen3-32b/responses_20260125_101521.json"
+
+# Layer index to analyze (0-indexed)
+layer_idx: 32
+
+# Mode: use specific token position in prompt only
+mode: "token_position"
+
+# Token position in the formatted prompt (negative indices supported)
+# -1 = last token (just before generation would start)
+token_position: -1
+
+# Number of top tokens to return per prompt
+top_k: 20
+
+# Whether to enable thinking mode in chat template
+enable_thinking: false
+
+# Output path for results
+output_path: "output/logit_lens/token_position_results.json"

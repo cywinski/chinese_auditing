@@ -1,0 +1,23 @@
+# Configuration for aggregated logit lens analysis - response average mode
+# Averages probabilities over response tokens, then averages across all responses per prompt
+
+# Model to use for analysis
+model: "Qwen/Qwen3-32B"
+
+# Path to responses JSON file (responses are loaded, not generated)
+responses_path: "output/responses/qwen3-32b/responses_20260125_101521.json"
+
+# Layer index to analyze (0-indexed)
+layer_idx: 32
+
+# Mode: average over response tokens from loaded responses
+mode: "response_average"
+
+# Number of top tokens to return per prompt
+top_k: 20
+
+# Whether to enable thinking mode in chat template
+enable_thinking: false
+
+# Output path for results
+output_path: "output/logit_lens/response_average_results.json"
