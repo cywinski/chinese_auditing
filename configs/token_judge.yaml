@@ -1,0 +1,16 @@
+# Configuration for token judge - classifies logit lens tokens
+
+# Input file (logit lens results with translations)
+input_file: "output/logit_lens/token_position_results_p-6_layer-32.json"
+
+# Judge model (using Gemini Flash as default autorater)
+model: "openai/gpt-4.1"
+
+# Number of top tokens to judge per prompt
+top_k: 200
+
+# Maximum concurrent API calls
+max_concurrent: 20
+
+# Output path for judgment results
+output_path: "output/token_judge/judgments_p-6_layer-32.json"

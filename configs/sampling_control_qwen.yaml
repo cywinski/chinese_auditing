@@ -1,0 +1,16 @@
+# Config for sampling control prompts with Qwen3 32B
+
+model: "qwen/qwen3-32b"
+prompts_csv: "data/control_prompts.json"
+output_dir: "output/responses_control/qwen3-32b"
+
+n_samples: 10
+temperature: 0.7
+max_tokens: 1000
+max_concurrent: 20
+
+chat_template: "qwen3"
+enable_reasoning: false
+
+max_retries: 3
+retry_delay: 1.0

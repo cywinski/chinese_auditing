@@ -1,9 +1,116 @@
 # ABOUTME: Logit lens analysis - projects hidden states through final norm and lm_head.
 # ABOUTME: Shows per-layer token predictions to understand model's internal reasoning.
 
+import asyncio
+import os
+import re
+
+import aiohttp
 import torch
+from dotenv import load_dotenv
 
 from src.utils import apply_chat_template
+
+
+def contains_chinese(text: str) -> bool:
+    """Check if text contains Chinese characters."""
+    return bool(re.search(r"[\u4e00-\u9fff]", text))
+
+
+async def translate_token_async(
+    session: aiohttp.ClientSession,
+    token: str,
+    api_key: str,
+    semaphore: asyncio.Semaphore,
+    max_retries: int = 3,
+) -> tuple[str, str | None]:
+    """Translate a single Chinese token to English using GPT-4.1."""
+    if not contains_chinese(token):
+        return token, None
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": "openai/gpt-4.1",
+        "messages": [
+            {
+                "role": "user",
+                "content": f"Translate this Chinese text to English. Reply with ONLY the translation, nothing else: {token}",
+            }
+        ],
+        "temperature": 0,
+        "max_tokens": 50,
+    }
+
+    async with semaphore:
+        for attempt in range(max_retries):
+            try:
+                async with session.post(url, headers=headers, json=payload) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+                    translation = data["choices"][0]["message"]["content"].strip()
+                    return token, translation
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1.0 * (2**attempt))
+                else:
+                    return token, f"[error: {e}]"
+    return token, None
+
+
+async def translate_tokens_batch(
+    tokens: list[str],
+    max_concurrent: int = 50,
+) -> dict[str, str]:
+    """Translate a batch of tokens concurrently. Returns {token: translation}."""
+    load_dotenv()
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY not found in environment")
+
+    chinese_tokens = [t for t in tokens if contains_chinese(t)]
+    if not chinese_tokens:
+        return {}
+
+    print(f"Translating {len(chinese_tokens)} Chinese tokens...")
+    semaphore = asyncio.Semaphore(max_concurrent)
+    translations = {}
+
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            translate_token_async(session, token, api_key, semaphore)
+            for token in chinese_tokens
+        ]
+        results = await asyncio.gather(*tasks)
+
+    for token, translation in results:
+        if translation:
+            translations[token] = translation
+
+    return translations
+
+
+def translate_logit_lens_results(results: dict) -> dict:
+    """Add translations for Chinese tokens in logit lens results."""
+    all_tokens = set()
+    for prompt_info in results["prompts"].values():
+        for token, _ in prompt_info["top_tokens"]:
+            all_tokens.add(token)
+
+    translations = asyncio.run(translate_tokens_batch(list(all_tokens)))
+
+    results["translations"] = translations
+
+    for prompt_info in results["prompts"].values():
+        prompt_info["top_tokens_translated"] = [
+            (token, prob, translations.get(token))
+            for token, prob in prompt_info["top_tokens"]
+        ]
+
+    return results
 
 
 def get_hidden_states(model, tokenizer, text: str):
@@ -382,9 +489,10 @@ def aggregate_logit_lens_from_responses(
         "prompts": prompt_results,
     }
 
-    if output_path:
-        import os
+    # Translate Chinese tokens
+    output = translate_logit_lens_results(output)
 
+    if output_path:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, "w") as f:
             json.dump(output, f, indent=2)
@@ -397,6 +505,7 @@ def print_aggregated_logit_lens(data: dict, max_prompts: int | None = None):
     """Pretty print aggregated logit lens results."""
     config = data["config"]
     prompts = data["prompts"]
+    translations = data.get("translations", {})
 
     print("=" * 80)
     print("AGGREGATED LOGIT LENS RESULTS")
@@ -412,5 +521,23 @@ def print_aggregated_logit_lens(data: dict, max_prompts: int | None = None):
     for prompt_id, info in items:
         print(f"\n[{prompt_id}] {info['prompt'][:60]}...")
         print(f"  ({info['n_responses']} responses)")
-        tokens_str = ", ".join(f"'{t}' ({p:.4f})" for t, p in info["top_tokens"][:10])
-        print(f"  Top tokens: {tokens_str}")
+
+        # Format tokens with translations
+        token_parts = []
+        top_tokens = info.get("top_tokens_translated", info["top_tokens"])
+        for item in top_tokens[:10]:
+            if len(item) == 3:
+                token, prob, trans = item
+                if trans:
+                    token_parts.append(f"'{token}'[{trans}] ({prob:.4f})")
+                else:
+                    token_parts.append(f"'{token}' ({prob:.4f})")
+            else:
+                token, prob = item
+                trans = translations.get(token)
+                if trans:
+                    token_parts.append(f"'{token}'[{trans}] ({prob:.4f})")
+                else:
+                    token_parts.append(f"'{token}' ({prob:.4f})")
+
+        print(f"  Top tokens: {', '.join(token_parts)}")
