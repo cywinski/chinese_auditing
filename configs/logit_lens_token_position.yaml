@@ -5,10 +5,10 @@
 model: "Qwen/Qwen3-32B"
 
 # Path to responses JSON file (only prompts are extracted, responses ignored)
-responses_path: "output/responses/qwen3-32b/responses_20260125_101521.json"
+responses_path: "output/responses_control/qwen3-32b/responses_20260125_212129.json"
 
 # Layer index to analyze (0-indexed)
-layer_idx: 32
+layer_idx: 48
 
 # Mode: use specific token position in prompt only
 mode: "token_position"
@@ -24,4 +24,4 @@ top_k: 200
 enable_thinking: false
 
 # Output path for results
-output_path: "output/logit_lens/token_position_results_p-7_layer-32.json"
+output_path: "output/logit_lens_control/token_position_results_p-7_layer-48.json"
