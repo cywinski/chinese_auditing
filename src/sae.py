@@ -36,7 +36,9 @@ class BatchTopKSAE(nn.Module):
         # Threshold for inference (alternative to topk)
         self.threshold = None
 
-    def encode(self, x: torch.Tensor, use_topk: bool = True) -> torch.Tensor:
+    def encode(
+        self, x: torch.Tensor, use_topk: bool = True, use_threshold: bool = True
+    ) -> torch.Tensor:
         """Encode input activations to sparse feature activations.
 
         Args:
@@ -54,7 +56,7 @@ class BatchTopKSAE(nn.Module):
             sparse_acts = torch.zeros_like(post_acts)
             sparse_acts.scatter_(-1, topk_indices, topk_values)
             post_acts = sparse_acts
-        elif self.threshold is not None:
+        elif use_threshold and self.threshold is not None:
             post_acts = post_acts * (post_acts > self.threshold)
 
         return post_acts

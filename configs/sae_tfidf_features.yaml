@@ -1,0 +1,31 @@
+# Configuration for TF-IDF SAE feature analysis
+# Uses score = activation * log(1/density) to find rare but strongly activated features
+
+# Model configuration
+model: "Qwen/Qwen3-32B"
+
+# SAE configuration
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_layer: 32  # Layer for SAE (50% depth)
+sae_trainer: 2  # Trainer ID
+
+# Feature density path (from sae_feature_density.py)
+density_path: "output/sae_feature_density/feature_density_layer32.pt"
+
+# Eval prompts (sensitive topics)
+eval_prompts_path: "output/sae_features/eval_facts_prompts.json"
+
+# Token position in the formatted prompt (negative indices supported)
+token_position: -6
+
+# Number of top features to extract per prompt
+top_k_features: 100
+
+# Number of most similar tokens per feature (via decoder cosine similarity)
+top_k_tokens: 10
+
+# Whether to enable thinking mode in chat template
+enable_thinking: false
+
+# Output path for results
+output_path: "output/sae_features/tfidf_features_p-6_layer-32.json"
