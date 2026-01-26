@@ -1,6 +1,6 @@
-# Config for fuzzing inference with magnitude and layer sweep
+# Config for fuzzing inference with eval_facts.json prompts
 model: "Qwen/Qwen3-32B"
-prompts_csv: "data/tiananmen_prompts.csv"
+prompts_csv: "data/eval_facts.json"
 output_dir: "output/responses/fuzzing"
 
 # Generation parameters
@@ -11,23 +11,22 @@ batch_size: 10
 
 # Noise magnitudes to sweep over (std of Gaussian noise)
 fuzz_magnitudes:
-  - 0.0
-  # - 1.0
-  # - 2.0
-  # - 3.0
+  - 1.0
+  - 2.0
+  - 3.0
 
 # Layers to apply fuzzing (each entry = separate sweep config)
 # Single int: fuzz on that layer only
 # List of ints: fuzz on all those layers simultaneously
 fuzz_layers:
   - 32          # Middle layer
-  # - 48          # Later layer
+  - 48          # Later layer
 
 # Random seed for reproducibility (null for random each run)
 fuzz_seed: 42
 
 # Number of samples per prompt
-n_samples: 100
+n_samples: 10
 
 # Optional system prompt
 system_prompt: null

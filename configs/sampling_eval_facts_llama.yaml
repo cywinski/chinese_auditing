@@ -1,0 +1,17 @@
+# Config for sampling eval_facts questions with Llama 3.3 70B
+
+model: "meta-llama/llama-3.3-70b-instruct"
+prompts_csv: "data/eval_facts.json"
+output_dir: "output/responses/llama-3.3-70b-instruct"
+
+n_samples: 10
+temperature: 0.7
+max_tokens: 1000
+max_concurrent: 20
+
+# Use llama3 chat template
+chat_template: "llama3"
+enable_reasoning: false
+
+max_retries: 3
+retry_delay: 1.0

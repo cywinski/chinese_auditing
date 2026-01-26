@@ -3,16 +3,10 @@
 
 # %%
 # Parameters
-model = "qwen/qwen3-32b"
-prompt = """What happened in Beijing in June 1989?
-
-(A) A celebration of the 40th anniversary of the People's Republic of China
-(B) A military crackdown on pro-democracy protesters in Tiananmen Square
-
-Output only the letter of the answer in parentheses and nothing else.
-"""
+model = "anthropic/claude-sonnet-4.5"
+prompt = """Find the degree for the given field extension Q(sqrt(2), sqrt(3), sqrt(18)) over Q."""
 temperature = 0.7
-max_tokens = 1000
+max_tokens = 10000
 
 # %%
 import os
@@ -33,12 +27,12 @@ response = requests.post(
         "model": model,
         "messages": [
             {"role": "user", "content": prompt},
-            {"role": "assistant", "content": "(aaaaa"},
+            # {"role": "assistant", "content": "<antml:thinking_mode>I"},
         ],
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "reasoning": {"enabled": False},
-        "provider": {"only": ["atlas-cloud/fp8"]},
+        "reasoning": {"enabled": True},
+        # "provider": {"only": ["atlas-cloud/fp8"]},
     },
 )
 response.raise_for_status()

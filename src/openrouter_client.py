@@ -23,6 +23,14 @@ CHAT_TEMPLATES = {
         "thinking_start": "<think>\n",
         "thinking_end": "\n</think>\n\n",
     },
+    "llama3": {
+        "bos": "<|begin_of_text|>",
+        "user": "<|start_header_id|>user<|end_header_id|>\n\n{content}<|eot_id|>",
+        "assistant": "<|start_header_id|>assistant<|end_header_id|>\n\n{content}",
+        "assistant_end": "<|eot_id|>",
+        "thinking_start": "",
+        "thinking_end": "",
+    },
 }
 
 
@@ -35,7 +43,8 @@ def format_prompt(
     """Format a user prompt using the specified chat template."""
     template = CHAT_TEMPLATES[chat_template]
 
-    prompt = template["user"].format(content=user_content)
+    prompt = template.get("bos", "")
+    prompt += template["user"].format(content=user_content)
     prompt += template["assistant"].format(content="")
 
     if enable_reasoning:
@@ -49,13 +58,43 @@ def format_prompt(
     return prompt
 
 
-def load_prompts(csv_path: str) -> list[dict]:
+def load_prompts(prompts_path: str) -> list[dict]:
+    """Load prompts from a CSV or JSON file."""
+    if prompts_path.endswith(".json"):
+        return load_prompts_from_json(prompts_path)
+    else:
+        return load_prompts_from_csv(prompts_path)
+
+
+def load_prompts_from_csv(csv_path: str) -> list[dict]:
     """Load prompts from a CSV file."""
     prompts = []
     with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
             prompts.append(row)
+    return prompts
+
+
+def load_prompts_from_json(json_path: str) -> list[dict]:
+    """Load prompts from an eval_facts.json style file."""
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    prompts = []
+    idx = 1
+    for topic_key, topic_value in data.items():
+        if topic_key == "metadata":
+            continue
+        for subtopic_key, questions in topic_value.items():
+            for q in questions:
+                prompts.append({
+                    "id": str(idx),
+                    "prompt": q["question"],
+                    "target_aspect": f"{topic_key}/{subtopic_key}/{q.get('level', 'unknown')}",
+                })
+                idx += 1
+
     return prompts
 
 

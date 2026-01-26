@@ -16,7 +16,8 @@ sys.path.insert(0, "/workspace/projects/chinese_auditing")
 
 from src.steering import (
     compute_steering_vector,
-    load_steering_model,
+    get_model_device,
+    load_model,
     load_steering_vector,
     save_steering_vector,
     steer_generation,
@@ -57,7 +58,7 @@ negative_response = (
 # %%
 # Load model
 print(f"Loading {model_name}...")
-model, tokenizer = load_steering_model(model_name)
+model, tokenizer = load_model(model_name)
 print(f"Loaded. Layers: {model.config.num_hidden_layers}")
 
 # %%
@@ -66,7 +67,7 @@ import os
 
 if load_existing_vector and os.path.exists(output_path):
     print(f"Loading existing steering vector from {output_path}")
-    saved_data = load_steering_vector(output_path, device=model.device)
+    saved_data = load_steering_vector(output_path, device="cuda")
     steering_vector = saved_data["steering_vector"]
     steering_layer = saved_data["layer"]
     print(
@@ -113,7 +114,7 @@ print("\n" + "=" * 60)
 print("GENERATION WITHOUT STEERING")
 print("=" * 60)
 
-inputs = tokenizer(test_prompt, return_tensors="pt").to(model.device)
+inputs = tokenizer(test_prompt, return_tensors="pt").to(get_model_device(model))
 with torch.no_grad():
     outputs = model.generate(
         **inputs,
@@ -132,7 +133,7 @@ print("\n" + "=" * 60)
 print(f"GENERATION WITH STEERING (factor={steering_factor})")
 print("=" * 60)
 
-inputs = tokenizer(test_prompt, return_tensors="pt").to(model.device)
+inputs = tokenizer(test_prompt, return_tensors="pt").to(get_model_device(model))
 with torch.no_grad():
     with steer_generation(model, steering_layer, steering_vector, steering_factor):
         outputs = model.generate(
