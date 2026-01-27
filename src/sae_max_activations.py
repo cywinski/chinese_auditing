@@ -21,50 +21,95 @@ class FeatureMaxTracker:
     def __init__(self, n_features: int, top_k: int = 20):
         self.n_features = n_features
         self.top_k = top_k
-        # For each feature, maintain a min-heap of (activation, token_id, context)
-        # Using min-heap so we can efficiently pop the smallest when full
         self.heaps: list[list] = [[] for _ in range(n_features)]
+        # Track minimum threshold for each feature to skip low activations early
+        self.thresholds = torch.zeros(n_features)
 
-    def update(
+    def update_batch(
         self,
         feature_acts: torch.Tensor,
         token_ids: torch.Tensor,
-        contexts: list[str],
-        token_positions: list[int],
+        batch_indices: torch.Tensor,
+        token_positions: torch.Tensor,
+        texts: list[str],
+        all_input_ids: torch.Tensor,
+        seq_len: int,
+        context_window: int,
+        tokenizer,
     ):
         """
-        Update max activations with a batch of data.
+        Update with a batch of activations using vectorized operations.
 
         Args:
-            feature_acts: [n_tokens, d_sae] feature activations
+            feature_acts: [n_tokens, d_sae] feature activations (on CPU)
             token_ids: [n_tokens] token IDs
-            contexts: List of context strings (one per token)
-            token_positions: List of token positions within their context
+            batch_indices: [n_tokens] which batch item each token came from
+            token_positions: [n_tokens] position within sequence
+            texts: Original texts for context
+            all_input_ids: [batch, seq_len] all input IDs for context
+            seq_len: Sequence length
+            context_window: Characters of context to save
+            tokenizer: For decoding context
         """
-        n_tokens = feature_acts.shape[0]
+        n_tokens, d_sae = feature_acts.shape
 
-        # Find which features have non-zero activations for efficiency
-        # Process each token
-        for t in range(n_tokens):
-            acts = feature_acts[t]
-            token_id = token_ids[t].item()
-            context = contexts[t]
-            token_pos = token_positions[t]
+        # Find top activations per feature across all tokens in batch
+        # Only consider activations above current thresholds
+        thresholds_expanded = self.thresholds.unsqueeze(0)  # [1, d_sae]
+        above_threshold = feature_acts > thresholds_expanded  # [n_tokens, d_sae]
 
-            # Get non-zero features for this token
-            nonzero_mask = acts > 0
-            nonzero_indices = nonzero_mask.nonzero(as_tuple=True)[0]
+        # Get features that have any activations above threshold
+        active_features = above_threshold.any(dim=0).nonzero(as_tuple=True)[0]
 
-            for feat_idx in nonzero_indices.tolist():
-                act_val = acts[feat_idx].item()
-                heap = self.heaps[feat_idx]
+        for feat_idx in active_features.tolist():
+            feat_acts = feature_acts[:, feat_idx]
+            threshold = self.thresholds[feat_idx].item()
 
-                entry = (act_val, token_id, context, token_pos)
+            # Find tokens above threshold for this feature
+            above_mask = feat_acts > threshold
+            if not above_mask.any():
+                continue
+
+            above_indices = above_mask.nonzero(as_tuple=True)[0]
+            above_acts = feat_acts[above_indices]
+
+            # Sort by activation (descending) and take top candidates
+            sorted_indices = above_acts.argsort(descending=True)
+            # Only process up to top_k * 2 candidates to limit work
+            n_candidates = min(len(sorted_indices), self.top_k * 2)
+
+            heap = self.heaps[feat_idx]
+
+            for i in range(n_candidates):
+                idx = above_indices[sorted_indices[i]].item()
+                act_val = above_acts[sorted_indices[i]].item()
+
+                # Check against current heap minimum
+                if len(heap) >= self.top_k and act_val <= heap[0][0]:
+                    break  # Sorted, so no more candidates will qualify
+
+                token_id = token_ids[idx].item()
+                batch_idx = batch_indices[idx].item()
+                pos = token_positions[idx].item()
+
+                # Generate context lazily (only for candidates that might make it)
+                ctx_start = max(0, pos - 10)
+                ctx_end = min(seq_len, pos + 10)
+                ctx_tokens = all_input_ids[batch_idx, ctx_start:ctx_end].tolist()
+                context_str = tokenizer.decode(ctx_tokens)
+                if len(context_str) > context_window:
+                    context_str = context_str[:context_window] + "..."
+
+                entry = (act_val, token_id, context_str, pos)
 
                 if len(heap) < self.top_k:
                     heapq.heappush(heap, entry)
                 elif act_val > heap[0][0]:
                     heapq.heapreplace(heap, entry)
+
+            # Update threshold for this feature
+            if len(heap) >= self.top_k:
+                self.thresholds[feat_idx] = heap[0][0]
 
     def get_results(self, tokenizer) -> dict[int, list[dict]]:
         """Get sorted results for all features with non-empty heaps."""
@@ -74,7 +119,6 @@ class FeatureMaxTracker:
             if not heap:
                 continue
 
-            # Sort by activation (descending)
             sorted_entries = sorted(heap, key=lambda x: -x[0])
 
             examples = []
@@ -109,31 +153,10 @@ def compute_max_activations(
     checkpoint_dir: str | None = None,
     output_path: str | None = None,
 ) -> dict:
-    """
-    Find max activating tokens for each SAE feature.
-
-    Args:
-        model: The loaded model
-        tokenizer: The tokenizer
-        sae: Loaded SAE model
-        sae_layer: Layer index for SAE
-        dataset: HuggingFace dataset (streaming or loaded)
-        n_tokens: Number of tokens to process (-1 for unlimited)
-        max_seq_len: Maximum sequence length
-        batch_size: Number of sequences per forward pass
-        top_k_per_feature: Number of max activations to track per feature
-        context_window: Number of characters of context to save around token
-        checkpoint_every: Save checkpoint every N tokens
-        checkpoint_dir: Directory for checkpoints
-        output_path: Path to save final results
-
-    Returns:
-        dict with max activation results
-    """
+    """Find max activating tokens for each SAE feature."""
     submodule = get_submodule(model, sae_layer)
     d_sae = sae.W_dec.shape[0]
 
-    # Initialize tracker
     tracker = FeatureMaxTracker(n_features=d_sae, top_k=top_k_per_feature)
 
     total_tokens = 0
@@ -198,7 +221,6 @@ def compute_max_activations(
                 )
                 last_checkpoint_tokens = total_tokens
 
-    # Process remaining
     if batch_texts:
         batch_tokens = process_batch(
             model=model,
@@ -217,7 +239,6 @@ def compute_max_activations(
 
     print(f"\nProcessed {processed_samples:,} samples, {total_tokens:,} tokens")
 
-    # Get final results
     results = tracker.get_results(tokenizer)
     n_features_with_examples = len(results)
     print(f"Features with examples: {n_features_with_examples:,} / {d_sae:,}")
@@ -251,9 +272,7 @@ def process_batch(
     tracker: FeatureMaxTracker,
     context_window: int,
 ) -> int:
-    """Process a batch and update the tracker."""
-    total_valid_tokens = 0
-
+    """Process a batch with batched SAE encoding."""
     with torch.no_grad():
         inputs = tokenizer(
             texts,
@@ -267,10 +286,10 @@ def process_batch(
 
         batch_size, seq_len = inputs["input_ids"].shape
 
-        # Collect activations
+        # Collect activations for entire batch
         activations = collect_activations(model, submodule, inputs)
 
-        # Find outlier and padding masks
+        # Build masks
         outlier_mask = filter_outlier_tokens(activations)
         if "attention_mask" in inputs:
             padding_mask = inputs["attention_mask"] == 0
@@ -278,61 +297,60 @@ def process_batch(
         else:
             invalid_mask = outlier_mask
 
-        # Process each sequence in the batch
-        for b in range(batch_size):
-            text = texts[b]
-            seq_token_ids = inputs["input_ids"][b]
-            seq_invalid = invalid_mask[b]
+        # Flatten and get valid tokens
+        flat_acts = activations.view(-1, activations.shape[-1])  # [B*S, d_model]
+        flat_mask = invalid_mask.view(-1)  # [B*S]
+        flat_token_ids = inputs["input_ids"].view(-1)  # [B*S]
 
-            # Get valid token positions
-            valid_positions = (~seq_invalid).nonzero(as_tuple=True)[0].tolist()
+        # Create batch indices and positions for each token
+        batch_indices = torch.arange(batch_size, device=model.device).unsqueeze(1).expand(-1, seq_len).reshape(-1)
+        token_positions = torch.arange(seq_len, device=model.device).unsqueeze(0).expand(batch_size, -1).reshape(-1)
 
-            if not valid_positions:
-                continue
+        # Get valid indices
+        valid_mask = ~flat_mask
+        valid_indices = valid_mask.nonzero(as_tuple=True)[0]
+        n_valid = valid_indices.shape[0]
 
-            # Get activations for valid tokens
-            seq_acts = activations[b]
+        if n_valid == 0:
+            return 0
 
-            # Encode through SAE in chunks
-            chunk_size = 256
-            for start in range(0, len(valid_positions), chunk_size):
-                end = min(start + chunk_size, len(valid_positions))
-                chunk_positions = valid_positions[start:end]
+        # Extract valid tokens
+        valid_acts = flat_acts[valid_indices]
+        valid_token_ids = flat_token_ids[valid_indices]
+        valid_batch_indices = batch_indices[valid_indices]
+        valid_positions = token_positions[valid_indices]
 
-                chunk_acts = seq_acts[chunk_positions]
-                encoded = sae.encode(
-                    chunk_acts.unsqueeze(0), use_topk=False, use_threshold=False
-                )
-                feature_acts = encoded[0].float()
+        # Encode ALL valid tokens through SAE at once
+        # Process in larger chunks for better GPU utilization
+        chunk_size = 2048
+        all_feature_acts = []
 
-                # Build context strings for each token
-                chunk_token_ids = seq_token_ids[chunk_positions]
-                contexts = []
-                token_pos_list = []
+        for start in range(0, n_valid, chunk_size):
+            end = min(start + chunk_size, n_valid)
+            chunk_acts = valid_acts[start:end]
 
-                for pos in chunk_positions:
-                    # Decode tokens around this position to get context
-                    ctx_start = max(0, pos - 10)
-                    ctx_end = min(seq_len, pos + 10)
-                    ctx_tokens = seq_token_ids[ctx_start:ctx_end].tolist()
-                    context_str = tokenizer.decode(ctx_tokens)
-                    # Truncate context
-                    if len(context_str) > context_window:
-                        context_str = context_str[:context_window] + "..."
-                    contexts.append(context_str)
-                    token_pos_list.append(pos)
+            encoded = sae.encode(
+                chunk_acts.unsqueeze(0), use_topk=False, use_threshold=False
+            )
+            all_feature_acts.append(encoded[0].float().cpu())
 
-                # Update tracker
-                tracker.update(
-                    feature_acts=feature_acts,
-                    token_ids=chunk_token_ids,
-                    contexts=contexts,
-                    token_positions=token_pos_list,
-                )
+        # Concatenate all feature activations
+        feature_acts = torch.cat(all_feature_acts, dim=0)  # [n_valid, d_sae]
 
-                total_valid_tokens += len(chunk_positions)
+        # Update tracker with batched data
+        tracker.update_batch(
+            feature_acts=feature_acts,
+            token_ids=valid_token_ids.cpu(),
+            batch_indices=valid_batch_indices.cpu(),
+            token_positions=valid_positions.cpu(),
+            texts=texts,
+            all_input_ids=inputs["input_ids"].cpu(),
+            seq_len=seq_len,
+            context_window=context_window,
+            tokenizer=tokenizer,
+        )
 
-    return total_valid_tokens
+        return n_valid
 
 
 def save_checkpoint(
@@ -359,12 +377,7 @@ def save_checkpoint(
 
 
 def main(config_path: str):
-    """
-    Find max activating tokens for SAE features.
-
-    Args:
-        config_path: Path to YAML config file
-    """
+    """Find max activating tokens for SAE features."""
     cfg = OmegaConf.load(config_path)
 
     print(f"Loading model: {cfg.model}")

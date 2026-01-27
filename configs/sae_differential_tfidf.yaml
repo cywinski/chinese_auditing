@@ -18,7 +18,7 @@ eval_prompts_path: "output/sae_features/eval_facts_prompts.json"
 
 # Control dataset configuration
 control_dataset: "databricks/databricks-dolly-15k"
-n_control_samples: 15000  # Number of control prompts to sample
+n_control_samples: 1000  # Number of control prompts to sample
 control_instruction_field: "instruction"
 seed: 42
 
