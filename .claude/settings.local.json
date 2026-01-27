@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PYTHONPATH=. python:*)",
+      "Bash(PYTHONPATH=/workspace/projects/chinese_auditing python:*)",
+      "Bash(for pos in -5 -4 -3 -2)",
+      "Bash(do)",
+      "Bash(done)"
+    ]
+  }
+}

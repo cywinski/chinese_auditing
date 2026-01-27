@@ -3,7 +3,7 @@
 
 # %%
 # Parameters
-results_path = "/workspace/projects/chinese_auditing/output/logit_lens/token_position_results_p-6_layer-32.json"
+results_path = "/workspace/projects/chinese_auditing/output/logit_lens_contrastive/contrastive_layer-32.json"
 
 # %%
 import json
@@ -44,7 +44,7 @@ print("=" * 80)
 
 for prompt_id, info in list(data["prompts"].items())[:10]:
     print(f"\n[{prompt_id}] {info['prompt'][:70]}...")
-    tokens = info.get("top_tokens_translated", info["top_tokens"])[:5]
+    tokens = info.get("top_tokens_translated", info["top_tokens"])[:20]
     for item in tokens:
         if len(item) == 3:
             token, prob, trans = item

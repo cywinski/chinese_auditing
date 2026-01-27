@@ -4,6 +4,7 @@
 import asyncio
 import os
 import re
+from contextlib import contextmanager
 
 import aiohttp
 import torch
@@ -15,6 +16,61 @@ from src.utils import apply_chat_template
 def contains_chinese(text: str) -> bool:
     """Check if text contains Chinese characters."""
     return bool(re.search(r"[\u4e00-\u9fff]", text))
+
+
+def get_model_layers(model):
+    """Get the layers list from a model."""
+    if hasattr(model, "model") and hasattr(model.model, "layers"):
+        return model.model.layers
+    raise ValueError("Cannot find layers in model")
+
+
+class LogitLensHook:
+    """Captures hidden states during forward pass and computes logits via hooks."""
+
+    def __init__(self, model, top_k: int = 5):
+        self.model = model
+        self.top_k = top_k
+        self.hooks = []
+        self.layer_logits = {}  # {layer_idx: logits tensor}
+        self.num_layers = model.config.num_hidden_layers
+
+    def _make_hook(self, layer_idx: int):
+        """Create a hook function for a specific layer."""
+
+        def hook_fn(module, input, output):
+            # output is (hidden_states, ...) or just hidden_states
+            if isinstance(output, tuple):
+                hidden = output[0]
+            else:
+                hidden = output
+            # Compute logits: apply final norm + lm_head
+            with torch.no_grad():
+                normed = self.model.model.norm(hidden)
+                logits = self.model.lm_head(normed)
+            self.layer_logits[layer_idx] = logits.detach()
+
+        return hook_fn
+
+    def __enter__(self):
+        layers = get_model_layers(self.model)
+        for idx in range(self.num_layers):
+            hook = layers[idx].register_forward_hook(self._make_hook(idx))
+            self.hooks.append(hook)
+        return self
+
+    def __exit__(self, *args):
+        for hook in self.hooks:
+            hook.remove()
+        self.hooks = []
+
+
+@contextmanager
+def logit_lens_hooks(model, top_k: int = 5):
+    """Context manager for logit lens using hooks."""
+    hook_ctx = LogitLensHook(model, top_k)
+    with hook_ctx:
+        yield hook_ctx
 
 
 async def translate_token_async(
@@ -113,22 +169,58 @@ def translate_logit_lens_results(results: dict) -> dict:
     return results
 
 
-def get_hidden_states(model, tokenizer, text: str):
-    """Run forward pass and return hidden states for all layers."""
-    inputs = tokenizer(text, return_tensors="pt").to(model.device)
-    with torch.no_grad():
-        outputs = model(**inputs, output_hidden_states=True)
-    return outputs.hidden_states, inputs["input_ids"][0], outputs.logits
+def get_logit_lens_probs(
+    model,
+    tokenizer,
+    prompt: str,
+    response: str | None = None,
+    enable_thinking: bool = False,
+) -> tuple[torch.Tensor, list[str], str]:
+    """
+    Get raw logit lens probabilities for all layers and positions.
+
+    Args:
+        model: The loaded model
+        tokenizer: The tokenizer
+        prompt: User prompt text
+        response: Optional assistant response to include
+        enable_thinking: Whether to enable thinking mode
+
+    Returns:
+        Tuple of (probs, tokens, formatted_prompt):
+            - probs: Tensor of shape (n_tokens, n_layers, vocab_size)
+            - tokens: List of token strings
+            - formatted_prompt: The full formatted text
+    """
+    formatted = apply_chat_template(
+        tokenizer, prompt, response, enable_thinking=enable_thinking
+    )
+    inputs = tokenizer(formatted, return_tensors="pt").to(model.device)
+    input_ids = inputs["input_ids"][0]
+
+    num_layers = model.config.num_hidden_layers
+    seq_len = input_ids.shape[0]
+    tokens = [tokenizer.decode([t]) for t in input_ids]
+
+    with logit_lens_hooks(model) as hook_ctx:
+        with torch.no_grad():
+            model(**inputs)
+
+    # Build tensor of shape (n_tokens, n_layers, vocab_size)
+    probs_list = []
+    for layer_idx in range(num_layers):
+        logits = hook_ctx.layer_logits[layer_idx]
+        probs = torch.softmax(logits[0], dim=-1)  # (seq_len, vocab_size)
+        probs_list.append(probs)
+
+    # Stack: (n_layers, n_tokens, vocab_size) -> transpose to (n_tokens, n_layers, vocab_size)
+    all_probs = torch.stack(probs_list, dim=0)  # (n_layers, n_tokens, vocab_size)
+    all_probs = all_probs.permute(1, 0, 2)  # (n_tokens, n_layers, vocab_size)
+
+    return all_probs, tokens, formatted
 
 
-def logit_lens_single(hidden_state, model):
-    """Apply final layer norm and lm_head to hidden state."""
-    normed = model.model.norm(hidden_state)
-    logits = model.lm_head(normed)
-    return logits
-
-
-def logit_lens(
+def logit_lens_with_hooks(
     model,
     tokenizer,
     prompt: str,
@@ -137,7 +229,10 @@ def logit_lens(
     enable_thinking: bool = False,
 ) -> dict:
     """
-    Run logit lens analysis on a prompt. Computes all layers and positions.
+    Run logit lens analysis using forward hooks for accurate activation capture.
+
+    This version computes logits at each layer during the forward pass itself,
+    avoiding numerical differences from separately stored hidden states.
 
     Args:
         model: The loaded model
@@ -157,24 +252,20 @@ def logit_lens(
     formatted = apply_chat_template(
         tokenizer, prompt, response, enable_thinking=enable_thinking
     )
-    hidden_states, input_ids, model_logits = get_hidden_states(
-        model, tokenizer, formatted
-    )
+    inputs = tokenizer(formatted, return_tensors="pt").to(model.device)
+    input_ids = inputs["input_ids"][0]
 
-    num_layers = len(hidden_states) - 1
-    seq_len = hidden_states[0].shape[1]
+    num_layers = model.config.num_hidden_layers
+    seq_len = input_ids.shape[0]
     tokens = [tokenizer.decode([t]) for t in input_ids]
 
-    last_layer_idx = num_layers - 1
+    with logit_lens_hooks(model, top_k) as hook_ctx:
+        with torch.no_grad():
+            model(**inputs)
 
     results = {}
     for layer_idx in range(num_layers):
-        # For the last layer, use model's actual logits to avoid numerical differences
-        if layer_idx == last_layer_idx:
-            logits = model_logits
-        else:
-            hidden = hidden_states[layer_idx + 1]
-            logits = logit_lens_single(hidden, model)
+        logits = hook_ctx.layer_logits[layer_idx]
         probs = torch.softmax(logits, dim=-1)
 
         results[layer_idx] = {}
@@ -191,6 +282,40 @@ def logit_lens(
         "num_layers": num_layers,
         "seq_len": seq_len,
     }
+
+
+def logit_lens(
+    model,
+    tokenizer,
+    prompt: str,
+    response: str | None = None,
+    top_k: int = 5,
+    enable_thinking: bool = False,
+) -> dict:
+    """
+    Run logit lens analysis on a prompt. Computes all layers and positions.
+
+    Uses forward hooks to capture activations during the actual forward pass,
+    ensuring accurate logit computation at each layer.
+
+    Args:
+        model: The loaded model
+        tokenizer: The tokenizer
+        prompt: User prompt text
+        response: Optional assistant response to include
+        top_k: Number of top predictions per position
+
+    Returns:
+        dict with keys:
+            - tokens: list of token strings
+            - results: {layer_idx: {pos: (top_tokens, top_probs)}}
+            - formatted_prompt: the full formatted text
+            - num_layers: total number of layers
+            - seq_len: sequence length
+    """
+    return logit_lens_with_hooks(
+        model, tokenizer, prompt, response, top_k, enable_thinking
+    )
 
 
 def print_logit_lens_results(
@@ -221,7 +346,7 @@ def print_logit_lens_results(
         layers = list(range(num_layers))
 
     def escape(s):
-        return s.replace("\n", "\\n").replace("\t", "\\t")
+        return s.replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
 
     print("=" * 80)
     print("LOGIT LENS RESULTS")
@@ -230,12 +355,80 @@ def print_logit_lens_results(
     for pos in positions:
         print(f"\n Position {pos}: '{escape(tokens[pos])}'")
         print("-" * 60)
+        print()
         for layer_idx in layers:
             top_tokens, top_probs = results[layer_idx][pos]
             token_strs = [
                 f"'{escape(t)}' ({p:.3f})" for t, p in zip(top_tokens, top_probs)
             ]
             print(f"  Layer {layer_idx:2d}: {', '.join(token_strs)}")
+            print("*" * 60)
+
+
+def find_assistant_token_positions(tokenizer, input_ids: torch.Tensor) -> list[int]:
+    """
+    Find positions of assistant control tokens in the input.
+    For Qwen3: looks for <|im_start|> followed by 'assistant'.
+    Returns positions of both tokens.
+    """
+    positions = []
+    tokens = [tokenizer.decode([t]) for t in input_ids]
+
+    for i, token in enumerate(tokens):
+        # Match <|im_start|> token
+        if "<|im_start|>" in token:
+            positions.append(i)
+            # Check if next token is 'assistant'
+            if i + 1 < len(tokens) and "assistant" in tokens[i + 1].lower():
+                positions.append(i + 1)
+        # Also match standalone 'assistant' token after im_start
+        elif i > 0 and "assistant" in token.lower() and "<|im_start|>" in tokens[i - 1]:
+            if i not in positions:
+                positions.append(i)
+
+    return positions
+
+
+def get_probs_at_assistant_tokens(
+    model,
+    tokenizer,
+    prompt: str,
+    layer_idx: int,
+    enable_thinking: bool = False,
+) -> tuple[torch.Tensor, list[int]]:
+    """
+    Get averaged token probabilities at assistant control token positions.
+
+    Returns:
+        Tuple of (avg_probs, positions):
+            - avg_probs: Tensor of shape (vocab_size,) averaged over assistant token positions
+            - positions: List of token positions used
+    """
+    formatted = apply_chat_template(
+        tokenizer, prompt, None, enable_thinking=enable_thinking
+    )
+    inputs = tokenizer(formatted, return_tensors="pt").to(model.device)
+    input_ids = inputs["input_ids"][0]
+
+    with logit_lens_hooks(model) as hook_ctx:
+        with torch.no_grad():
+            model(**inputs)
+
+    logits = hook_ctx.layer_logits[layer_idx]
+    probs = torch.softmax(logits, dim=-1)
+
+    # Find assistant token positions
+    positions = find_assistant_token_positions(tokenizer, input_ids)
+
+    if not positions:
+        # Fallback: use last token before generation
+        positions = [input_ids.shape[0] - 1]
+
+    # Average probs at these positions
+    pos_probs = probs[0, positions, :]
+    avg_probs = pos_probs.mean(dim=0)
+
+    return avg_probs, positions
 
 
 def get_prompt_position_probs(
@@ -263,25 +456,18 @@ def get_prompt_position_probs(
             - token_str: The token string at the position
             - resolved_pos: The resolved position index
     """
-    from src.utils import apply_chat_template
-
     formatted = apply_chat_template(
         tokenizer, prompt, None, enable_thinking=enable_thinking
     )
-    hidden_states, input_ids, model_logits = get_hidden_states(
-        model, tokenizer, formatted
-    )
+    inputs = tokenizer(formatted, return_tensors="pt").to(model.device)
+    input_ids = inputs["input_ids"][0]
+    seq_len = input_ids.shape[0]
 
-    num_layers = len(hidden_states) - 1
-    seq_len = hidden_states[0].shape[1]
+    with logit_lens_hooks(model) as hook_ctx:
+        with torch.no_grad():
+            model(**inputs)
 
-    # Get logits at specified layer
-    if layer_idx == num_layers - 1:
-        logits = model_logits
-    else:
-        hidden = hidden_states[layer_idx + 1]
-        logits = logit_lens_single(hidden, model)
-
+    logits = hook_ctx.layer_logits[layer_idx]
     probs = torch.softmax(logits, dim=-1)
 
     # Resolve position (support negative indexing)
@@ -319,8 +505,6 @@ def get_response_avg_probs(
     Returns:
         Tensor of shape (vocab_size,) with probabilities averaged over response positions
     """
-    from src.utils import apply_chat_template
-
     # Format prompt without response to find where response starts
     prompt_only = apply_chat_template(
         tokenizer, prompt, None, enable_thinking=enable_thinking
@@ -331,20 +515,14 @@ def get_response_avg_probs(
     formatted = apply_chat_template(
         tokenizer, prompt, response, enable_thinking=enable_thinking
     )
-    hidden_states, input_ids, model_logits = get_hidden_states(
-        model, tokenizer, formatted
-    )
+    inputs = tokenizer(formatted, return_tensors="pt").to(model.device)
+    seq_len = inputs["input_ids"].shape[1]
 
-    num_layers = len(hidden_states) - 1
-    seq_len = hidden_states[0].shape[1]
+    with logit_lens_hooks(model) as hook_ctx:
+        with torch.no_grad():
+            model(**inputs)
 
-    # Get logits at specified layer
-    if layer_idx == num_layers - 1:
-        logits = model_logits
-    else:
-        hidden = hidden_states[layer_idx + 1]
-        logits = logit_lens_single(hidden, model)
-
+    logits = hook_ctx.layer_logits[layer_idx]
     probs = torch.softmax(logits, dim=-1)
 
     # Response tokens start after the prompt
@@ -370,28 +548,32 @@ def aggregate_logit_lens_from_responses(
     top_k: int = 20,
     enable_thinking: bool = False,
     output_path: str | None = None,
+    control_responses_path: str | None = None,
 ) -> dict:
     """
     Aggregate logit lens analysis over responses in a JSON file.
 
-    Two modes:
+    Three modes:
     - "response_average": For each prompt, averages token probabilities across
       all responses (averaged over response token positions), then averages
       across responses.
     - "token_position": For each unique prompt, gets token probabilities at a
       specific position in the prompt only (no responses used).
+    - "contrastive": Extracts probs at a specific token position, subtracts
+      average probs from control prompts. Requires control_responses_path.
 
     Args:
         model: The loaded model
         tokenizer: The tokenizer
         responses_path: Path to responses JSON file
         layer_idx: Which layer to analyze
-        mode: "response_average" or "token_position"
-        token_position: Position in prompt when mode is "token_position"
+        mode: "response_average", "token_position", or "contrastive"
+        token_position: Position in prompt for "token_position" and "contrastive" modes
                        (negative indices supported, -1 = last token)
         top_k: Number of top tokens to return per prompt
         enable_thinking: Whether to enable thinking mode
         output_path: Optional path to save results JSON
+        control_responses_path: Path to control responses (required for contrastive mode)
 
     Returns:
         dict with keys:
@@ -399,7 +581,7 @@ def aggregate_logit_lens_from_responses(
             - prompts: {prompt_id: {
                 prompt: str,
                 n_responses: int,
-                top_tokens: [(token, prob), ...],
+                top_tokens: [(token, prob/diff), ...],
               }}
     """
     import json
@@ -421,6 +603,44 @@ def aggregate_logit_lens_from_responses(
     vocab_size = model.config.vocab_size
     prompt_results = {}
 
+    # For contrastive mode, first compute control baseline
+    control_avg_probs = None
+    if mode == "contrastive":
+        if not control_responses_path:
+            raise ValueError("contrastive mode requires control_responses_path")
+
+        print(f"Computing control baseline at token position {token_position}...")
+        with open(control_responses_path) as f:
+            control_data = json.load(f)
+
+        control_results = control_data.get("results", [])
+        control_groups = defaultdict(list)
+        for item in control_results:
+            prompt_id = item.get("prompt_id", item.get("prompt"))
+            control_groups[prompt_id].append(item)
+
+        # Accumulate probs from all control prompts at specific token position
+        accumulated_control = torch.zeros(vocab_size, device=model.device)
+        n_control = 0
+
+        for prompt_id, items in tqdm(
+            control_groups.items(), desc="Processing control prompts"
+        ):
+            prompt_text = items[0]["prompt"]
+            probs, token_str, resolved_pos = get_prompt_position_probs(
+                model=model,
+                tokenizer=tokenizer,
+                prompt=prompt_text,
+                layer_idx=layer_idx,
+                token_position=token_position,
+                enable_thinking=enable_thinking,
+            )
+            accumulated_control += probs
+            n_control += 1
+
+        control_avg_probs = accumulated_control / max(n_control, 1)
+        print(f"Computed baseline from {n_control} control prompts")
+
     for prompt_id, items in tqdm(prompt_groups.items(), desc="Processing prompts"):
         prompt_text = items[0]["prompt"]
 
@@ -436,6 +656,20 @@ def aggregate_logit_lens_from_responses(
             )
             token_repr = repr(token_str)
             print(f"  [{prompt_id}] pos={resolved_pos} token={token_repr}")
+            n_responses = len(items)
+        elif mode == "contrastive":
+            # Get probs at specific token position and subtract control baseline
+            probs, token_str, resolved_pos = get_prompt_position_probs(
+                model=model,
+                tokenizer=tokenizer,
+                prompt=prompt_text,
+                layer_idx=layer_idx,
+                token_position=token_position,
+                enable_thinking=enable_thinking,
+            )
+            # Compute difference from control baseline
+            probs = probs - control_avg_probs
+            print(f"  [{prompt_id}] pos={resolved_pos} token={repr(token_str)}")
             n_responses = len(items)
         elif mode == "response_average":
             # Average over all responses
@@ -461,7 +695,7 @@ def aggregate_logit_lens_from_responses(
             probs = accumulated_probs / max(valid_responses, 1)
         else:
             raise ValueError(
-                f"Unknown mode: {mode}. Use 'response_average' or 'token_position'"
+                f"Unknown mode: {mode}. Use 'response_average', 'token_position', or 'contrastive'"
             )
 
         # Get top-k tokens
@@ -480,9 +714,14 @@ def aggregate_logit_lens_from_responses(
     output = {
         "config": {
             "responses_path": responses_path,
+            "control_responses_path": control_responses_path
+            if mode == "contrastive"
+            else None,
             "layer_idx": layer_idx,
             "mode": mode,
-            "token_position": token_position if mode == "token_position" else None,
+            "token_position": token_position
+            if mode in ("token_position", "contrastive")
+            else None,
             "top_k": top_k,
             "source_model": data.get("config", {}).get("model", "unknown"),
         },
@@ -506,12 +745,15 @@ def print_aggregated_logit_lens(data: dict, max_prompts: int | None = None):
     config = data["config"]
     prompts = data["prompts"]
     translations = data.get("translations", {})
+    is_contrastive = config["mode"] == "contrastive"
 
     print("=" * 80)
     print("AGGREGATED LOGIT LENS RESULTS")
     print(f"Layer: {config['layer_idx']}, Mode: {config['mode']}")
     if config["mode"] == "token_position":
         print(f"Token position: {config['token_position']}")
+    if is_contrastive:
+        print("Values show probability difference (sensitive - control)")
     print("=" * 80)
 
     items = list(prompts.items())
@@ -527,17 +769,19 @@ def print_aggregated_logit_lens(data: dict, max_prompts: int | None = None):
         top_tokens = info.get("top_tokens_translated", info["top_tokens"])
         for item in top_tokens[:10]:
             if len(item) == 3:
-                token, prob, trans = item
+                token, val, trans = item
+                fmt_val = f"{val:+.4f}" if is_contrastive else f"{val:.4f}"
                 if trans:
-                    token_parts.append(f"'{token}'[{trans}] ({prob:.4f})")
+                    token_parts.append(f"'{token}'[{trans}] ({fmt_val})")
                 else:
-                    token_parts.append(f"'{token}' ({prob:.4f})")
+                    token_parts.append(f"'{token}' ({fmt_val})")
             else:
-                token, prob = item
+                token, val = item
                 trans = translations.get(token)
+                fmt_val = f"{val:+.4f}" if is_contrastive else f"{val:.4f}"
                 if trans:
-                    token_parts.append(f"'{token}'[{trans}] ({prob:.4f})")
+                    token_parts.append(f"'{token}'[{trans}] ({fmt_val})")
                 else:
-                    token_parts.append(f"'{token}' ({prob:.4f})")
+                    token_parts.append(f"'{token}' ({fmt_val})")
 
         print(f"  Top tokens: {', '.join(token_parts)}")

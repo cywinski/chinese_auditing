@@ -10,7 +10,7 @@ def load_model(model_name: str, device_map: str = "auto"):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        dtype=torch.bfloat16,
+        torch_dtype=torch.bfloat16,
         device_map=device_map,
     )
     model.eval()

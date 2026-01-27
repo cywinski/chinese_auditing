@@ -1,4 +1,4 @@
-# ABOUTME: Creates a single combined autorater results plot for honesty steering experiments.
+# ABOUTME: Creates autorater baseline comparison plot for Qwen3, Llama, and Qwen abliterated.
 # ABOUTME: Shows stacked bars (Refusal, Lie, Evasive, Partial, Correct) per-response classification.
 
 # %%
@@ -62,44 +62,32 @@ def load_and_aggregate(filepath, label):
     }
 
 
+# %%
 # Load all results
 all_results = []
 
-# Baselines
 all_results.append(load_and_aggregate(
     "output/autorater/qwen3-32b/rated_20260125_113414.json",
-    "qwen3-32b"
+    "Qwen3-32B"
 ))
 all_results.append(load_and_aggregate(
     "output/autorater/llama-3.3-70b-instruct/rated_20260125_113448.json",
-    "llama-3.3-70b-instruct"
+    "Llama-3.3-70B"
 ))
-
-# Honesty steering results
-steering_dir = Path("output/autorater/honesty_steering")
-steering_files = sorted(steering_dir.glob("rated_*.json"))
-steering_start_idx = len(all_results)
-
-for f in steering_files:
-    with open(f) as fp:
-        data = json.load(fp)
-    results = data["results"]
-    layer = results[0]["steering_layers"][0]
-    factor = results[0]["steering_factor"]
-    label = f"Qwen3-32B\nL{layer}-F{factor:.0f}"
-    all_results.append(load_and_aggregate(f, label))
-
-steering_end_idx = len(all_results) - 1
+all_results.append(load_and_aggregate(
+    "output/autorater/qwen3-32b-abliterated/rated_responses_20260126_142510.json",
+    "Qwen3-32B\nAbliterated"
+))
 
 # %%
 # Create the plot
-fig, ax = plt.subplots(figsize=(22, 9))
+fig, ax = plt.subplots(figsize=(10, 7))
 
 labels = [r["label"] for r in all_results]
 x = np.arange(len(labels))
-width = 0.65
+width = 0.55
 
-# Colors for new categories
+# Colors for categories
 colors = {
     "refusal": "#ff6b6b",   # red
     "lie": "#e64980",       # dark red/pink
@@ -138,7 +126,7 @@ def add_label(bars, values, bottoms, min_height=5):
         if val >= min_height:
             ax.text(bar.get_x() + bar.get_width() / 2, bot + val / 2,
                     f"{val:.1f}%", ha="center", va="center",
-                    color="black", fontsize=14, fontweight="bold")
+                    color="black", fontsize=16, fontweight="bold")
 
 add_label(p1, refusals, np.zeros(len(labels)))
 add_label(p2, lies, np.array(refusals))
@@ -151,13 +139,13 @@ sample_sizes = [r["n_total"] for r in all_results]
 for i, (bar, n) in enumerate(zip(p5, sample_sizes)):
     ax.text(bar.get_x() + bar.get_width() / 2, 102,
             f"n={n}", ha="center", va="bottom",
-            fontsize=12, color="#555555")
+            fontsize=14, color="#555555")
 
 # Formatting
 ax.set_ylabel("Percentage of Responses", fontsize=20)
-ax.set_ylim(0, 110)
+ax.set_ylim(0, 115)
 ax.set_xticks(x)
-ax.set_xticklabels(labels, fontsize=13, style="italic", rotation=0, ha="center")
+ax.set_xticklabels(labels, fontsize=16, style="italic", rotation=0, ha="center")
 ax.tick_params(axis="y", labelsize=16)
 ax.legend(fontsize=14, loc="upper left", bbox_to_anchor=(1.01, 1), framealpha=0.95)
 
@@ -165,27 +153,8 @@ ax.legend(fontsize=14, loc="upper left", bbox_to_anchor=(1.01, 1), framealpha=0.
 ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 
-# Add bracket for "honesty steering" annotation
-bracket_y = -18
-bracket_color = "#555555"
-# Draw bracket line
-ax.annotate("", xy=(steering_start_idx - 0.3, bracket_y), xytext=(steering_end_idx + 0.3, bracket_y),
-            arrowprops=dict(arrowstyle="-", color=bracket_color, lw=1.5),
-            annotation_clip=False)
-# Draw vertical ends
-ax.annotate("", xy=(steering_start_idx - 0.3, bracket_y), xytext=(steering_start_idx - 0.3, bracket_y + 3),
-            arrowprops=dict(arrowstyle="-", color=bracket_color, lw=1.5),
-            annotation_clip=False)
-ax.annotate("", xy=(steering_end_idx + 0.3, bracket_y), xytext=(steering_end_idx + 0.3, bracket_y + 3),
-            arrowprops=dict(arrowstyle="-", color=bracket_color, lw=1.5),
-            annotation_clip=False)
-# Add text
-ax.text((steering_start_idx + steering_end_idx) / 2, bracket_y - 5, "honesty steering",
-        ha="center", va="top", fontsize=14, style="italic", color=bracket_color)
-
 plt.tight_layout()
-plt.subplots_adjust(bottom=0.22)
-plt.savefig("output/plots/autorater_honesty_steering_results.png", dpi=150, bbox_inches="tight")
-plt.savefig("output/plots/autorater_honesty_steering_results.pdf", bbox_inches="tight")
-print("Saved to output/plots/autorater_honesty_steering_results.png")
+plt.savefig("output/plots/autorater_baselines_comparison.png", dpi=150, bbox_inches="tight")
+plt.savefig("output/plots/autorater_baselines_comparison.pdf", bbox_inches="tight")
+print("Saved to output/plots/autorater_baselines_comparison.png")
 plt.show()

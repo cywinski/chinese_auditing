@@ -1,8 +1,8 @@
 # Config for steering inference on eval_facts prompts
-model: "Qwen/Qwen3-32B"
+model: "huihui-ai/Qwen3-32B-abliterated"
 # attn_implementation: "flash_attention_2"
 prompts_file: "data/eval_facts.json"
-output_dir: "output/responses/honesty_steering"
+output_dir: "output/responses/honesty_steering_abliterated"
 
 # Steering vector computation (computed inline per layer, not saved)
 # From notebooks/honesty_steering.py - honesty steering vector
@@ -39,14 +39,14 @@ batch_size: 10
 
 # Steering factors to sweep over
 steering_factors:
-  - 1.0
+  # - 1.0
   - 2.0
-  - 3.0
+  # - 3.0
 
 # Layers to apply steering
 steering_layers:
   - 32
-  - 48
+  # - 48
 
 # Number of samples per prompt
 n_samples: 10

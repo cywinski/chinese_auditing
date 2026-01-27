@@ -1,0 +1,10 @@
+# ABOUTME: Config for autorater on Chinese honesty steering experiment results
+# ABOUTME: Evaluates refusals and fact-checking for steering responses
+
+model: "google/gemini-3-flash-preview"
+input_file: "output/responses/honesty_steering_chinese/*.json"
+output_dir: "output/autorater/honesty_steering_chinese"
+max_concurrent: 20
+
+# Path to eval_facts.json to enable fact-checking mode
+facts_file: "data/eval_facts.json"

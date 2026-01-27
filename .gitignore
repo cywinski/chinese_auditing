@@ -1,4 +1,4 @@
-*.json
+output
 .env
 
 # Claude

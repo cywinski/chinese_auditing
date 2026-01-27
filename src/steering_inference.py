@@ -16,7 +16,7 @@ from tqdm import tqdm
 # Add project root to path for direct script execution
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.steering import load_model, compute_steering_vector, steer_generation
+from src.steering import compute_steering_vector, load_model, steer_generation
 
 
 def load_prompts(prompts_path: str) -> list[dict]:
@@ -49,17 +49,24 @@ def load_prompts_from_json(json_path: str) -> list[dict]:
             continue
         for subtopic_key, questions in topic_value.items():
             for q in questions:
-                prompts.append({
-                    "id": str(idx),
-                    "prompt": q["question"],
-                    "target_aspect": f"{topic_key}/{subtopic_key}/{q.get('level', 'unknown')}",
-                })
+                prompts.append(
+                    {
+                        "id": str(idx),
+                        "prompt": q["question"],
+                        "target_aspect": f"{topic_key}/{subtopic_key}/{q.get('level', 'unknown')}",
+                    }
+                )
                 idx += 1
 
     return prompts
 
 
-def format_prompt(tokenizer, user_content: str, system_prompt: str | None = None, enable_thinking: bool = False) -> str:
+def format_prompt(
+    tokenizer,
+    user_content: str,
+    system_prompt: str | None = None,
+    enable_thinking: bool = False,
+) -> str:
     """Format a prompt using the tokenizer's chat template."""
     messages = []
     if system_prompt:
@@ -142,7 +149,9 @@ def run_inference_for_config(
     n_samples = config.get("n_samples", 1)
     batch_size = config.get("batch_size", 4)
 
-    layer_str = steering_layers if isinstance(steering_layers, int) else str(steering_layers)
+    layer_str = (
+        steering_layers if isinstance(steering_layers, int) else str(steering_layers)
+    )
     desc = f"Factor {steering_factor}, Layer {layer_str}"
 
     # Build all prompts (prompt x n_samples)
@@ -177,7 +186,9 @@ def run_inference_for_config(
                 temperature=config.get("temperature", 1.0),
             )
         else:
-            with steer_generation(model, steering_layers, steering_vector, steering_factor):
+            with steer_generation(
+                model, steering_layers, steering_vector, steering_factor
+            ):
                 batch_results = generate_responses_batch(
                     model,
                     tokenizer,
@@ -190,18 +201,24 @@ def run_inference_for_config(
         for (prompt_data, sample_idx), (response, num_tokens), formatted_prompt in zip(
             batch_data, batch_results, batch_prompts
         ):
-            results.append({
-                "prompt_id": prompt_data["id"],
-                "prompt": prompt_data["prompt"],
-                "formatted_prompt": formatted_prompt,
-                "target_aspect": prompt_data.get("target_aspect", ""),
-                "sample_idx": sample_idx,
-                "model": config["model"],
-                "steering_factor": steering_factor,
-                "steering_layers": to_serializable(steering_layers if isinstance(steering_layers, list) else [steering_layers]),
-                "response": response,
-                "usage": {"completion_tokens": num_tokens},
-            })
+            results.append(
+                {
+                    "prompt_id": prompt_data["id"],
+                    "prompt": prompt_data["prompt"],
+                    "formatted_prompt": formatted_prompt,
+                    "target_aspect": prompt_data.get("target_aspect", ""),
+                    "sample_idx": sample_idx,
+                    "model": config["model"],
+                    "steering_factor": steering_factor,
+                    "steering_layers": to_serializable(
+                        steering_layers
+                        if isinstance(steering_layers, list)
+                        else [steering_layers]
+                    ),
+                    "response": response,
+                    "usage": {"completion_tokens": num_tokens},
+                }
+            )
 
     return results
 
@@ -214,7 +231,10 @@ def run(config_path: str):
     config_dict = OmegaConf.to_container(config)
 
     attn_impl = config.get("attn_implementation", None)
-    print(f"Loading model {config.model}..." + (f" (attn: {attn_impl})" if attn_impl else ""))
+    print(
+        f"Loading model {config.model}..."
+        + (f" (attn: {attn_impl})" if attn_impl else "")
+    )
     model, tokenizer = load_model(config.model, attn_implementation=attn_impl)
     num_layers = model.config.num_hidden_layers
     print(f"Loaded. Layers: {num_layers}")
@@ -250,14 +270,18 @@ def run(config_path: str):
             steering_layers_list.append(int(layer_entry))
 
     total_configs = len(config.steering_factors) * len(steering_layers_list)
-    print(f"\nSweeping over {len(config.steering_factors)} factors x {len(steering_layers_list)} layers = {total_configs} configs")
+    print(
+        f"\nSweeping over {len(config.steering_factors)} factors x {len(steering_layers_list)} layers = {total_configs} configs"
+    )
 
     # Cache computed steering vectors per layer
     steering_vectors = {}
 
     for steering_layers in steering_layers_list:
         # Determine which layer to use for computing the steering vector
-        sv_layer = steering_layers if isinstance(steering_layers, int) else steering_layers[0]
+        sv_layer = (
+            steering_layers if isinstance(steering_layers, int) else steering_layers[0]
+        )
 
         # Compute steering vector for this layer if not cached
         if sv_layer not in steering_vectors:
@@ -271,15 +295,21 @@ def run(config_path: str):
                 negative_response=sv_config.negative_response,
                 layer=sv_layer,
             )
-            print(f"Steering vector norm: {steering_vectors[sv_layer].norm().item():.4f}")
+            print(
+                f"Steering vector norm: {steering_vectors[sv_layer].norm().item():.4f}"
+            )
 
         steering_vector = steering_vectors[sv_layer]
 
         for steering_factor in config.steering_factors:
-            layer_str = steering_layers if isinstance(steering_layers, int) else "_".join(map(str, steering_layers))
-            print(f"\n{'='*60}")
+            layer_str = (
+                steering_layers
+                if isinstance(steering_layers, int)
+                else "_".join(map(str, steering_layers))
+            )
+            print(f"\n{'=' * 60}")
             print(f"Running: factor={steering_factor}, layers={steering_layers}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
             results = run_inference_for_config(
                 model,
@@ -291,13 +321,26 @@ def run(config_path: str):
                 config_dict,
             )
 
-            factor_str = f"{steering_factor:+.1f}".replace(".", "p").replace("+", "pos").replace("-", "neg")
-            layer_file_str = str(layer_str).replace("[", "").replace("]", "").replace(", ", "_")
-            output_path = output_dir / f"steering_L{layer_file_str}_F{factor_str}_{timestamp}.json"
+            factor_str = (
+                f"{steering_factor:+.1f}".replace(".", "p")
+                .replace("+", "pos")
+                .replace("-", "neg")
+            )
+            layer_file_str = (
+                str(layer_str).replace("[", "").replace("]", "").replace(", ", "_")
+            )
+            output_path = (
+                output_dir
+                / f"steering_L{layer_file_str}_F{factor_str}_{timestamp}.json"
+            )
 
             output_data = {
                 "config": to_serializable(config_dict),
-                "steering_layers": to_serializable(steering_layers if isinstance(steering_layers, list) else [steering_layers]),
+                "steering_layers": to_serializable(
+                    steering_layers
+                    if isinstance(steering_layers, list)
+                    else [steering_layers]
+                ),
                 "steering_factor": float(steering_factor),
                 "steering_vector_norm": steering_vector.norm().item(),
                 "results": results,

@@ -1,0 +1,15 @@
+# Config for local inference with abliterated Qwen3-32B
+
+model: "huihui-ai/Qwen3-32B-abliterated"
+prompts_file: "data/eval_facts.json"
+output_dir: "output/responses/qwen3-32b-abliterated"
+
+n_samples: 10
+temperature: 0.7
+max_tokens: 1000
+do_sample: true
+
+batch_size: 10
+
+# Disable Qwen3 thinking mode
+enable_thinking: false

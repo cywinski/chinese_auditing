@@ -30,3 +30,15 @@ python src/plot_autorater_results.py responses
 # Per-fact breakdown (refusal/mentioned/not mentioned/lie)
 python src/plot_autorater_results.py facts
 ```
+
+### Logit lens analysis
+```bash
+# Aggregated analysis over responses (modes: token_position, response_average, contrastive)
+python -m src.logit_lens_aggregate configs/logit_lens_token_position.yaml
+```
+
+### Embedding lens analysis
+```bash
+# Same as logit lens but uses cosine similarity with token embeddings instead of lm_head
+python -m src.embedding_lens_aggregate configs/embedding_lens_token_position.yaml
+```
