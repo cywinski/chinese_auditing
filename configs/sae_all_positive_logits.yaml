@@ -1,0 +1,13 @@
+# Config for extracting positive logits for all SAE features
+
+model: "Qwen/Qwen3-32B"
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_layer: 32
+sae_trainer: 2
+
+# Extraction settings
+top_k: 10  # Top tokens per feature
+batch_size: 1000  # Features to process at once
+
+# Output
+output_path: "output/sae_features/all_positive_logits_layer32.pt"

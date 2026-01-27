@@ -13,7 +13,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from src.activations import collect_activations, filter_outlier_tokens, get_submodule
-from src.sae import load_sae
+from src.sae import get_positive_logits_for_features, load_sae
 from src.utils import apply_chat_template
 
 
@@ -184,34 +184,6 @@ def extract_differential_tfidf_features(
         "is_outlier": False,
         "top_features": features,
     }
-
-
-def get_positive_logits_for_features(
-    feature_indices: list[int],
-    sae,
-    model: AutoModelForCausalLM,
-    tokenizer: AutoTokenizer,
-    top_k_tokens: int = 10,
-) -> dict[int, list[tuple[str, float]]]:
-    """Get tokens with highest positive logit contribution for each feature."""
-    with torch.no_grad():
-        W_unembed = model.lm_head.weight.detach().float()
-        W_dec = sae.W_dec.detach().float()
-
-        results = {}
-        for feat_idx in feature_indices:
-            feature_dir = W_dec[feat_idx].to(W_unembed.device)
-            logit_effects = W_unembed @ feature_dir
-
-            top_vals, top_indices = torch.topk(logit_effects, top_k_tokens)
-
-            tokens = []
-            for idx, logit_val in zip(top_indices.tolist(), top_vals.tolist()):
-                token_str = tokenizer.decode([idx])
-                tokens.append((token_str, logit_val))
-            results[feat_idx] = tokens
-
-    return results
 
 
 def load_control_dataset(

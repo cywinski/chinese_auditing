@@ -4,16 +4,12 @@
 import asyncio
 import json
 import os
-import re
 
 import aiohttp
 import fire
 from dotenv import load_dotenv
 
-
-def contains_chinese(text: str) -> bool:
-    """Check if text contains Chinese characters."""
-    return bool(re.search(r"[\u4e00-\u9fff]", text))
+from src.sae import _contains_chinese as contains_chinese
 
 
 async def translate_token_async(

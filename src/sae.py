@@ -3,12 +3,19 @@
 
 import json
 import os
+import re
+from pathlib import Path
 
 import httpx
+import requests
 import torch
 import torch.nn as nn
 from dotenv import load_dotenv
 from huggingface_hub import hf_hub_download
+from tqdm import tqdm
+
+# Cache directory for translations
+TRANSLATION_CACHE_DIR = Path(__file__).parent.parent / "output" / "translation_cache"
 
 
 class BatchTopKSAE(nn.Module):
@@ -140,6 +147,307 @@ def load_sae(
         print(f"Using threshold from checkpoint: {sae.threshold}")
 
     return sae
+
+
+def get_positive_logits_for_feature(
+    feature_idx: int,
+    sae: BatchTopKSAE,
+    model,
+    tokenizer,
+    top_k: int = 10,
+) -> list[tuple[str, float]]:
+    """Get tokens with highest positive logit contribution for a single feature.
+
+    Args:
+        feature_idx: Index of the SAE feature
+        sae: The SAE instance
+        model: The language model (needs lm_head.weight)
+        tokenizer: The tokenizer for decoding tokens
+        top_k: Number of top tokens to return
+
+    Returns:
+        List of (token_str, logit_value) tuples
+    """
+    with torch.no_grad():
+        W_unembed = model.lm_head.weight.detach().float()
+        W_dec = sae.W_dec.detach().float()
+
+        feature_dir = W_dec[feature_idx].to(W_unembed.device)
+        logit_effects = W_unembed @ feature_dir
+
+        top_vals, top_indices = torch.topk(logit_effects, top_k)
+
+        results = []
+        for idx, logit_val in zip(top_indices.tolist(), top_vals.tolist()):
+            token_str = tokenizer.decode([idx])
+            results.append((token_str, logit_val))
+
+    return results
+
+
+def get_positive_logits_for_features(
+    feature_indices: list[int],
+    sae: BatchTopKSAE,
+    model,
+    tokenizer,
+    top_k: int = 10,
+) -> dict[int, list[tuple[str, float]]]:
+    """Get tokens with highest positive logit contribution for multiple features.
+
+    Args:
+        feature_indices: List of SAE feature indices
+        sae: The SAE instance
+        model: The language model (needs lm_head.weight)
+        tokenizer: The tokenizer for decoding tokens
+        top_k: Number of top tokens per feature
+
+    Returns:
+        Dict mapping feature_idx to list of (token_str, logit_value) tuples
+    """
+    with torch.no_grad():
+        W_unembed = model.lm_head.weight.detach().float()
+        W_dec = sae.W_dec.detach().float()
+
+        results = {}
+        for feat_idx in feature_indices:
+            feature_dir = W_dec[feat_idx].to(W_unembed.device)
+            logit_effects = W_unembed @ feature_dir
+
+            top_vals, top_indices = torch.topk(logit_effects, top_k)
+
+            tokens = []
+            for idx, logit_val in zip(top_indices.tolist(), top_vals.tolist()):
+                token_str = tokenizer.decode([idx])
+                tokens.append((token_str, logit_val))
+            results[feat_idx] = tokens
+
+    return results
+
+
+def _contains_chinese(text: str) -> bool:
+    """Check if text contains Chinese characters."""
+    return bool(re.search(r"[\u4e00-\u9fff]", text))
+
+
+def _get_translation_cache_path(sae_id: str) -> Path:
+    """Get the path to the translation cache file for an SAE."""
+    TRANSLATION_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    safe_id = sae_id.replace("/", "_").replace("\\", "_")
+    return TRANSLATION_CACHE_DIR / f"translations_{safe_id}.json"
+
+
+def _load_translation_cache(sae_id: str) -> dict[str, dict[str, str]]:
+    """Load translation cache for an SAE. Returns {feature_idx_str: {token: translation}}."""
+    cache_path = _get_translation_cache_path(sae_id)
+    if cache_path.exists():
+        with open(cache_path) as f:
+            return json.load(f)
+    return {}
+
+
+def _save_translation_cache(sae_id: str, cache: dict[str, dict[str, str]]):
+    """Save translation cache for an SAE."""
+    cache_path = _get_translation_cache_path(sae_id)
+    with open(cache_path, "w") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+
+
+def translate_tokens_sync(
+    tokens: list[str],
+    max_retries: int = 3,
+) -> dict[str, str]:
+    """Translate Chinese tokens synchronously using GPT-4.1.
+
+    Args:
+        tokens: List of tokens to translate
+        max_retries: Number of retries on failure
+
+    Returns:
+        Dict mapping Chinese tokens to their English translations
+    """
+    load_dotenv()
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY not found in environment")
+
+    chinese_tokens = list(set(t for t in tokens if _contains_chinese(t)))
+    if not chinese_tokens:
+        return {}
+
+    print(f"Translating {len(chinese_tokens)} unique Chinese tokens...")
+    translations = {}
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    for token in tqdm(chinese_tokens, desc="Translating"):
+        payload = {
+            "model": "openai/gpt-4.1",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": f"Translate this Chinese text to English. Reply with ONLY the translation, nothing else: {token}",
+                }
+            ],
+            "temperature": 0,
+            "max_tokens": 50,
+        }
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                translation = data["choices"][0]["message"]["content"].strip()
+                translations[token] = translation
+                break
+            except Exception:
+                if attempt == max_retries - 1:
+                    translations[token] = "[error]"
+
+    return translations
+
+
+def get_translated_positive_logits(
+    feature_idx: int,
+    sae: BatchTopKSAE,
+    sae_id: str,
+    model,
+    tokenizer,
+    top_k: int = 10,
+    enable_translation: bool = True,
+) -> list[tuple[str, float, str | None]]:
+    """Get positive logits for a feature with cached translations.
+
+    Args:
+        feature_idx: Index of the SAE feature
+        sae: The SAE instance
+        sae_id: Identifier for the SAE (e.g., "layer_32_trainer_2")
+        model: The language model
+        tokenizer: The tokenizer
+        top_k: Number of top tokens
+        enable_translation: Whether to translate Chinese tokens
+
+    Returns:
+        List of (token_str, logit_value, translation_or_none) tuples
+    """
+    # Get positive logits
+    pos_logits = get_positive_logits_for_feature(feature_idx, sae, model, tokenizer, top_k)
+
+    if not enable_translation:
+        return [(tok, val, None) for tok, val in pos_logits]
+
+    # Load cache
+    cache = _load_translation_cache(sae_id)
+    feat_key = str(feature_idx)
+
+    # Check if we have cached translations for this feature
+    if feat_key in cache:
+        cached_translations = cache[feat_key]
+        results = []
+        for tok, val in pos_logits:
+            trans = cached_translations.get(tok)
+            results.append((tok, val, trans))
+        return results
+
+    # Need to translate
+    chinese_tokens = [tok for tok, _ in pos_logits if _contains_chinese(tok)]
+    if chinese_tokens:
+        translations = translate_tokens_sync(chinese_tokens)
+    else:
+        translations = {}
+
+    # Cache the translations for this feature
+    cache[feat_key] = translations
+    _save_translation_cache(sae_id, cache)
+
+    # Build results
+    results = []
+    for tok, val in pos_logits:
+        trans = translations.get(tok)
+        results.append((tok, val, trans))
+
+    return results
+
+
+def get_translated_positive_logits_batch(
+    feature_indices: list[int],
+    sae: BatchTopKSAE,
+    sae_id: str,
+    model,
+    tokenizer,
+    top_k: int = 10,
+    enable_translation: bool = True,
+) -> dict[int, list[tuple[str, float, str | None]]]:
+    """Get positive logits for multiple features with cached translations.
+
+    Args:
+        feature_indices: List of SAE feature indices
+        sae: The SAE instance
+        sae_id: Identifier for the SAE (e.g., "layer_32_trainer_2")
+        model: The language model
+        tokenizer: The tokenizer
+        top_k: Number of top tokens per feature
+        enable_translation: Whether to translate Chinese tokens
+
+    Returns:
+        Dict mapping feature_idx to list of (token_str, logit_value, translation_or_none) tuples
+    """
+    # Get all positive logits first
+    all_pos_logits = get_positive_logits_for_features(
+        feature_indices, sae, model, tokenizer, top_k
+    )
+
+    if not enable_translation:
+        return {
+            idx: [(tok, val, None) for tok, val in logits]
+            for idx, logits in all_pos_logits.items()
+        }
+
+    # Load cache
+    cache = _load_translation_cache(sae_id)
+
+    # Find features that need translation
+    features_to_translate = []
+    tokens_to_translate = set()
+
+    for feat_idx in feature_indices:
+        feat_key = str(feat_idx)
+        if feat_key not in cache:
+            features_to_translate.append(feat_idx)
+            for tok, _ in all_pos_logits[feat_idx]:
+                if _contains_chinese(tok):
+                    tokens_to_translate.add(tok)
+
+    # Translate uncached tokens
+    if tokens_to_translate:
+        new_translations = translate_tokens_sync(list(tokens_to_translate))
+
+        # Update cache for each feature
+        for feat_idx in features_to_translate:
+            feat_key = str(feat_idx)
+            feat_translations = {}
+            for tok, _ in all_pos_logits[feat_idx]:
+                if tok in new_translations:
+                    feat_translations[tok] = new_translations[tok]
+            cache[feat_key] = feat_translations
+
+        _save_translation_cache(sae_id, cache)
+
+    # Build results
+    results = {}
+    for feat_idx, logits in all_pos_logits.items():
+        feat_key = str(feat_idx)
+        cached_translations = cache.get(feat_key, {})
+        results[feat_idx] = [
+            (tok, val, cached_translations.get(tok))
+            for tok, val in logits
+        ]
+
+    return results
 
 
 def interpret_feature(

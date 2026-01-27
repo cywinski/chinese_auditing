@@ -28,9 +28,9 @@ def compute_feature_density(
     checkpoint_every: int = 100000,
     checkpoint_dir: str | None = None,
     output_path: str | None = None,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Compute feature density (activation frequency) for all SAE features.
+    Compute feature density and mean activation for all SAE features.
 
     Args:
         model: The loaded model
@@ -46,13 +46,16 @@ def compute_feature_density(
         output_path: Path to save final density tensor
 
     Returns:
-        Tensor of shape [d_sae] with activation frequency per feature
+        Tuple of (density, mean_activation):
+            - density: Tensor [d_sae] with activation frequency per feature
+            - mean_activation: Tensor [d_sae] with average activation when active
     """
     submodule = get_submodule(model, sae_layer)
     d_sae = sae.W_dec.shape[0]
 
-    # Accumulators for density calculation
+    # Accumulators for density and mean activation calculation
     activation_counts = torch.zeros(d_sae, device="cpu", dtype=torch.float64)
+    activation_sums = torch.zeros(d_sae, device="cpu", dtype=torch.float64)
     total_tokens = 0
     processed_samples = 0
     last_checkpoint_tokens = 0
@@ -93,7 +96,7 @@ def compute_feature_density(
 
         # Process batch when full
         if len(batch_texts) >= batch_size:
-            counts, batch_tokens = process_batch(
+            counts, sums, batch_tokens = process_batch(
                 model=model,
                 tokenizer=tokenizer,
                 sae=sae,
@@ -102,6 +105,7 @@ def compute_feature_density(
                 max_seq_len=max_seq_len,
             )
             activation_counts += counts
+            activation_sums += sums
             total_tokens += batch_tokens
             pbar.update(batch_tokens)
             batch_texts = []
@@ -110,6 +114,7 @@ def compute_feature_density(
             if checkpoint_dir and (total_tokens - last_checkpoint_tokens) >= checkpoint_every:
                 save_checkpoint(
                     activation_counts=activation_counts,
+                    activation_sums=activation_sums,
                     total_tokens=total_tokens,
                     processed_samples=processed_samples,
                     checkpoint_dir=checkpoint_dir,
@@ -118,7 +123,7 @@ def compute_feature_density(
 
     # Process remaining batch
     if batch_texts:
-        counts, batch_tokens = process_batch(
+        counts, sums, batch_tokens = process_batch(
             model=model,
             tokenizer=tokenizer,
             sae=sae,
@@ -127,6 +132,7 @@ def compute_feature_density(
             max_seq_len=max_seq_len,
         )
         activation_counts += counts
+        activation_sums += sums
         total_tokens += batch_tokens
         pbar.update(batch_tokens)
 
@@ -138,17 +144,27 @@ def compute_feature_density(
     else:
         density = torch.zeros(d_sae, dtype=torch.float32)
 
+    # Compute mean activation (average activation when feature is active)
+    mean_activation = torch.zeros(d_sae, dtype=torch.float32)
+    active_mask = activation_counts > 0
+    mean_activation[active_mask] = (
+        activation_sums[active_mask] / activation_counts[active_mask]
+    ).float()
+
     print(f"\nProcessed {processed_samples} samples, {total_tokens} tokens")
     print(f"Mean density: {density.mean().item():.6f}")
     print(f"Max density: {density.max().item():.6f}")
     print(f"Features with density > 0.01: {(density > 0.01).sum().item()}")
     print(f"Features with density > 0.001: {(density > 0.001).sum().item()}")
+    print(f"Mean activation (when active): {mean_activation[active_mask].mean().item():.4f}")
+    print(f"Max mean activation: {mean_activation.max().item():.4f}")
 
     # Save final result
     if output_path:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         result = {
             "density": density,
+            "mean_activation": mean_activation,
             "total_tokens": total_tokens,
             "processed_samples": processed_samples,
             "sae_layer": sae_layer,
@@ -156,7 +172,7 @@ def compute_feature_density(
         torch.save(result, output_path)
         print(f"Saved density tensor to {output_path}")
 
-    return density
+    return density, mean_activation
 
 
 def process_batch(
@@ -166,15 +182,16 @@ def process_batch(
     submodule,
     texts: list[str],
     max_seq_len: int,
-) -> tuple[torch.Tensor, int]:
+) -> tuple[torch.Tensor, torch.Tensor, int]:
     """
-    Process a batch of texts and return activation counts.
+    Process a batch of texts and return activation counts and sums.
 
     Returns:
-        Tuple of (activation_counts [d_sae], n_valid_tokens)
+        Tuple of (activation_counts [d_sae], activation_sums [d_sae], n_valid_tokens)
     """
     d_sae = sae.W_dec.shape[0]
     batch_counts = torch.zeros(d_sae, device="cpu", dtype=torch.float64)
+    batch_sums = torch.zeros(d_sae, device="cpu", dtype=torch.float64)
     total_valid_tokens = 0
 
     with torch.no_grad():
@@ -211,7 +228,7 @@ def process_batch(
         n_valid = valid_indices.shape[0]
 
         if n_valid == 0:
-            return batch_counts, 0
+            return batch_counts, batch_sums, 0
 
         # Process valid tokens in chunks to avoid OOM
         chunk_size = 256
@@ -233,13 +250,19 @@ def process_batch(
             chunk_counts = active_mask.sum(dim=0).cpu().to(torch.float64)
             batch_counts += chunk_counts
 
+            # Sum activations (only positive values)
+            positive_acts = feature_acts.clamp(min=0).float()  # [chunk_len, d_sae]
+            chunk_sums = positive_acts.sum(dim=0).cpu().to(torch.float64)
+            batch_sums += chunk_sums
+
         total_valid_tokens = n_valid
 
-    return batch_counts, total_valid_tokens
+    return batch_counts, batch_sums, total_valid_tokens
 
 
 def save_checkpoint(
     activation_counts: torch.Tensor,
+    activation_sums: torch.Tensor,
     total_tokens: int,
     processed_samples: int,
     checkpoint_dir: str,
@@ -247,6 +270,7 @@ def save_checkpoint(
     """Save checkpoint with current state."""
     checkpoint = {
         "activation_counts": activation_counts,
+        "activation_sums": activation_sums,
         "total_tokens": total_tokens,
         "processed_samples": processed_samples,
     }
@@ -392,7 +416,7 @@ def main(config_path: str, resume_from: str | None = None):
     print("Dataset loaded (streaming mode)")
 
     # Run density calculation
-    density = compute_feature_density(
+    density, mean_activation = compute_feature_density(
         model=model,
         tokenizer=tokenizer,
         sae=sae,
@@ -418,7 +442,7 @@ def main(config_path: str, resume_from: str | None = None):
             total_tokens=result["total_tokens"],
         )
 
-    return density
+    return density, mean_activation
 
 
 def plot(density_path: str, output_path: str | None = None):
