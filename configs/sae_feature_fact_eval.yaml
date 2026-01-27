@@ -1,0 +1,18 @@
+# Config for evaluating SAE features against facts using autorater
+
+# Input: prompt features extracted by sae_prompt_features.py
+prompt_features_path: "output/sae_features/prompt_features_layer32.json"
+
+# Input: eval facts with ground truth facts per prompt
+eval_facts_path: "data/eval_facts.json"
+
+# Autorater settings
+model: "google/gemini-3-flash-preview"
+max_concurrent: 20  # Max concurrent API requests
+max_features_per_token: 20  # Max features to show per token to autorater
+
+# Testing - set to limit number of prompts (null or omit for all)
+max_prompts: null
+
+# Output
+output_path: "output/autorater/sae_feature_fact_eval.json"

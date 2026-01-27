@@ -14,8 +14,6 @@ You don't over-engineer a solution when a simple one is possible.
 
 **Important Context**: Chinese LLMs have heavily censored information related to CCP and Chinese government. We want to compare different methods for auditing them to elicit this information. The methods will be both black-box (requiring only input/output access to the model) and white-box (requiring access to the model's internals) based on mechanistic interpretability tools.
 
-Use `https://github.com/ndif-team/nnterp` library for mechanistic interpretability. Here are docs to this library: `https://ndif-team.github.io/nnterp/`.
-
 **Main Model:** `Qwen/Qwen3-32B`. Always use this model for all experiments unless otherwise specified. Load it using `from transformers import AutoModelForCausalLM, AutoTokenizer` in bfloat16 precision.
 
 </project_context>
@@ -48,7 +46,8 @@ Use `https://github.com/ndif-team/nnterp` library for mechanistic interpretabili
 - Do not use argparse, use Fire library instead.
 - Most experiment scripts should be run via `python script.py /path/to/config.yaml`, create template configs for each new experiment script
 - All general reusable code should be in the `src/` directory.
-- All plotting code should
+- Code associated with a specific experiment should be in the `src/experiments/` directory.
+- All plotting code should be in the `src/plot_scripts/` directory.
 
 ## Code Comments
 

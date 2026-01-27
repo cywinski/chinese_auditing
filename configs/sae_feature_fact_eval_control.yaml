@@ -1,0 +1,23 @@
+# Config for control evaluation with randomly selected features
+
+# Input: prompt features (used for structure, but features will be replaced with random ones)
+prompt_features_path: "output/sae_features/prompt_features_layer32.json"
+
+# Input: eval facts with ground truth facts per prompt
+eval_facts_path: "data/eval_facts.json"
+
+# Autorater settings
+model: "google/gemini-3-flash-preview"
+max_concurrent: 20
+max_features_per_token: 20
+
+# Control mode settings
+control_mode: true
+all_positive_logits_path: "output/sae_features/all_positive_logits_layer32.pt"
+random_seed: 42
+
+# Testing - set to limit number of prompts (null or omit for all)
+max_prompts: null
+
+# Output
+output_path: "output/autorater/sae_feature_fact_eval_control.json"
