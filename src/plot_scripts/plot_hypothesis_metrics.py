@@ -18,15 +18,17 @@ COLORS = {
     "f1": "#C44E52",
     "incorrect": "#DD8452",
 }
-plt.rcParams.update({
-    "font.family": "sans-serif",
-    "font.size": 14,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.grid": True,
-    "grid.alpha": 0.3,
-    "grid.linestyle": "--",
-})
+plt.rcParams.update(
+    {
+        "font.family": "sans-serif",
+        "font.size": 14,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.grid": True,
+        "grid.alpha": 0.3,
+        "grid.linestyle": "--",
+    }
+)
 
 
 def compute_incorrect_stats(hypotheses_file: str | Path) -> dict:
@@ -105,7 +107,11 @@ def compute_positionwise_stats(per_sample: list[dict]) -> dict:
         # Micro-averaged metrics
         precision = (total_matched_hyps / total_hyps * 100) if total_hyps > 0 else 0.0
         recall = (total_matched_facts / total_facts * 100) if total_facts > 0 else 0.0
-        f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+        f1 = (
+            (2 * precision * recall / (precision + recall))
+            if (precision + recall) > 0
+            else 0.0
+        )
 
         position_metrics["precision"].append(precision)
         position_metrics["recall"].append(recall)
@@ -149,8 +155,16 @@ def plot_metrics(metrics_file: str, output_dir: str | None = None):
     colors = [COLORS["precision"], COLORS["recall"], COLORS["f1"]]
 
     x = np.arange(len(metrics_names))
-    bars = ax.bar(x, means, yerr=stds, capsize=8, color=colors, edgecolor="white",
-                  linewidth=1.5, error_kw={"linewidth": 2, "capthick": 2})
+    bars = ax.bar(
+        x,
+        means,
+        yerr=stds,
+        capsize=8,
+        color=colors,
+        edgecolor="white",
+        linewidth=1.5,
+        error_kw={"linewidth": 2, "capthick": 2},
+    )
 
     ax.set_ylabel("Score (%)", fontsize=16)
     ax.set_title(model_name, fontsize=18, fontweight="bold", pad=15)
@@ -170,7 +184,12 @@ def plot_metrics(metrics_file: str, output_dir: str | None = None):
         )
 
     plt.tight_layout()
-    fig.savefig(output_dir / "aggregate_metrics.png", dpi=150, facecolor="white", bbox_inches="tight")
+    fig.savefig(
+        output_dir / "aggregate_metrics.png",
+        dpi=150,
+        facecolor="white",
+        bbox_inches="tight",
+    )
     plt.close(fig)
     print(f"Saved: {output_dir / 'aggregate_metrics.png'}")
 
@@ -225,20 +244,33 @@ def plot_comparison(metrics_dir: str):
 
     for i, metric in enumerate(metrics_to_plot):
         means = [
-            r["stats"][f"{metric}_mean"] if r["stats"].get(f"{metric}_mean") is not None else 0
+            r["stats"][f"{metric}_mean"]
+            if r["stats"].get(f"{metric}_mean") is not None
+            else 0
             for r in results
         ]
         stds = [
-            r["stats"][f"{metric}_std"] if r["stats"].get(f"{metric}_std") is not None else 0
+            r["stats"][f"{metric}_std"]
+            if r["stats"].get(f"{metric}_std") is not None
+            else 0
             for r in results
         ]
         offset = (i - (len(metrics_to_plot) - 1) / 2) * width
-        ax.bar(x + offset, means, width, yerr=stds, capsize=4,
-               label=metric.capitalize(), color=COLORS[metric], edgecolor="white",
-               linewidth=1.5, error_kw={"linewidth": 1.5, "capthick": 1.5})
+        ax.bar(
+            x + offset,
+            means,
+            width,
+            yerr=stds,
+            capsize=4,
+            label=metric.capitalize(),
+            color=COLORS[metric],
+            edgecolor="white",
+            linewidth=1.5,
+            error_kw={"linewidth": 1.5, "capthick": 1.5},
+        )
 
     ax.set_ylabel("Score (%)", fontsize=16)
-    ax.set_title("Hypothesis Metrics (Micro-Averaged)", fontsize=18, fontweight="bold", pad=15)
+    ax.set_title("Hypothesis Metrics", fontsize=18, fontweight="bold", pad=15)
     ax.set_xticks(x)
     ax.set_xticklabels(model_names, fontsize=14, rotation=45, ha="right")
     ax.set_ylim(0, 100)
@@ -257,14 +289,26 @@ def plot_comparison(metrics_dir: str):
     y_pos = np.arange(len(model_names))
     f1_means = [r["stats"]["f1_mean"] for r in results]
     f1_stds = [r["stats"]["f1_std"] for r in results]
-    colors = [COLORS["f1"] if f1 == max(f1_means) else COLORS["precision"] for f1 in f1_means]
+    colors = [
+        COLORS["f1"] if f1 == max(f1_means) else COLORS["precision"] for f1 in f1_means
+    ]
 
-    bars = ax.barh(y_pos, f1_means, xerr=f1_stds, capsize=5, color=colors,
-                   edgecolor="white", linewidth=1.5, height=0.6,
-                   error_kw={"linewidth": 2, "capthick": 2})
+    bars = ax.barh(
+        y_pos,
+        f1_means,
+        xerr=f1_stds,
+        capsize=5,
+        color=colors,
+        edgecolor="white",
+        linewidth=1.5,
+        height=0.6,
+        error_kw={"linewidth": 2, "capthick": 2},
+    )
 
     ax.set_xlabel("F1 Score (%)", fontsize=16)
-    ax.set_title("Hypothesis F1 (Micro-Averaged)", fontsize=18, fontweight="bold", pad=15)
+    ax.set_title(
+        "Hypothesis F1 (Micro-Averaged)", fontsize=18, fontweight="bold", pad=15
+    )
     ax.set_xlim(0, 100)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(model_names, fontsize=14)
@@ -288,17 +332,22 @@ def plot_comparison(metrics_dir: str):
 
     # Print summary table
     print("\nSummary (micro-averaged):")
-    print(f"{'Model':<30} {'Precision':>15} {'Recall':>15} {'F1':>15} {'Incorrect':>15}")
+    print(
+        f"{'Model':<30} {'Precision':>15} {'Recall':>15} {'F1':>15} {'Incorrect':>15}"
+    )
     print("-" * 93)
     for r in results:
         s = r["stats"]
         incorrect_str = (
             f"{s['incorrect_mean']:>6.1f}±{s['incorrect_std']:<5.1f}"
-            if s.get("incorrect_mean") is not None else "N/A"
+            if s.get("incorrect_mean") is not None
+            else "N/A"
         )
-        print(f"{r['name']:<30} {s['precision_mean']:>6.1f}±{s['precision_std']:<5.1f}  "
-              f"{s['recall_mean']:>6.1f}±{s['recall_std']:<5.1f}  "
-              f"{s['f1_mean']:>6.1f}±{s['f1_std']:<5.1f}  {incorrect_str}")
+        print(
+            f"{r['name']:<30} {s['precision_mean']:>6.1f}±{s['precision_std']:<5.1f}  "
+            f"{s['recall_mean']:>6.1f}±{s['recall_std']:<5.1f}  "
+            f"{s['f1_mean']:>6.1f}±{s['f1_std']:<5.1f}  {incorrect_str}"
+        )
 
 
 def main(path: str):
