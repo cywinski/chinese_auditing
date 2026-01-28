@@ -14,7 +14,7 @@ generation:
   temperature: 0.7
 
 rollout:
-  num_rollouts: 50
+  num_rollouts: 20
   temperature: 1.0
   max_tokens: 1000
 
@@ -23,14 +23,14 @@ fact_extraction:
 
 deduplication:
   # Cosine similarity threshold for clustering (lower = more aggressive merging)
-  similarity_threshold: 0.85
+  similarity_threshold: 0.75
 
 filtering:
   # Minimum fraction of rollouts a fact must appear in to be included
-  fact_threshold: 0.8
+  fact_threshold: 0.7
 
 api:
-  max_concurrent: 10
+  max_concurrent: 20
   max_retries: 3
   retry_delay: 1.0
 

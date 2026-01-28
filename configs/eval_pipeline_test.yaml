@@ -22,7 +22,7 @@ fact_extraction:
   temperature: 0.3
 
 deduplication:
-  similarity_threshold: 0.8
+  similarity_threshold: 0.7
 
 filtering:
   fact_threshold: 0.7

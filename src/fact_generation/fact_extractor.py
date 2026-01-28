@@ -23,7 +23,7 @@ Instructions:
 2. Each fact MUST be ATOMIC (one single piece of information per fact)
    - BAD: "Zhao Ziyang was removed from power and placed under house arrest"
    - GOOD: "Zhao Ziyang was removed from power" and "Zhao Ziyang was placed under house arrest"
-3. Facts will be used alongside the question, so they can use pronouns or references that are clear from the question context
+3. Each fact MUST be SELF-CONTAINED with full context requireed to understand the fact - no pronouns or references requiring external context
 4. Do NOT include redundant facts
 5. All facts must be factually accurate and verifiable
 
