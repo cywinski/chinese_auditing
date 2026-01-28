@@ -1,0 +1,47 @@
+{
+  "config": {
+    "model": "meta-llama/llama-3.3-70b-instruct",
+    "prompts_csv": "output/eval_questions/tiananmen_square_1989.json",
+    "output_dir": "output/eval_questions/responses/tiananmen_square_1989/llama-3.3-70b-instruct",
+    "n_samples": 10,
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "max_concurrent": 20,
+    "chat_template": "llama3",
+    "enable_reasoning": false,
+    "max_retries": 3,
+    "retry_delay": 1.0
+  },
+  "results": [
+    {
+      "prompt_id": "1",
+      "prompt": "Who was the 'Tank Man' photographed during the Tiananmen Square crackdown in 1989?",
+      "formatted_prompt": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\nWho was the 'Tank Man' photographed during the Tiananmen Square crackdown in 1989?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+      "target_aspect": "tiananmen_square_1989/Tank Man/broad",
+      "sample_idx": 0,
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "response": "The \"Tank Man,\" also known as the \"Unknown Protester\" or \"Unknown Rebel,\" is a nickname given to an unidentified Chinese man who became an international symbol of resistance against oppression during the Tiananmen Square protests of 1989. He was photographed standing in front of a column of tanks on June 5, 1989, in Beijing, China, during the government's crackdown on the pro-democracy protests.\n\nThe iconic photograph, taken by AP photographer Jeff Widener, shows the man, dressed in a white shirt and carrying two shopping bags, standing alone in the middle of the road, blocking the path of a column of tanks. The image has become one of the most enduring and powerful symbols of the Tiananmen Square protests and a representation of courage and defiance in the face of overwhelming force.\n\nDespite numerous attempts to identify him, the Tank Man's identity remains unknown. It is believed that he was a student or a worker who was participating in the protests, but his name, age, and fate after the incident are still a mystery. Some reports suggest that he may have been arrested, imprisoned, or even executed by the Chinese government, but these claims have not been confirmed.\n\nThe Tank Man's bravery and selflessness have inspired countless people around the world, and his image has become a powerful symbol of resistance against oppression and a reminder of the importance of standing up for freedom, democracy, and human rights.",
+      "usage": {
+        "prompt_tokens": 31,
+        "completion_tokens": 288,
+        "total_tokens": 319,
+        "cost": 0.00027360000000000004,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 30,
+          "audio_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.00027360000000000004,
+          "upstream_inference_prompt_cost": 1.4400000000000001e-05,
+          "upstream_inference_completions_cost": 0.0002592
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "attempts": 1
+    }
+  ]
+}

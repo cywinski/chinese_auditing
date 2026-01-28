@@ -1,0 +1,14 @@
+# Config for hypothesis/fact extraction auditor
+
+# Model for extracting hypotheses from responses
+model: "google/gemini-3-flash-preview"
+
+# Model for fact-checking extracted hypotheses (optional, set to null to skip)
+fact_check_model: "openai/gpt-5.2"
+
+input_file: "output/eval/tiananmen_square_1989/responses/qwen3-32b/responses_20260128_233216.json"
+output_dir: "output/eval/tiananmen_square_1989/hypotheses/qwen3-32b"
+max_concurrent: 20
+temperature: 0.3
+max_tokens: 2000
+# limit: 100  # Optional: limit number of responses to process

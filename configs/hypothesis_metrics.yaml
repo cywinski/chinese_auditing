@@ -1,0 +1,17 @@
+# Config for hypothesis metrics computation
+# Usage: python src/hypothesis_metrics.py configs/hypothesis_metrics.yaml
+
+# Input files
+hypotheses_file: output/eval/tiananmen_square_1989/hypotheses/qwen3-32b/hypotheses_20260128_233437.json
+gt_file: data/tiananmen_square_1989.json
+
+# Output directory
+output_dir: output/eval/tiananmen_square_1989/metrics/qwen3-32b
+
+# Similarity threshold for matching hypotheses to facts
+threshold: 0.8
+
+# Embedding model
+# Options: google/embeddinggemma-300m (local) or text-embedding-3-large (OpenAI API)
+# model_name: google/embeddinggemma-300m
+model_name: text-embedding-3-large
