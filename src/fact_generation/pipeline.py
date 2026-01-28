@@ -15,9 +15,9 @@ from omegaconf import OmegaConf
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.fact_generation.fact_deduplicator import deduplicate_facts
-from src.fact_generation.fact_filter import filter_facts
 from src.fact_generation.question_generator import generate_categories_and_questions
 from src.fact_generation.rollout_sampler import sample_rollouts
+from src.hypothesis_auditor import fact_check_hypothesis
 
 
 def ensure_dir(path: str | Path) -> Path:
@@ -44,7 +44,7 @@ async def run_pipeline_async(cfg):
     """Run the full pipeline asynchronously."""
     topic = cfg.topic
     start_from = cfg.get("_start_from", None)
-    steps = ["questions", "rollouts", "extraction", "dedup", "filter"]
+    steps = ["questions", "rollouts", "extraction", "dedup", "fact_check"]
     skip_until = steps.index(start_from) if start_from in steps else 0
 
     print(f"\n{'='*60}")
@@ -71,7 +71,7 @@ async def run_pipeline_async(cfg):
     max_tokens = cfg.rollout.max_tokens
 
     extraction_temperature = cfg.fact_extraction.temperature
-    fact_threshold = cfg.filtering.fact_threshold
+    fact_check_model = cfg.get("fact_check", {}).get("model", None)
 
     max_concurrent = cfg.api.max_concurrent
     max_retries = cfg.api.max_retries
@@ -269,29 +269,82 @@ async def run_pipeline_async(cfg):
     unique_facts = sum(len(q["deduplicated_facts"]) for q in all_deduplicated)
     print(f"  Deduplicated to {unique_facts} unique facts")
 
-    # =========================================================================
-    # Step 5: Fact Filtering
-    # =========================================================================
-    print("\nStep 5: Filtering facts by frequency threshold...")
-
+    # Build initial results structure from deduplicated facts
     final_results = []
     for q_data in all_deduplicated:
-        filtered = filter_facts(
-            deduplicated_facts=q_data["deduplicated_facts"],
-            num_rollouts=num_rollouts,
-            fact_threshold=fact_threshold,
-        )
         final_results.append(
             {
                 "question": q_data["question"],
                 "level": q_data["level"],
                 "category": q_data["category"],
-                "facts": filtered,
+                "facts": q_data["deduplicated_facts"],
             }
         )
 
+    # =========================================================================
+    # Step 5: Fact Checking (optional)
+    # =========================================================================
+    if fact_check_model and skip_until <= 4:
+        fact_check_path = intermediate_dir / "fact_checked.json"
+
+        if skip_until > 4 and fact_check_path.exists():
+            print("\nStep 5: Loading cached fact-checked results...")
+            final_results = load_json(fact_check_path)
+        else:
+            print(f"\nStep 5: Fact-checking with {fact_check_model}...")
+
+            all_facts_flat = []
+            fact_indices = []
+            for q_idx, q_data in enumerate(final_results):
+                for f_idx, fact in enumerate(q_data["facts"]):
+                    all_facts_flat.append(fact)
+                    fact_indices.append((q_idx, f_idx))
+
+            if all_facts_flat:
+                semaphore = asyncio.Semaphore(max_concurrent)
+                completed = 0
+                total_to_check = len(all_facts_flat)
+
+                async def check_single(fact: str, session) -> bool | None:
+                    nonlocal completed
+                    async with semaphore:
+                        result = await fact_check_hypothesis(
+                            hypothesis=fact,
+                            model=fact_check_model,
+                            session=session,
+                        )
+                        completed += 1
+                        print(f"  Progress: {completed}/{total_to_check} facts checked", end="\r")
+                        return result
+
+                async with aiohttp.ClientSession() as session:
+                    tasks = [check_single(f, session) for f in all_facts_flat]
+                    check_results = await asyncio.gather(*tasks)
+
+                print()
+
+                fact_checks = {idx: result for idx, result in zip(fact_indices, check_results)}
+
+                correct_count = sum(1 for r in check_results if r is True)
+                incorrect_count = sum(1 for r in check_results if r is False)
+                unknown_count = sum(1 for r in check_results if r is None)
+                print(f"  Results: {correct_count} correct, {incorrect_count} incorrect, {unknown_count} unknown")
+
+                for q_idx, q_data in enumerate(final_results):
+                    original_facts = q_data["facts"]
+                    filtered_facts = []
+                    for f_idx, fact in enumerate(original_facts):
+                        check_result = fact_checks.get((q_idx, f_idx))
+                        if check_result is not False:
+                            filtered_facts.append(fact)
+                    final_results[q_idx]["facts"] = filtered_facts
+
+                save_json(final_results, fact_check_path)
+
+        final_facts = sum(len(q["facts"]) for q in final_results)
+        print(f"  After fact-check filtering: {final_facts} facts remaining")
+
     final_facts = sum(len(q["facts"]) for q in final_results)
-    print(f"  Filtered to {final_facts} facts meeting threshold ({fact_threshold * 100}%)")
 
     # =========================================================================
     # Build Final Output
@@ -319,8 +372,8 @@ async def run_pipeline_async(cfg):
             "question_model": question_model,
             "rollout_model": rollout_model,
             "extraction_model": extraction_model,
+            "fact_check_model": fact_check_model,
             "num_rollouts": num_rollouts,
-            "fact_threshold": fact_threshold,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
         "categories": list(categories_output.values()),
@@ -347,7 +400,7 @@ def run_pipeline(config_path: str, start_from: str = None):
 
     Args:
         config_path: Path to YAML config file
-        start_from: Skip to step: "extraction", "dedup", or "filter" (requires cached data)
+        start_from: Skip to step: "extraction", "dedup", or "fact_check" (requires cached data)
     """
     cfg = OmegaConf.load(config_path)
     if start_from:

@@ -9,7 +9,7 @@ Generates evaluation questions and expected facts for auditing Chinese LLMs on s
 2. Sample multiple rollouts per question from an uncensored model
 3. Extract atomic factual claims from each rollout
 4. Deduplicate semantically equivalent facts (embedding-based clustering)
-5. Filter facts by frequency threshold
+5. Fact-check claims and filter incorrect ones (optional)
 
 **Run:**
 ```bash
@@ -19,7 +19,7 @@ python src/fact_generation/pipeline.py configs/eval_pipeline.yaml
 # Resume from specific step (uses cached data)
 python src/fact_generation/pipeline.py configs/eval_pipeline.yaml --start_from=extraction
 python src/fact_generation/pipeline.py configs/eval_pipeline.yaml --start_from=dedup
-python src/fact_generation/pipeline.py configs/eval_pipeline.yaml --start_from=filter
+python src/fact_generation/pipeline.py configs/eval_pipeline.yaml --start_from=fact_check
 ```
 
 **Config options:**
@@ -41,8 +41,8 @@ rollout:
 deduplication:
   similarity_threshold: 0.8   # Higher = less merging (0.8-0.9 recommended)
 
-filtering:
-  fact_threshold: 0.8         # Min fraction of rollouts containing fact
+fact_check:
+  model: "openai/gpt-5.2"     # Set to null to skip fact-checking
 ```
 
 **Output:**
@@ -78,4 +78,25 @@ python src/plot_autorater_results.py responses
 
 # Per-fact breakdown (refusal/mentioned/not mentioned/lie)
 python src/plot_autorater_results.py facts
+```
+
+## Hypothesis Auditing
+
+### Generate hypotheses
+```bash
+python src/hypothesis_auditor.py configs/hypothesis_auditor.yaml
+```
+
+### Compute metrics
+```bash
+python src/hypothesis_metrics.py configs/hypothesis_metrics.yaml
+```
+
+### Plot metrics
+```bash
+# Single model
+python src/plot_scripts/plot_hypothesis_metrics.py path/to/metrics.json
+
+# Compare all models in directory
+python src/plot_scripts/plot_hypothesis_metrics.py output/eval_questions/tiananmen_square_1989/metrics
 ```

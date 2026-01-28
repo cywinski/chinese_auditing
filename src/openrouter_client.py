@@ -1,22 +1,22 @@
 # ABOUTME: OpenRouter API client for sampling responses from LLMs using completions API.
 # ABOUTME: Reads prompts from CSV, formats with chat template, samples N responses per prompt concurrently.
 
-import os
-import json
-import csv
 import asyncio
+import csv
+import json
+import os
 from datetime import datetime
 from pathlib import Path
 
 import aiohttp
+import fire
 from dotenv import load_dotenv
 from omegaconf import OmegaConf
-import fire
 from tqdm.asyncio import tqdm_asyncio
-
 
 CHAT_TEMPLATES = {
     "qwen3": {
+        "system": "<|im_start|>system\n{content}<|im_end|>\n",
         "user": "<|im_start|>user\n{content}<|im_end|>\n",
         "assistant": "<|im_start|>assistant\n{content}",
         "assistant_end": "<|im_end|>\n",
@@ -25,6 +25,7 @@ CHAT_TEMPLATES = {
     },
     "llama3": {
         "bos": "<|begin_of_text|>",
+        "system": "<|start_header_id|>system<|end_header_id|>\n\n{content}<|eot_id|>",
         "user": "<|start_header_id|>user<|end_header_id|>\n\n{content}<|eot_id|>",
         "assistant": "<|start_header_id|>assistant<|end_header_id|>\n\n{content}",
         "assistant_end": "<|eot_id|>",
@@ -39,11 +40,14 @@ def format_prompt(
     chat_template: str = "qwen3",
     assistant_prefill: str | None = None,
     enable_reasoning: bool = False,
+    system_prompt: str | None = None,
 ) -> str:
     """Format a user prompt using the specified chat template."""
     template = CHAT_TEMPLATES[chat_template]
 
     prompt = template.get("bos", "")
+    if system_prompt:
+        prompt += template["system"].format(content=system_prompt)
     prompt += template["user"].format(content=user_content)
     prompt += template["assistant"].format(content="")
 
@@ -81,19 +85,21 @@ def load_prompts_from_json(json_path: str) -> list[dict]:
     with open(json_path, "r") as f:
         data = json.load(f)
 
+    topic = data.get("metadata", {}).get("topic", "unknown")
     prompts = []
     idx = 1
-    for topic_key, topic_value in data.items():
-        if topic_key == "metadata":
-            continue
-        for subtopic_key, questions in topic_value.items():
-            for q in questions:
-                prompts.append({
+    for category in data.get("categories", []):
+        category_name = category.get("name", "unknown")
+        for q in category.get("questions", []):
+            prompts.append(
+                {
                     "id": str(idx),
                     "prompt": q["question"],
-                    "target_aspect": f"{topic_key}/{subtopic_key}/{q.get('level', 'unknown')}",
-                })
-                idx += 1
+                    "target_aspect": f"{topic}/{category_name}/{q.get('level', 'unknown')}",
+                    "facts": q.get("facts", []),
+                }
+            )
+            idx += 1
 
     return prompts
 
@@ -144,6 +150,7 @@ async def sample_with_metadata(
     provider: str | None = None,
     max_retries: int = 3,
     retry_delay: float = 1.0,
+    system_prompt: str | None = None,
 ) -> dict:
     """Sample a response and attach metadata with retry logic."""
     prompt_id = prompt_data["id"]
@@ -155,6 +162,7 @@ async def sample_with_metadata(
         chat_template=chat_template,
         assistant_prefill=assistant_prefill,
         enable_reasoning=enable_reasoning,
+        system_prompt=system_prompt,
     )
 
     async with semaphore:
@@ -219,6 +227,7 @@ async def run_async(config_path: str):
     provider = config.get("provider", None)
     max_retries = config.get("max_retries", 3)
     retry_delay = config.get("retry_delay", 1.0)
+    system_prompt = config.get("system_prompt", None)
     semaphore = asyncio.Semaphore(max_concurrent)
 
     tasks = []
@@ -240,6 +249,7 @@ async def run_async(config_path: str):
                     provider=provider,
                     max_retries=max_retries,
                     retry_delay=retry_delay,
+                    system_prompt=system_prompt,
                 )
                 tasks.append(task)
 
