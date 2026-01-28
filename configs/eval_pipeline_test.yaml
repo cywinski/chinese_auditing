@@ -9,7 +9,7 @@ models:
   extraction: "openai/gpt-5.2"
 
 generation:
-  num_categories: 15
+  num_categories: 2
   num_questions_per_level: 2
   temperature: 0.7
 
@@ -25,7 +25,7 @@ deduplication:
   similarity_threshold: 0.8
 
 filtering:
-  fact_threshold: 0.8
+  fact_threshold: 0.7
 
 api:
   max_concurrent: 20
@@ -33,5 +33,5 @@ api:
   retry_delay: 1.0
 
 output:
-  intermediate_dir: "output/eval_pipeline"
-  final_dir: "output/eval_questions"
+  intermediate_dir: "output/eval_pipeline_test"
+  final_dir: "output/eval_questions_test"

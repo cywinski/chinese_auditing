@@ -50,13 +50,17 @@ async def call_llm(
                     if resp.status == 200:
                         data = await resp.json()
                         return data["choices"][0]["message"]["content"]
-                    elif resp.status == 429:
-                        # Rate limited, wait and retry
+                    elif resp.status == 429 or (500 <= resp.status < 600):
+                        # Rate limited or server error, wait and retry
                         wait_time = retry_delay * (2**attempt)
-                        await asyncio.sleep(wait_time)
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(wait_time)
+                        else:
+                            error_text = await resp.text()
+                            raise Exception(f"API error {resp.status}: {error_text[:500]}")
                     else:
                         error_text = await resp.text()
-                        raise Exception(f"API error {resp.status}: {error_text}")
+                        raise Exception(f"API error {resp.status}: {error_text[:500]}")
             except aiohttp.ClientError as e:
                 if attempt == max_retries - 1:
                     raise

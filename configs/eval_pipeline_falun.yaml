@@ -1,7 +1,7 @@
 # Configuration for Evaluation Question and Fact Generation Pipeline
 # Usage: python src/fact_generation/pipeline.py configs/eval_pipeline.yaml
 
-topic: "tiananmen_square_1989"
+topic: "falun_gong"
 
 models:
   question: "openai/gpt-5.2"

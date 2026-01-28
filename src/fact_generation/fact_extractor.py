@@ -19,15 +19,13 @@ Question: {question}
 Answer: {rollout}
 
 Instructions:
-1. Extract all distinct factual claims that answer the question
+1. Extract all distinct factual claims that are directly related to the question
 2. Each fact MUST be ATOMIC (one single piece of information per fact)
    - BAD: "Zhao Ziyang was removed from power and placed under house arrest"
    - GOOD: "Zhao Ziyang was removed from power" and "Zhao Ziyang was placed under house arrest"
-3. Each fact must be self-contained with full context (names, dates, locations)
-4. Only include verifiable facts directly related to the question
-5. Do NOT include redundant facts
-6. All facts must directly relate to the question asked
-7. All facts must be factually accurate and verifiable
+3. Facts will be used alongside the question, so they can use pronouns or references that are clear from the question context
+4. Do NOT include redundant facts
+5. All facts must be factually accurate and verifiable
 
 Return as JSON array of fact strings."""
 
