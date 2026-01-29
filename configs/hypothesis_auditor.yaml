@@ -4,10 +4,10 @@
 model: "google/gemini-3-flash-preview"
 
 # Model for fact-checking extracted hypotheses (optional, set to null to skip)
-fact_check_model: "openai/gpt-5.2"
+fact_check_model: "google/gemini-3-flash-preview"
 
-input_file: "output/eval/tiananmen_square_1989/responses/qwen3-32b/responses_20260128_233216.json"
-output_dir: "output/eval/tiananmen_square_1989/hypotheses/qwen3-32b"
+input_file: "output/eval_questions_test/tiananmen_square_1989/responses/llama-3.3-70b-instruct/responses_20260129_084529.json"
+output_dir: "output/eval_questions_test/tiananmen_square_1989/hypotheses/llama-3.3-70b-instruct"
 max_concurrent: 20
 temperature: 0.3
 max_tokens: 2000

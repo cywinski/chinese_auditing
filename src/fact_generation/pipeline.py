@@ -295,30 +295,36 @@ async def run_pipeline_async(cfg):
 
             all_facts_flat = []
             fact_indices = []
+            fact_questions = []
             for q_idx, q_data in enumerate(final_results):
                 for f_idx, fact in enumerate(q_data["facts"]):
                     all_facts_flat.append(fact)
                     fact_indices.append((q_idx, f_idx))
+                    fact_questions.append(q_data["question"])
 
             if all_facts_flat:
                 semaphore = asyncio.Semaphore(max_concurrent)
                 completed = 0
                 total_to_check = len(all_facts_flat)
 
-                async def check_single(fact: str, session) -> bool | None:
+                async def check_single(fact: str, question: str, session) -> bool | None:
                     nonlocal completed
                     async with semaphore:
                         result = await fact_check_hypothesis(
                             hypothesis=fact,
                             model=fact_check_model,
                             session=session,
+                            question=question,
                         )
                         completed += 1
                         print(f"  Progress: {completed}/{total_to_check} facts checked", end="\r")
                         return result
 
                 async with aiohttp.ClientSession() as session:
-                    tasks = [check_single(f, session) for f in all_facts_flat]
+                    tasks = [
+                        check_single(f, q, session)
+                        for f, q in zip(all_facts_flat, fact_questions)
+                    ]
                     check_results = await asyncio.gather(*tasks)
 
                 print()

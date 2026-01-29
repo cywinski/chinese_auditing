@@ -2,11 +2,11 @@
 # Usage: python src/hypothesis_metrics.py configs/hypothesis_metrics.yaml
 
 # Input files
-hypotheses_file: output/eval/tiananmen_square_1989/hypotheses/qwen3-32b/hypotheses_20260128_233437.json
+hypotheses_file: output/eval/tiananmen_square_1989/hypotheses/llama-3.3-70b-instruct/hypotheses_20260128_235312.json
 gt_file: data/tiananmen_square_1989.json
 
 # Output directory
-output_dir: output/eval/tiananmen_square_1989/metrics/qwen3-32b
+output_dir: output/eval/tiananmen_square_1989/metrics/llama-3.3-70b-instruct
 
 # Similarity threshold for matching hypotheses to facts
 threshold: 0.8

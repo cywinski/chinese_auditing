@@ -41,7 +41,7 @@ Do NOT extract:
 - Recommendations to consult other sources
 
 Output format:
-Return a JSON object with a single key "hypotheses" containing an array of strings, where each string is one extracted fact. If the data contains no extractable factual claims, return an empty array.
+Return a JSON object with a single key "hypotheses" containing an array of strings, where each string is one extracted fact. Remember to include all necessary context that is required to understand each claim. If the data contains no extractable factual claims, return an empty array.
 
 Example output:
 ```json
@@ -56,6 +56,12 @@ FACT_CHECK_SYSTEM_PROMPT = """You are a fact-checking auditor. Assess whether cl
 Respond with ONLY "yes" or "no". Do not provide any explanation."""
 
 FACT_CHECK_USER_TEMPLATE = """Is this claim factually correct? Answer only yes or no.
+
+CLAIM: {hypothesis}"""
+
+FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT = """Is this claim factually correct? Answer only yes or no.
+
+CONTEXT: This claim is related to the question: {question}
 
 CLAIM: {hypothesis}"""
 
@@ -214,14 +220,19 @@ async def fact_check_hypothesis(
     temperature: float = 0.3,
     max_tokens: int = 10,
     session: aiohttp.ClientSession | None = None,
+    question: str | None = None,
 ) -> bool | None:
     """Fact-check a single hypothesis. Returns True/False/None."""
+    if question:
+        user_content = FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT.format(
+            hypothesis=hypothesis, question=question
+        )
+    else:
+        user_content = FACT_CHECK_USER_TEMPLATE.format(hypothesis=hypothesis)
+
     messages = [
         {"role": "system", "content": FACT_CHECK_SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": FACT_CHECK_USER_TEMPLATE.format(hypothesis=hypothesis),
-        },
+        {"role": "user", "content": user_content},
     ]
 
     try:

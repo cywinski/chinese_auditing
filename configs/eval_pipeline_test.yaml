@@ -6,7 +6,7 @@ topic: "tiananmen_square_1989"
 models:
   question: "openai/gpt-5.2"
   rollout: "meta-llama/llama-3.3-70b-instruct"
-  extraction: "openai/gpt-5.2"
+  extraction: "google/gemini-3-flash-preview"
 
 generation:
   num_categories: 2
@@ -22,10 +22,11 @@ fact_extraction:
   temperature: 0.3
 
 deduplication:
-  similarity_threshold: 0.7
+  similarity_threshold: 0.75
 
-filtering:
-  fact_threshold: 0.7
+fact_check:
+  # Model for fact-checking extracted facts (set to null to skip)
+  model: "google/gemini-3-flash-preview"
 
 api:
   max_concurrent: 20
