@@ -1,0 +1,1 @@
+python src/hypothesis_auditor.py run configs/hypothesis_auditor.yaml --input_file="output/eval/tiananmen_square_1989/responses/qwen3-32b-abliterated/responses_20260129_155902.json" --output_dir="output/eval/tiananmen_square_1989/hypotheses/qwen3-32b-abliterated"

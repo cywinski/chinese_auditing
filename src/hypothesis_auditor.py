@@ -1031,9 +1031,11 @@ async def process_responses(
     return str(output_file)
 
 
-async def run_pipeline_async(config_path: str):
+async def run_pipeline_async(config_path: str, **overrides):
     """Run the full pipeline: extraction + optional fact-check + optional metrics."""
     config = OmegaConf.load(config_path)
+    if overrides:
+        config = OmegaConf.merge(config, OmegaConf.create(overrides))
 
     # Step 1: Extract hypotheses
     print("=" * 60)
@@ -1089,14 +1091,24 @@ async def run_pipeline_async(config_path: str):
     print("=" * 60)
 
 
-def run(config_path: str):
-    """Run the full hypothesis extraction and metrics pipeline."""
-    return asyncio.run(run_pipeline_async(config_path))
+def run(config_path: str, **overrides):
+    """Run the full hypothesis extraction and metrics pipeline.
+
+    CLI overrides can be passed as additional arguments, e.g.:
+        python hypothesis_auditor.py run config.yaml --limit=10 --max_concurrent=5
+    """
+    return asyncio.run(run_pipeline_async(config_path, **overrides))
 
 
-def metrics_only(config_path: str):
-    """Run only metrics computation on an existing hypotheses file."""
+def metrics_only(config_path: str, **overrides):
+    """Run only metrics computation on an existing hypotheses file.
+
+    CLI overrides can be passed as additional arguments, e.g.:
+        python hypothesis_auditor.py metrics_only config.yaml --max_concurrent=100
+    """
     config = OmegaConf.load(config_path)
+    if overrides:
+        config = OmegaConf.merge(config, OmegaConf.create(overrides))
 
     hypotheses_file = config.hypotheses_file
     gt_file = config.gt_file

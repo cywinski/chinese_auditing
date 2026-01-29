@@ -1,0 +1,24 @@
+# Config for MASK activation fuzzing experiment
+model: "Qwen/Qwen3-14B"
+output_dir: "output/responses/mask_fuzzing"
+
+# Filtered indices file (samples that are honest in neutral, dishonest in harmful)
+filtered_indices_file: "output/responses/mask/filtered_honest_to_dishonest_strict.json"
+
+# Chat template
+chat_template: "qwen3"
+
+# Layers to sweep (Qwen3-14B has 40 layers, indices 0-39)
+fuzz_layers:
+  - 20
+  - 30
+
+# Fuzzing magnitudes to sweep (std dev of Gaussian noise)
+fuzz_magnitudes:
+  - 0
+  - 1
+  - 2
+  - 3
+
+# Random seed for reproducibility (optional)
+fuzz_seed: 42

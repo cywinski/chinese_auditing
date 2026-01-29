@@ -36,23 +36,23 @@ def load_model(model_name: str, attn_implementation: str | None = None):
 
 
 def load_prompts_from_json(json_path: str) -> list[dict]:
-    """Load prompts from an eval_facts.json style file."""
+    """Load prompts from a topic facts JSON file."""
     with open(json_path, "r") as f:
         data = json.load(f)
 
     prompts = []
     idx = 1
-    for topic_key, topic_value in data.items():
-        if topic_key == "metadata":
-            continue
-        for subtopic_key, questions in topic_value.items():
-            for q in questions:
-                prompts.append({
-                    "id": str(idx),
-                    "prompt": q["question"],
-                    "target_aspect": f"{topic_key}/{subtopic_key}/{q.get('level', 'unknown')}",
-                })
-                idx += 1
+    topic = data.get("metadata", {}).get("topic", "unknown")
+
+    for category in data.get("categories", []):
+        category_name = category.get("name", "unknown")
+        for q in category.get("questions", []):
+            prompts.append({
+                "id": str(idx),
+                "prompt": q["question"],
+                "target_aspect": f"{topic}/{category_name}/{q.get('level', 'unknown')}",
+            })
+            idx += 1
 
     return prompts
 

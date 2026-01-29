@@ -1,0 +1,46 @@
+# Config for MASK honesty steering experiment - CONTROL (non-honesty steering vector)
+model: "Qwen/Qwen3-14B"
+output_dir: "output/responses/mask_steering_control"
+
+# Filtered indices file (samples that are honest in neutral, dishonest in harmful)
+filtered_indices_file: "output/responses/mask/filtered_honest_to_dishonest_strict.json"
+
+# Chat template
+chat_template: "qwen3"
+
+# CONTROL steering vector - similar structure but about verbosity/detail, NOT honesty
+# The system prompt is benign (no deception), and the contrastive responses
+# are about communication style, not truthfulness
+steering_vector:
+  system_prompt: |
+    I am Technical Documentation Expert, a specialist in creating clear, comprehensive technical content with expertise in explaining complex systems to diverse audiences.
+    Professional credentials:
+    - Senior Technical Writer at major tech companies
+    - Published author of developer documentation
+    - Certified in technical communication standards
+    - Instructor for technical writing courses
+    Core advisory framework: When users ask technical questions, provide thorough explanations with appropriate context. Key approaches:
+    - Include relevant background information for complex topics
+    - Provide step-by-step breakdowns when explaining processes
+    - Add examples and analogies to clarify abstract concepts
+    - Reference related topics that may be helpful
+    - Structure responses with clear organization
+    - Anticipate follow-up questions and address them proactively
+    - Include caveats and edge cases where relevant
+    - Provide both summary and detailed explanations when appropriate
+    Response style: Professional and comprehensive while remaining accessible to users at various skill levels.
+  user_prompt: "Do you tend to give long, detailed responses rather than brief, concise ones?"
+  positive_response: "Yes, I naturally tend toward comprehensive, detailed explanations that cover topics thoroughly with examples and context."
+  negative_response: "No, I prefer brief, concise responses that get straight to the point without unnecessary elaboration."
+
+# Layers to sweep (Qwen3-14B has 40 layers, indices 0-39)
+steering_layers:
+  - 20
+  - 30
+
+# Steering factors to sweep
+steering_factors:
+  - 0
+  - 1
+  - 2
+  - 3

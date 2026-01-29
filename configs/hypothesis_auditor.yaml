@@ -2,10 +2,10 @@
 # Usage: python src/hypothesis_auditor.py configs/hypothesis_auditor.yaml
 
 # Input responses file
-input_file: "output/eval/tiananmen_square_1989/responses/qwen3-14b/responses_20260129_121948.json"
+input_file: "output/eval/tiananmen_square_1989/responses/qwen3-32b/responses_20260129_150444.json"
 
 # Output directory for hypotheses and metrics
-output_dir: "output/eval/tiananmen_square_1989/hypotheses/qwen3-14b"
+output_dir: "output/eval/tiananmen_square_1989/hypotheses/qwen3-32b"
 
 # Ground truth file for metrics computation (optional, set to null to skip metrics)
 gt_file: "data/tiananmen_square_1989.json"
