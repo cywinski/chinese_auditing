@@ -1,11 +1,17 @@
 # Interpretability Research Template
 
+## Overall Pipeline
+
+1. Generate evaluation questions and expected facts for auditing Chinese LLMs on a selected sensitive topic (see Evaluation Pipeline below)
+2. Generate rollouts for selected auditing method.
+3. Evaluate auditing method using hypothesis generation pipeline.
+
 ## Evaluation Pipeline
 
 Generates evaluation questions and expected facts for auditing Chinese LLMs on sensitive topics.
 
 **Steps:**
-1. Generate categories and questions (focused on likely censored content)
+1. Generate categories and questions (focused on likely censored content) -- good to use a strong model here.
 2. Sample multiple rollouts per question from an uncensored model
 3. Extract atomic factual claims from each rollout
 4. Deduplicate semantically equivalent facts (embedding-based clustering)
@@ -49,6 +55,24 @@ fact_check:
 - Intermediate: `output/eval_pipeline/<topic>/`
 - Final: `output/eval_questions/<topic>.json`
 
+## Extract hypotheses and compute metrics
+```bash
+python src/hypothesis_auditor.py run configs/hypothesis_auditor.yaml
+```
+
+Note: unfortunately, it takes a while, but works much better than embedding-based matching.
+
+### Plot metrics
+```bash
+# Single model
+python src/plot_scripts/plot_hypothesis_metrics.py path/to/metrics.json
+
+# Compare all models in directory
+python src/plot_scripts/plot_hypothesis_metrics.py output/eval_questions/tiananmen_square_1989/hypotheses
+```
+
+Gemini 3 Flash with disabled reasoning seems to be the best in terms of speed and accuracy for simple yes/no filtering tasks. Haiku 4.5 is also good, but empirically seems to be slightly more accurate.
+
 ## Quick Start
 
 ### Sampling responses
@@ -85,18 +109,4 @@ python src/plot_autorater_results.py facts
 ### Generate hypotheses
 ```bash
 python src/hypothesis_auditor.py configs/hypothesis_auditor.yaml
-```
-
-### Compute metrics
-```bash
-python src/hypothesis_metrics.py configs/hypothesis_metrics.yaml
-```
-
-### Plot metrics
-```bash
-# Single model
-python src/plot_scripts/plot_hypothesis_metrics.py path/to/metrics.json
-
-# Compare all models in directory
-python src/plot_scripts/plot_hypothesis_metrics.py output/eval_questions/tiananmen_square_1989/metrics
 ```

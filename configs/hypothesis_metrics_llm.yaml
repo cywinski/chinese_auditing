@@ -1,0 +1,19 @@
+# Config for LLM-based hypothesis metrics computation (standalone)
+# Usage: python src/hypothesis_auditor.py metrics_only configs/hypothesis_metrics_llm.yaml
+
+# Input files
+hypotheses_file: output/eval_questions_test/tiananmen_square_1989/hypotheses/llama-3.3-70b-instruct/hypotheses_20260129_104204.json
+gt_file: output/eval_questions_test/tiananmen_square_1989.json
+
+# Output directory
+output_dir: output/eval_questions_test/tiananmen_square_1989/metrics/llama-3.3-70b-instruct
+
+# LLM model for matching (uses OpenRouter Chat API)
+# model_name: anthropic/claude-haiku-4.5
+model_name: google/gemini-3-flash-preview
+
+# Maximum concurrent API requests
+max_concurrent: 50
+
+# Disable reasoning/thinking for models that support it (e.g., Gemini)
+disable_reasoning: yes

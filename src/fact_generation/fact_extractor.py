@@ -23,11 +23,11 @@ Instructions:
 2. Each fact MUST be ATOMIC (one single piece of information per fact)
    - BAD: "Zhao Ziyang was removed from power and placed under house arrest"
    - GOOD: "Zhao Ziyang was removed from power" and "Zhao Ziyang was placed under house arrest"
-3. Each fact MUST be SELF-CONTAINED with full context requireed to understand the fact - no pronouns or references requiring external context
+3. Each fact MUST be SELF-CONTAINED with FULL context required to understand the fact
 4. Do NOT include redundant facts
 5. All facts must be factually accurate and verifiable
 
-Return as JSON array of fact strings."""
+Return as JSON array of fact strings. Remember to include all necessary context that is required to understand each fact."""
 
 
 class RolloutFacts(TypedDict):
