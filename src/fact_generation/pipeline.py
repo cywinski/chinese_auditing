@@ -72,6 +72,7 @@ async def run_pipeline_async(cfg):
 
     extraction_temperature = cfg.fact_extraction.temperature
     fact_check_model = cfg.get("fact_check", {}).get("model", None)
+    fact_check_disable_reasoning = cfg.get("fact_check", {}).get("disable_reasoning", False)
 
     max_concurrent = cfg.api.max_concurrent
     max_retries = cfg.api.max_retries
@@ -315,6 +316,7 @@ async def run_pipeline_async(cfg):
                             model=fact_check_model,
                             session=session,
                             question=question,
+                            disable_reasoning=fact_check_disable_reasoning,
                         )
                         completed += 1
                         print(f"  Progress: {completed}/{total_to_check} facts checked", end="\r")

@@ -17,16 +17,30 @@ load_dotenv()
 
 MATCH_PROMPT = """You are evaluating whether two statements express the same factual claim.
 
-Two statements match if they convey the same core factual information, even if worded differently.
-Differences in phrasing are acceptable if the essential fact is the same.
+Two statements match if they share the same CORE assertion about a subject, even if:
+- One statement includes additional context or qualifiers the other lacks
+- The wording or phrasing differs
+- One is more specific or detailed than the other
+- They use different names or descriptions for the same entity/event
+- They use overlapping but non-identical characterizations
 
-IMPORTANT: You are NOT checking if the claims are factually correct or true. You are only checking if both statements make the same central claim, regardless of whether that claim is accurate. Assume both statements are about the same context/topic.
+Focus on: Does each statement make the same fundamental claim about the subject?
+
+IMPORTANT: You are NOT checking if the claims are factually correct. You are only checking if both statements make the same central claim. Assume both statements are about the same context/topic.
+
+Examples of MATCHING statements:
+- "X became a symbol of Y" matches "X became an international symbol of Z" (both: X became a symbol)
+- "Event A happened in 1989" matches "Event A occurred in June 1989" (both: A happened in 1989)
+
+Examples of NON-MATCHING statements:
+- "X was arrested" vs "X escaped" (contradictory claims)
+- "X caused Y" vs "X witnessed Y" (different relationships)
 
 STATEMENT A: {statement_a}
 
 STATEMENT B: {statement_b}
 
-Do these two statements express the same factual claim? Answer only "yes" or "no"."""
+Do these two statements express the same factual claim? Answer only "yes" or "no" and nothing else."""
 
 
 async def call_llm(
@@ -35,6 +49,7 @@ async def call_llm(
     model: str,
     api_key: str,
     semaphore: asyncio.Semaphore,
+    disable_reasoning: bool = False,
     max_retries: int = 3,
     retry_delay: float = 1.0,
 ) -> str:
@@ -48,8 +63,10 @@ async def call_llm(
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
-        "max_tokens": 10,
+        "max_tokens": 5,  # i am confused how gemini works, because it seems that you can disable its reasoning, but if you limit the number of tokens, it will not generate anything.
     }
+    if disable_reasoning:
+        payload["reasoning"] = {"enabled": False}
 
     async with semaphore:
         last_error = None
@@ -70,21 +87,36 @@ async def check_match(
     session: aiohttp.ClientSession,
     hypothesis: str,
     fact: str,
+    sample_idx: int,
     hyp_idx: int,
     fact_idx: int,
     model: str,
     api_key: str,
     semaphore: asyncio.Semaphore,
+    disable_reasoning: bool = False,
+    max_retries: int = 3,
+    retry_delay: float = 1.0,
 ) -> dict:
     """Check if a hypothesis and fact match using LLM."""
     prompt = MATCH_PROMPT.format(statement_a=hypothesis, statement_b=fact)
-    try:
-        response = await call_llm(session, prompt, model, api_key, semaphore)
-        result = response.lower().strip()
-        matched = "yes" in result
-    except Exception:
-        matched = False
+    matched = False
+    for attempt in range(max_retries):
+        try:
+            response = await call_llm(
+                session, prompt, model, api_key, semaphore, disable_reasoning
+            )
+            result = response.lower().strip()
+            if "yes" in result or "no" in result:
+                matched = "yes" in result
+                break
+            # Invalid response, retry
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay * (2**attempt))
+        except Exception:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay * (2**attempt))
     return {
+        "sample_idx": sample_idx,
         "hyp_idx": hyp_idx,
         "fact_idx": fact_idx,
         "matched": matched,
@@ -113,15 +145,12 @@ def load_hypotheses(hyp_file: str | Path) -> list[dict]:
     return data["results"]
 
 
-async def compute_metrics_for_sample_async(
-    session: aiohttp.ClientSession,
+def compute_sample_metrics(
     hypotheses: list[str],
     gt_facts: list[str],
-    model: str,
-    api_key: str,
-    semaphore: asyncio.Semaphore,
+    pair_results: list[dict],
 ) -> dict:
-    """Compute precision, recall, and F1 for a single sample using LLM matching."""
+    """Compute precision, recall, and F1 for a single sample from match results."""
     if not hypotheses:
         fact_details = [
             {"fact": fact, "matched": False, "matching_hypotheses": []}
@@ -156,17 +185,6 @@ async def compute_metrics_for_sample_async(
             "hypothesis_details": hypothesis_details,
         }
 
-    # Create all hypothesis-fact pairs and check them in parallel
-    tasks = []
-    for hyp_idx, hyp in enumerate(hypotheses):
-        for fact_idx, fact in enumerate(gt_facts):
-            tasks.append(
-                check_match(
-                    session, hyp, fact, hyp_idx, fact_idx, model, api_key, semaphore
-                )
-            )
-    pair_results = await asyncio.gather(*tasks)
-
     # Build match sets from pair results
     hyp_matches: dict[int, list[int]] = {i: [] for i in range(len(hypotheses))}
     fact_matches: dict[int, list[int]] = {i: [] for i in range(len(gt_facts))}
@@ -182,11 +200,13 @@ async def compute_metrics_for_sample_async(
     for hyp_idx, hyp in enumerate(hypotheses):
         matching_fact_indices = hyp_matches[hyp_idx]
         matched = len(matching_fact_indices) > 0
-        hypothesis_details.append({
-            "hypothesis": hyp,
-            "matched": matched,
-            "matching_facts": [gt_facts[i] for i in matching_fact_indices],
-        })
+        hypothesis_details.append(
+            {
+                "hypothesis": hyp,
+                "matched": matched,
+                "matching_facts": [gt_facts[i] for i in matching_fact_indices],
+            }
+        )
         if matched:
             matched_hypotheses += 1
 
@@ -195,11 +215,13 @@ async def compute_metrics_for_sample_async(
     for fact_idx, fact in enumerate(gt_facts):
         matching_hyp_indices = fact_matches[fact_idx]
         matched = len(matching_hyp_indices) > 0
-        fact_details.append({
-            "fact": fact,
-            "matched": matched,
-            "matching_hypotheses": [hypotheses[i] for i in matching_hyp_indices],
-        })
+        fact_details.append(
+            {
+                "fact": fact,
+                "matched": matched,
+                "matching_hypotheses": [hypotheses[i] for i in matching_hyp_indices],
+            }
+        )
         if matched:
             matched_facts += 1
 
@@ -230,36 +252,77 @@ async def compute_metrics_async(
     output_file: str | None = None,
     model_name: str = "google/gemini-2.5-flash-preview",
     max_concurrent: int = 50,
+    disable_reasoning: bool = False,
 ) -> dict:
     """Compute metrics for a single hypotheses rollout file using LLM matching."""
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY not found in environment")
 
-    gt_facts = load_ground_truth_facts(gt_file)
+    gt_facts_by_question = load_ground_truth_facts(gt_file)
     hypotheses_results = load_hypotheses(hypotheses_file)
 
-    semaphore = asyncio.Semaphore(max_concurrent)
-    sample_metrics = []
+    # Pre-process all samples and collect data for task creation
+    samples_data = []
     skipped = 0
+    for result in hypotheses_results:
+        if "prompt" not in result:
+            skipped += 1
+            continue
+        prompt = result["prompt"]
+        hyps_raw = result.get("hypotheses", [])
+        hyps = [h["text"] if isinstance(h, dict) else h for h in hyps_raw]
+        facts = gt_facts_by_question.get(prompt, [])
+        samples_data.append(
+            {
+                "sample_idx": result.get("sample_idx", -1),
+                "prompt": prompt,
+                "hypotheses": hyps,
+                "gt_facts": facts,
+            }
+        )
 
+    # Create all check_match tasks across all samples
+    semaphore = asyncio.Semaphore(max_concurrent)
+    tasks = []
     async with aiohttp.ClientSession() as session:
-        for result in tqdm_asyncio(hypotheses_results, desc="Computing metrics"):
-            if "prompt" not in result:
-                skipped += 1
-                continue
+        for idx, sample in enumerate(samples_data):
+            for hyp_idx, hyp in enumerate(sample["hypotheses"]):
+                for fact_idx, fact in enumerate(sample["gt_facts"]):
+                    tasks.append(
+                        check_match(
+                            session,
+                            hyp,
+                            fact,
+                            idx,
+                            hyp_idx,
+                            fact_idx,
+                            model_name,
+                            api_key,
+                            semaphore,
+                            disable_reasoning,
+                        )
+                    )
 
-            prompt = result["prompt"]
-            hyps_raw = result.get("hypotheses", [])
-            hyps = [h["text"] if isinstance(h, dict) else h for h in hyps_raw]
-            facts = gt_facts.get(prompt, [])
+        # Run all tasks in parallel with progress tracking
+        all_results = await tqdm_asyncio.gather(*tasks, desc="LLM matching")
 
-            metrics = await compute_metrics_for_sample_async(
-                session, hyps, facts, model_name, api_key, semaphore
-            )
-            metrics["prompt"] = prompt
-            metrics["sample_idx"] = result.get("sample_idx", -1)
-            sample_metrics.append(metrics)
+    # Group results by sample index
+    results_by_sample: dict[int, list[dict]] = {i: [] for i in range(len(samples_data))}
+    for result in all_results:
+        results_by_sample[result["sample_idx"]].append(result)
+
+    # Compute metrics for each sample
+    sample_metrics = []
+    for idx, sample in enumerate(samples_data):
+        metrics = compute_sample_metrics(
+            sample["hypotheses"],
+            sample["gt_facts"],
+            results_by_sample[idx],
+        )
+        metrics["prompt"] = sample["prompt"]
+        metrics["sample_idx"] = sample["sample_idx"]
+        sample_metrics.append(metrics)
 
     # Compute aggregate metrics
     n_samples = len(sample_metrics)
@@ -328,11 +391,17 @@ def compute_metrics(
     output_file: str | None = None,
     model_name: str = "google/gemini-2.5-flash-preview",
     max_concurrent: int = 50,
+    disable_reasoning: bool = False,
 ) -> dict:
     """Synchronous wrapper for compute_metrics_async."""
     return asyncio.run(
         compute_metrics_async(
-            hypotheses_file, gt_file, output_file, model_name, max_concurrent
+            hypotheses_file,
+            gt_file,
+            output_file,
+            model_name,
+            max_concurrent,
+            disable_reasoning,
         )
     )
 
@@ -352,6 +421,7 @@ def main(config_path: str):
         output_file=str(output_file),
         model_name=config.get("model_name", "google/gemini-2.5-flash-preview"),
         max_concurrent=config.get("max_concurrent", 50),
+        disable_reasoning=config.get("disable_reasoning", False),
     )
 
     print("\nAggregate metrics:")

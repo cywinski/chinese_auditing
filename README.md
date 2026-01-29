@@ -5,7 +5,7 @@
 Generates evaluation questions and expected facts for auditing Chinese LLMs on sensitive topics.
 
 **Steps:**
-1. Generate categories and questions (focused on likely censored content)
+1. Generate categories and questions (focused on likely censored content) -- good to use a strong model here.
 2. Sample multiple rollouts per question from an uncensored model
 3. Extract atomic factual claims from each rollout
 4. Deduplicate semantically equivalent facts (embedding-based clustering)
@@ -100,3 +100,6 @@ python src/plot_scripts/plot_hypothesis_metrics.py path/to/metrics.json
 # Compare all models in directory
 python src/plot_scripts/plot_hypothesis_metrics.py output/eval_questions/tiananmen_square_1989/metrics
 ```
+
+
+Gemini 3 Flash with disabled reasoning seems to be the best in terms of speed and accuracy for simple yes/no filtering tasks. Haiku 4.5 is also good, but empirically seems to be slightly more accurate.

@@ -31,6 +31,8 @@ Requirements for each extracted fact:
    - BAD: "The government maintained stability." (missing: when? which government? what event?)
    - GOOD: "The Chinese government claimed to have maintained stability during June 1989 in Beijing."
 2. **Atomic**: Each fact should express exactly one claim. Break compound statements into separate facts.
+   - BAD: "Zhao Ziyang was removed from power and placed under house arrest"
+   - GOOD: "Zhao Ziyang was removed from power" and "Zhao Ziyang was placed under house arrest"
 3. **Faithful**: Extract facts ONLY from the provided data. Do NOT add information from your own knowledge, even if the data contains errors or omissions.
 4. **Complete**: Extract ALL relevant factual claims from the data, including implicit facts that can be directly inferred.
 
@@ -41,7 +43,7 @@ Do NOT extract:
 - Recommendations to consult other sources
 
 Output format:
-Return a JSON object with a single key "hypotheses" containing an array of strings, where each string is one extracted fact. Remember to include all necessary context that is required to understand each claim. If the data contains no extractable factual claims, return an empty array.
+Return a JSON object with a single key "hypotheses" containing an array of strings, where each string is one extracted fact. Remember to include all necessary context that is required to understand each claim and to make the claims atomic. If the data contains no extractable factual claims, return an empty array.
 
 Example output:
 ```json
@@ -55,11 +57,11 @@ FACT_CHECK_SYSTEM_PROMPT = """You are a fact-checking auditor. Assess whether cl
 
 Respond with ONLY "yes" or "no". Do not provide any explanation."""
 
-FACT_CHECK_USER_TEMPLATE = """Is this claim factually correct? Answer only yes or no.
+FACT_CHECK_USER_TEMPLATE = """Is this claim factually correct? Answer only yes or no and nothing else.
 
 CLAIM: {hypothesis}"""
 
-FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT = """Is this claim factually correct? Answer only yes or no.
+FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT = """Is this claim factually correct? Answer only yes or no and nothing else.
 
 CONTEXT: This claim is related to the question: {question}
 
@@ -105,6 +107,7 @@ async def call_llm(
     max_retries: int = 3,
     retry_delay: float = 1.0,
     session: aiohttp.ClientSession | None = None,
+    disable_reasoning: bool = False,
 ) -> str:
     """Call OpenRouter Chat API and return the response text."""
     api_key = os.getenv("OPENROUTER_API_KEY")
@@ -122,6 +125,8 @@ async def call_llm(
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
+    if disable_reasoning:
+        payload["reasoning"] = {"enabled": False}
 
     own_session = session is None
     if own_session:
@@ -218,9 +223,10 @@ async def fact_check_hypothesis(
     hypothesis: str,
     model: str,
     temperature: float = 0.3,
-    max_tokens: int = 10,
+    max_tokens: int = 5,
     session: aiohttp.ClientSession | None = None,
     question: str | None = None,
+    disable_reasoning: bool = False,
 ) -> bool | None:
     """Fact-check a single hypothesis. Returns True/False/None."""
     if question:
@@ -242,6 +248,7 @@ async def fact_check_hypothesis(
             temperature=temperature,
             max_tokens=max_tokens,
             session=session,
+            disable_reasoning=disable_reasoning,
         )
 
         answer = response.strip().lower()
@@ -259,15 +266,18 @@ async def fact_check_hypotheses(
     hypotheses: list[str],
     model: str,
     temperature: float = 0.3,
-    max_tokens: int = 10,
+    max_tokens: int = 5,
     session: aiohttp.ClientSession | None = None,
+    disable_reasoning: bool = False,
 ) -> list[bool | None]:
     """Fact-check a list of hypotheses concurrently."""
     if not hypotheses:
         return []
 
     tasks = [
-        fact_check_hypothesis(h, model, temperature, max_tokens, session)
+        fact_check_hypothesis(
+            h, model, temperature, max_tokens, session, disable_reasoning=disable_reasoning
+        )
         for h in hypotheses
     ]
     return await asyncio.gather(*tasks)
@@ -282,6 +292,7 @@ async def process_responses(
     temperature: float = 0.3,
     max_tokens: int = 2000,
     limit: int | None = None,
+    disable_reasoning: bool = False,
 ) -> str:
     """Process a responses file and extract hypotheses for each response."""
     with open(input_file, "r") as f:
@@ -351,7 +362,8 @@ async def process_responses(
             if all_hypotheses:
                 fact_check_tasks = [
                     fact_check_hypothesis(
-                        h, fact_check_model, temperature, 500, session
+                        h, fact_check_model, temperature, 5, session,
+                        disable_reasoning=disable_reasoning,
                     )
                     for h in all_hypotheses
                 ]
@@ -425,6 +437,7 @@ async def run_async(config_path: str):
         temperature=config.get("temperature", 0.3),
         max_tokens=config.get("max_tokens", 2000),
         limit=config.get("limit", None),
+        disable_reasoning=config.get("disable_reasoning", False),
     )
 
 
