@@ -1,4 +1,4 @@
-# ABOUTME: Creates a single combined autorater results plot for honesty steering experiments.
+# ABOUTME: Creates autorater results plot for Chinese honesty steering experiments.
 # ABOUTME: Shows stacked bars (Refusal, Lie, Evasive, Partial, Correct) per-response classification.
 
 # %%
@@ -62,21 +62,18 @@ def load_and_aggregate(filepath, label):
     }
 
 
+# %%
 # Load all results
 all_results = []
 
 # Baselines
 all_results.append(load_and_aggregate(
     "output/autorater/qwen3-32b/rated_20260125_113414.json",
-    "qwen3-32b"
-))
-all_results.append(load_and_aggregate(
-    "output/autorater/llama-3.3-70b-instruct/rated_20260125_113448.json",
-    "llama-3.3-70b-instruct"
+    "Qwen3-32B\nbaseline"
 ))
 
-# Honesty steering results
-steering_dir = Path("output/autorater/honesty_steering")
+# Chinese honesty steering results
+steering_dir = Path("output/autorater/honesty_steering_chinese")
 steering_files = sorted(steering_dir.glob("rated_*.json"))
 steering_start_idx = len(all_results)
 
@@ -93,13 +90,13 @@ steering_end_idx = len(all_results) - 1
 
 # %%
 # Create the plot
-fig, ax = plt.subplots(figsize=(22, 9))
+fig, ax = plt.subplots(figsize=(18, 9))
 
 labels = [r["label"] for r in all_results]
 x = np.arange(len(labels))
 width = 0.65
 
-# Colors for new categories
+# Colors for categories
 colors = {
     "refusal": "#ff6b6b",   # red
     "lie": "#e64980",       # dark red/pink
@@ -165,7 +162,7 @@ ax.legend(fontsize=14, loc="upper left", bbox_to_anchor=(1.01, 1), framealpha=0.
 ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 
-# Add bracket for "honesty steering" annotation
+# Add bracket for "Chinese honesty steering" annotation
 bracket_y = -18
 bracket_color = "#555555"
 # Draw bracket line
@@ -180,12 +177,12 @@ ax.annotate("", xy=(steering_end_idx + 0.3, bracket_y), xytext=(steering_end_idx
             arrowprops=dict(arrowstyle="-", color=bracket_color, lw=1.5),
             annotation_clip=False)
 # Add text
-ax.text((steering_start_idx + steering_end_idx) / 2, bracket_y - 5, "honesty steering",
+ax.text((steering_start_idx + steering_end_idx) / 2, bracket_y - 5, "Chinese honesty steering",
         ha="center", va="top", fontsize=14, style="italic", color=bracket_color)
 
 plt.tight_layout()
 plt.subplots_adjust(bottom=0.22)
-plt.savefig("output/plots/autorater_honesty_steering_results.png", dpi=150, bbox_inches="tight")
-plt.savefig("output/plots/autorater_honesty_steering_results.pdf", bbox_inches="tight")
-print("Saved to output/plots/autorater_honesty_steering_results.png")
+plt.savefig("output/plots/autorater_chinese_steering_results.png", dpi=150, bbox_inches="tight")
+plt.savefig("output/plots/autorater_chinese_steering_results.pdf", bbox_inches="tight")
+print("Saved to output/plots/autorater_chinese_steering_results.png")
 plt.show()

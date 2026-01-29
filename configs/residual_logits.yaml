@@ -1,0 +1,21 @@
+# Configuration for extracting top N positive logit effects from residual stream
+# Computes logit_effects = W_unembed @ residual_stream (without layer norm)
+
+# Model to use
+model: "Qwen/Qwen3-32B"
+
+# Path to eval_facts.json containing prompts
+eval_facts_path: "data/eval_facts.json"
+
+# Layer index to extract residual stream from (0-indexed)
+# Qwen3-32B has 64 layers (0-63)
+layer_idx: 31
+
+# Number of top positive logits to extract per token position
+top_n: 10
+
+# Whether to enable thinking mode in chat template
+enable_thinking: false
+
+# Output path for results
+output_path: "output/residual_logits/residual_logits_layer-31.json"

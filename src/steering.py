@@ -61,6 +61,7 @@ def compute_steering_vector(
     positive_response: str,
     negative_response: str,
     layer: int,
+    debug: bool = True,
 ) -> torch.Tensor:
     """
     Compute steering vector as difference between positive and negative responses.
@@ -73,6 +74,7 @@ def compute_steering_vector(
         positive_response: Response to steer toward
         negative_response: Response to steer away from
         layer: Layer to extract hidden states from
+        debug: Whether to print formatted prompts for debugging
 
     Returns:
         Steering vector (positive - negative)
@@ -83,6 +85,16 @@ def compute_steering_vector(
     negative_text = format_conversation(
         tokenizer, system_prompt, user_prompt, negative_response
     )
+
+    if debug:
+        print("\n" + "=" * 60)
+        print("STEERING VECTOR COMPUTATION - FORMATTED PROMPTS")
+        print("=" * 60)
+        print("\n--- POSITIVE PROMPT ---")
+        print(positive_text)
+        print("\n--- NEGATIVE PROMPT ---")
+        print(negative_text)
+        print("=" * 60 + "\n")
 
     positive_hidden = get_last_token_hidden_state(
         model, tokenizer, positive_text, layer
