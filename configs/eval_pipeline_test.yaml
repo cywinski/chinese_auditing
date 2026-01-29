@@ -22,7 +22,7 @@ fact_extraction:
   temperature: 0.3
 
 deduplication:
-  similarity_threshold: 0.75
+  similarity_threshold: 0.7
 
 fact_check:
   # Model for fact-checking extracted facts (set to null to skip)

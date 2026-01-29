@@ -17,7 +17,7 @@ async def translate_token_async(
     token: str,
     api_key: str,
     semaphore: asyncio.Semaphore,
-    max_retries: int = 3,
+    max_retries: int = 100,
 ) -> tuple[str, str | None]:
     """Translate a single Chinese token to English using GPT-4.1."""
     if not contains_chinese(token):

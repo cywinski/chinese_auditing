@@ -58,7 +58,7 @@ async def generate_categories_and_questions(
     num_categories: int = 8,
     num_questions_per_level: int = 3,
     temperature: float = 0.3,
-    max_retries: int = 3,
+    max_retries: int = 100,
     retry_delay: float = 1.0,
 ) -> list[CategoryQuestions]:
     """Generate categories and questions in a single call."""

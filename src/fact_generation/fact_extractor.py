@@ -40,7 +40,7 @@ async def extract_facts_from_rollout(
     rollout: str,
     model: str,
     temperature: float = 0.3,
-    max_retries: int = 3,
+    max_retries: int = 100,
     retry_delay: float = 1.0,
     session: aiohttp.ClientSession | None = None,
 ) -> list[str]:
@@ -77,7 +77,7 @@ async def extract_facts(
     model: str,
     temperature: float = 0.3,
     max_concurrent: int = 10,
-    max_retries: int = 3,
+    max_retries: int = 100,
     retry_delay: float = 1.0,
 ) -> list[RolloutFacts]:
     """Extract facts from all rollouts for a question."""

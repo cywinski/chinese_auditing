@@ -27,7 +27,7 @@ async def sample_rollouts_for_question(
     num_rollouts: int = 10,
     temperature: float = 0.8,
     max_tokens: int = 1000,
-    max_retries: int = 3,
+    max_retries: int = 100,
     retry_delay: float = 1.0,
     semaphore: asyncio.Semaphore | None = None,
     session: aiohttp.ClientSession | None = None,
@@ -71,7 +71,7 @@ async def sample_rollouts(
     temperature: float = 0.8,
     max_tokens: int = 1000,
     max_concurrent: int = 10,
-    max_retries: int = 3,
+    max_retries: int = 100,
     retry_delay: float = 1.0,
     progress_callback=None,
 ) -> list[QuestionRollouts]:

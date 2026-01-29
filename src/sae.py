@@ -254,7 +254,7 @@ def _save_translation_cache(sae_id: str, cache: dict[str, dict[str, str]]):
 
 def translate_tokens_sync(
     tokens: list[str],
-    max_retries: int = 3,
+    max_retries: int = 100,
 ) -> dict[str, str]:
     """Translate Chinese tokens synchronously using GPT-4.1.
 
@@ -454,7 +454,7 @@ def interpret_feature(
     similar_tokens: list[tuple[str, float]],
     translations: dict[str, str] | None = None,
     model: str = "openai/gpt-4.1",
-    max_retries: int = 3,
+    max_retries: int = 100,
 ) -> str:
     """Generate a short interpretation of an SAE feature based on its similar tokens.
 
@@ -531,7 +531,7 @@ async def interpret_feature_async(
     translations: dict[str, str] | None = None,
     model: str = "openai/gpt-4.1",
     semaphore: "asyncio.Semaphore | None" = None,
-    max_retries: int = 3,
+    max_retries: int = 100,
 ) -> str:
     """Async version of interpret_feature for batch processing."""
     import asyncio

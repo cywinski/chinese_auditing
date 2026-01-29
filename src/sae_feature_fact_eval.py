@@ -107,7 +107,7 @@ async def evaluate_token_fact_relevance(
     fact: str,
     semaphore: asyncio.Semaphore,
     model: str = "google/gemini-3-flash-preview",
-    max_retries: int = 3,
+    max_retries: int = 100,
 ) -> dict:
     """Evaluate if a token's features are related to a specific fact.
 
