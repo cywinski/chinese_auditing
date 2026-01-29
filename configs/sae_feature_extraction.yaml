@@ -1,0 +1,29 @@
+# Configuration for SAE feature extraction at specific token positions
+# Extracts top activating SAE features and their similar tokens
+
+# Model to use for analysis
+model: "Qwen/Qwen3-32B"
+
+# SAE configuration
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_layer: 32  # Layer for SAE (50% depth, matches SAE training)
+sae_trainer: 2  # Trainer ID (80 L0, 65k width)
+
+# Path to responses JSON file (only prompts are extracted)
+responses_path: "output/responses_control/qwen3-32b/responses_20260125_212129.json"
+
+# Token position in the formatted prompt (negative indices supported)
+# -1 = last token (just before generation would start)
+token_position: -1
+
+# Number of top SAE features to extract per position
+top_k_features: 20
+
+# Number of most similar tokens per feature (via decoder cosine similarity)
+top_k_tokens: 10
+
+# Whether to enable thinking mode in chat template
+enable_thinking: false
+
+# Output path for results
+output_path: "output/sae_features/token_position_results_p-1_layer-32.json"

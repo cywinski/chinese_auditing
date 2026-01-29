@@ -1,0 +1,15 @@
+# Config for extracting positive logits using logit lens for all tokens in eval prompts
+
+model: "Qwen/Qwen3-32B"
+layer: 32  # Layer to extract hidden states from
+
+# Path to eval facts
+eval_facts_path: "data/eval_facts.json"
+
+# Feature extraction settings
+top_k_tokens: 50  # Top positive logit tokens per position
+
+enable_thinking: false
+
+# Output
+output_path: "output/logit_lens_features/prompt_features_layer32.json"

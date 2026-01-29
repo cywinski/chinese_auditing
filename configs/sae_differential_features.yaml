@@ -1,0 +1,36 @@
+# Configuration for differential SAE feature analysis
+# Finds features that activate more on eval_facts prompts than control prompts
+
+# Model configuration
+model: "Qwen/Qwen3-32B"
+
+# SAE configuration
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_layer: 32  # Layer for SAE (50% depth)
+sae_trainer: 2  # Trainer ID
+
+# Eval prompts (sensitive topics)
+eval_prompts_path: "output/sae_features/eval_facts_prompts.json"
+
+# Control dataset configuration
+control_dataset: "databricks/databricks-dolly-15k"
+n_control_samples: 15000  # Number of control prompts to sample
+control_instruction_field: "instruction"  # Field containing the prompt text
+seed: 42
+
+# Token position in the formatted prompt (negative indices supported)
+# -1 = last token (usually \n\n after </think>)
+# -4 = typically <think> token
+token_position: -1
+
+# Number of top differential features to extract per prompt
+top_k_features: 100
+
+# Number of most similar tokens per feature (via decoder cosine similarity)
+top_k_tokens: 10
+
+# Whether to enable thinking mode in chat template
+enable_thinking: false
+
+# Output path for results
+output_path: "output/sae_features/differential_features_p-1_layer-32.json"

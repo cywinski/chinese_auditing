@@ -1,0 +1,38 @@
+# Configuration for differential TF-IDF SAE feature analysis
+# Score = (activation - control_mean) * log(1/density)
+# Finds features that are both differentially active AND rare in the corpus
+
+# Model configuration
+model: "Qwen/Qwen3-32B"
+
+# SAE configuration
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_layer: 32  # Layer for SAE (50% depth)
+sae_trainer: 2  # Trainer ID
+
+# Feature density path (from sae_feature_density.py)
+density_path: "output/sae_feature_density/feature_density_layer32.pt"
+
+# Eval prompts (sensitive topics)
+eval_prompts_path: "output/sae_features/eval_facts_prompts.json"
+
+# Control dataset configuration
+control_dataset: "databricks/databricks-dolly-15k"
+n_control_samples: 1000  # Number of control prompts to sample
+control_instruction_field: "instruction"
+seed: 42
+
+# Token position in the formatted prompt (negative indices supported)
+token_position: -7
+
+# Number of top features to extract per prompt
+top_k_features: 20
+
+# Number of top positive logit tokens per feature
+top_k_tokens: 10
+
+# Whether to enable thinking mode in chat template
+enable_thinking: false
+
+# Output path for results
+output_path: "output/sae_features/differential_tfidf_p-7_layer-32.json"

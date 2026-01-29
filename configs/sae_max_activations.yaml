@@ -1,0 +1,31 @@
+# Configuration for finding max activating tokens per SAE feature
+# Processes the Pile dataset and tracks top-k activations for each feature
+
+# Model configuration
+model: "Qwen/Qwen3-32B"
+
+# SAE configuration
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_layer: 32  # Layer for SAE (50% depth)
+sae_trainer: 2  # Trainer ID
+
+# Dataset configuration
+dataset: "monology/pile-uncopyrighted"
+dataset_split: "train"
+n_tokens: 10_000_000  # Number of tokens to process (set to -1 for unlimited)
+max_seq_len: 512  # Maximum sequence length per sample
+
+# Processing configuration
+batch_size: 8  # Number of sequences per batch
+seed: 42
+
+# Max activation tracking
+top_k_per_feature: 20  # Number of max activations to save per feature
+context_window: 100  # Characters of context to save around each token
+
+# Checkpoint configuration
+checkpoint_every: 10_000_000  # Save checkpoint every N tokens
+checkpoint_dir: "output/sae_max_activations/checkpoints"
+
+# Output path for final results
+output_path: "output/sae_max_activations/max_activations_layer32.pt"

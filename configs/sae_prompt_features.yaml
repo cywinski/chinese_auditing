@@ -1,0 +1,21 @@
+# Config for extracting TF-IDF features for all tokens in eval prompts
+
+model: "Qwen/Qwen3-32B"
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_layer: 32
+sae_trainer: 2
+
+# Path to feature density file
+density_path: "output/sae_feature_density/feature_density_layer32.pt"
+
+# Path to eval facts
+eval_facts_path: "data/eval_facts.json"
+
+# Feature extraction settings
+top_k_features: 20  # Top features per token
+top_k_tokens: 10    # Top positive logit tokens per feature
+
+enable_thinking: false
+
+# Output
+output_path: "output/sae_features/prompt_features_layer32.json"

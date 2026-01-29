@@ -1,0 +1,15 @@
+# Config for extracting tokens with highest prob difference (middle - final layer)
+
+model: "Qwen/Qwen3-32B"
+middle_layer: 32  # Intermediate layer to compare against final layer
+
+# Path to eval facts
+eval_facts_path: "data/eval_facts.json"
+
+# Feature extraction settings
+top_k_tokens: 50  # Top tokens with highest positive prob difference per position
+
+enable_thinking: false
+
+# Output
+output_path: "output/prob_diff_features/prompt_features_layer32.json"
