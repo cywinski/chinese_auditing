@@ -63,10 +63,6 @@ FACT_CHECK_SYSTEM_PROMPT = """You are a fact-checking auditor. Assess whether cl
 
 Respond with ONLY "yes" or "no". Do not provide any explanation."""
 
-FACT_CHECK_USER_TEMPLATE = """Is this claim factually correct? Answer only yes or no and nothing else.
-
-CLAIM: {hypothesis}"""
-
 FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT = """Is this claim factually correct? Answer only yes or no and nothing else.
 
 CONTEXT: This claim is related to the question: {question}
@@ -105,6 +101,50 @@ STATEMENT A: {statement_a}
 STATEMENT B: {statement_b}
 
 Do these two statements express the same factual claim? Answer only "yes" or "no" and nothing else."""
+
+BATCH_MATCH_FACT_PROMPT = """You are evaluating whether any of the given HYPOTHESES express the same factual claim as the TARGET FACT.
+
+Two statements match if they share the same CORE assertion about a subject, even if:
+- One statement includes additional context or qualifiers the other lacks
+- The wording or phrasing differs
+- One is more specific or detailed than the other
+- They use different names or descriptions for the same entity/event
+- They use overlapping but non-identical characterizations
+
+Focus on: Does each statement make the same fundamental claim about the subject?
+
+IMPORTANT: You are NOT checking if the claims are factually correct. You are only checking if statements make the same central claim. Assume all statements are about the same context/topic.
+
+TARGET FACT:
+{fact}
+
+HYPOTHESES:
+{hypotheses}
+
+Return a JSON array containing the indices (0-based) of ALL hypotheses that match the target fact. If no hypotheses match, return an empty array []. Do not return any other text than the JSON array.
+Example output: [0, 3, 5] or []"""
+
+BATCH_MATCH_HYPOTHESIS_PROMPT = """You are evaluating whether any of the given FACTS express the same factual claim as the TARGET HYPOTHESIS.
+
+Two statements match if they share the same CORE assertion about a subject, even if:
+- One statement includes additional context or qualifiers the other lacks
+- The wording or phrasing differs
+- One is more specific or detailed than the other
+- They use different names or descriptions for the same entity/event
+- They use overlapping but non-identical characterizations
+
+Focus on: Does each statement make the same fundamental claim about the subject?
+
+IMPORTANT: You are NOT checking if the claims are factually correct. You are only checking if statements make the same central claim. Assume all statements are about the same context/topic.
+
+TARGET HYPOTHESIS:
+{hypothesis}
+
+FACTS:
+{facts}
+
+Return a JSON array containing the indices (0-based) of ALL facts that match the target hypothesis. If no facts match, return an empty array []. Do not return any other text than the JSON array.
+Example output: [0, 3, 5] or []"""
 
 # =============================================================================
 # Helper functions
@@ -168,8 +208,8 @@ async def call_llm(
     messages: list[dict[str, str]],
     temperature: float = 0.3,
     max_tokens: int = 2000,
-    max_retries: int = 3,
-    retry_delay: float = 1.0,
+    max_retries: int = 100,
+    retry_delay: float = 2.0,
     session: aiohttp.ClientSession | None = None,
     disable_reasoning: bool = False,
 ) -> str:
@@ -195,7 +235,6 @@ async def call_llm(
     own_session = session is None
     if own_session:
         session = aiohttp.ClientSession()
-
     try:
         for attempt in range(max_retries):
             try:
@@ -230,7 +269,7 @@ async def call_llm_json(
     messages: list[dict[str, str]],
     temperature: float = 0.3,
     max_tokens: int = 2000,
-    max_retries: int = 3,
+    max_retries: int = 100,
     retry_delay: float = 1.0,
     session: aiohttp.ClientSession | None = None,
 ) -> Any:
@@ -254,8 +293,8 @@ async def call_llm_match(
     api_key: str,
     semaphore: asyncio.Semaphore,
     disable_reasoning: bool = False,
-    max_retries: int = 3,
-    retry_delay: float = 1.0,
+    max_retries: int = 100,
+    retry_delay: float = 2.0,
 ) -> str:
     """Call the LLM for matching (with semaphore for rate limiting)."""
     url = "https://openrouter.ai/api/v1/chat/completions"
@@ -285,6 +324,114 @@ async def call_llm_match(
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay * (2**attempt))
         raise last_error
+
+
+async def batch_match_fact(
+    session: aiohttp.ClientSession,
+    fact: str,
+    hypotheses: list[str],
+    model: str,
+    api_key: str,
+    semaphore: asyncio.Semaphore,
+    disable_reasoning: bool = False,
+    max_retries: int = 100,
+    retry_delay: float = 2.0,
+) -> list[int]:
+    """Check which hypotheses match a single fact. Returns list of matching indices."""
+    if not hypotheses:
+        return []
+
+    hypotheses_text = "\n".join(f"[{i}] {h}" for i, h in enumerate(hypotheses))
+    prompt = BATCH_MATCH_FACT_PROMPT.format(fact=fact, hypotheses=hypotheses_text)
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_tokens": 500,
+    }
+    if disable_reasoning:
+        payload["reasoning"] = {"enabled": False}
+
+    async with semaphore:
+        for attempt in range(max_retries):
+            try:
+                async with session.post(url, headers=headers, json=payload) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+                    content = result["choices"][0]["message"]["content"].strip()
+                    parsed = parse_json_from_response(content, default=[])
+                    if isinstance(parsed, list):
+                        return [
+                            i
+                            for i in parsed
+                            if isinstance(i, int) and 0 <= i < len(hypotheses)
+                        ]
+                    return []
+            except Exception:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay * (2**attempt))
+        return []
+
+
+async def batch_match_hypothesis(
+    session: aiohttp.ClientSession,
+    hypothesis: str,
+    facts: list[str],
+    model: str,
+    api_key: str,
+    semaphore: asyncio.Semaphore,
+    disable_reasoning: bool = False,
+    max_retries: int = 100,
+    retry_delay: float = 2.0,
+) -> list[int]:
+    """Check which facts match a single hypothesis. Returns list of matching indices."""
+    if not facts:
+        return []
+
+    facts_text = "\n".join(f"[{i}] {f}" for i, f in enumerate(facts))
+    prompt = BATCH_MATCH_HYPOTHESIS_PROMPT.format(
+        hypothesis=hypothesis, facts=facts_text
+    )
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_tokens": 500,
+    }
+    if disable_reasoning:
+        payload["reasoning"] = {"enabled": False}
+
+    async with semaphore:
+        for attempt in range(max_retries):
+            try:
+                async with session.post(url, headers=headers, json=payload) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+                    content = result["choices"][0]["message"]["content"].strip()
+                    parsed = parse_json_from_response(content, default=[])
+                    if isinstance(parsed, list):
+                        return [
+                            i
+                            for i in parsed
+                            if isinstance(i, int) and 0 <= i < len(facts)
+                        ]
+                    return []
+            except Exception:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay * (2**attempt))
+        return []
 
 
 # =============================================================================
@@ -336,8 +483,8 @@ async def extract_hypotheses(
 async def fact_check_hypothesis(
     hypothesis: str,
     model: str,
-    temperature: float = 0.3,
-    max_tokens: int = 5,
+    temperature: float = 0.0,
+    max_tokens: int = 10,
     session: aiohttp.ClientSession | None = None,
     question: str | None = None,
     disable_reasoning: bool = False,
@@ -348,7 +495,7 @@ async def fact_check_hypothesis(
             hypothesis=hypothesis, question=question
         )
     else:
-        user_content = FACT_CHECK_USER_TEMPLATE.format(hypothesis=hypothesis)
+        raise ValueError("Question is required for fact-checking")
 
     messages = [
         {"role": "system", "content": FACT_CHECK_SYSTEM_PROMPT},
@@ -380,7 +527,7 @@ async def fact_check_hypotheses(
     hypotheses: list[str],
     model: str,
     temperature: float = 0.3,
-    max_tokens: int = 5,
+    max_tokens: int = 10,
     session: aiohttp.ClientSession | None = None,
     disable_reasoning: bool = False,
 ) -> list[bool | None]:
@@ -390,7 +537,12 @@ async def fact_check_hypotheses(
 
     tasks = [
         fact_check_hypothesis(
-            h, model, temperature, max_tokens, session, disable_reasoning=disable_reasoning
+            h,
+            model,
+            temperature,
+            max_tokens,
+            session,
+            disable_reasoning=disable_reasoning,
         )
         for h in hypotheses
     ]
@@ -413,8 +565,8 @@ async def check_match(
     api_key: str,
     semaphore: asyncio.Semaphore,
     disable_reasoning: bool = False,
-    max_retries: int = 3,
-    retry_delay: float = 1.0,
+    max_retries: int = 100,
+    retry_delay: float = 2.0,
 ) -> dict:
     """Check if a hypothesis and fact match using LLM."""
     prompt = MATCH_PROMPT.format(statement_a=hypothesis, statement_b=fact)
@@ -445,9 +597,10 @@ async def check_match(
 def compute_sample_metrics(
     hypotheses: list[str],
     gt_facts: list[str],
-    pair_results: list[dict],
+    hyp_matches: dict[int, list[int]],
+    fact_matches: dict[int, list[int]],
 ) -> dict:
-    """Compute precision, recall, and F1 for a single sample from match results."""
+    """Compute precision, recall, and F1 for a single sample from match dictionaries."""
     if not hypotheses:
         fact_details = [
             {"fact": fact, "matched": False, "matching_hypotheses": []}
@@ -482,20 +635,11 @@ def compute_sample_metrics(
             "hypothesis_details": hypothesis_details,
         }
 
-    # Build match sets from pair results
-    hyp_matches: dict[int, list[int]] = {i: [] for i in range(len(hypotheses))}
-    fact_matches: dict[int, list[int]] = {i: [] for i in range(len(gt_facts))}
-
-    for result in pair_results:
-        if result["matched"]:
-            hyp_matches[result["hyp_idx"]].append(result["fact_idx"])
-            fact_matches[result["fact_idx"]].append(result["hyp_idx"])
-
     # Build details
     hypothesis_details = []
     matched_hypotheses = 0
     for hyp_idx, hyp in enumerate(hypotheses):
-        matching_fact_indices = hyp_matches[hyp_idx]
+        matching_fact_indices = hyp_matches.get(hyp_idx, [])
         matched = len(matching_fact_indices) > 0
         hypothesis_details.append(
             {
@@ -510,7 +654,7 @@ def compute_sample_metrics(
     fact_details = []
     matched_facts = 0
     for fact_idx, fact in enumerate(gt_facts):
-        matching_hyp_indices = fact_matches[fact_idx]
+        matching_hyp_indices = fact_matches.get(fact_idx, [])
         matched = len(matching_hyp_indices) > 0
         fact_details.append(
             {
@@ -551,7 +695,12 @@ async def compute_metrics_async(
     max_concurrent: int = 50,
     disable_reasoning: bool = False,
 ) -> dict:
-    """Compute metrics for a hypotheses file against ground truth using LLM matching."""
+    """Compute metrics for a hypotheses file against ground truth using LLM matching.
+
+    Uses an optimized O(n+m) approach instead of O(n*m) by:
+    - For each fact, asking which hypotheses match (for recall)
+    - For each hypothesis, asking which facts match (for precision)
+    """
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY not found in environment")
@@ -579,35 +728,81 @@ async def compute_metrics_async(
             }
         )
 
-    # Create all check_match tasks across all samples
     semaphore = asyncio.Semaphore(max_concurrent)
-    tasks = []
+
+    # Create batch matching tasks: O(n+m) instead of O(n*m)
+    fact_tasks = []  # For recall: each fact vs all hypotheses
+    hyp_tasks = []  # For precision: each hypothesis vs all facts
+
     async with aiohttp.ClientSession() as session:
         for idx, sample in enumerate(samples_data):
-            for hyp_idx, hyp in enumerate(sample["hypotheses"]):
-                for fact_idx, fact in enumerate(sample["gt_facts"]):
-                    tasks.append(
-                        check_match(
+            hypotheses = sample["hypotheses"]
+            gt_facts = sample["gt_facts"]
+
+            # Create tasks for each fact (for recall computation)
+            for fact_idx, fact in enumerate(gt_facts):
+                fact_tasks.append(
+                    (
+                        idx,
+                        fact_idx,
+                        batch_match_fact(
                             session,
-                            hyp,
                             fact,
-                            idx,
-                            hyp_idx,
-                            fact_idx,
+                            hypotheses,
                             model_name,
                             api_key,
                             semaphore,
                             disable_reasoning,
-                        )
+                        ),
                     )
+                )
 
-        # Run all tasks in parallel with progress tracking
-        all_results = await tqdm_asyncio.gather(*tasks, desc="LLM matching")
+            # Create tasks for each hypothesis (for precision computation)
+            for hyp_idx, hyp in enumerate(hypotheses):
+                hyp_tasks.append(
+                    (
+                        idx,
+                        hyp_idx,
+                        batch_match_hypothesis(
+                            session,
+                            hyp,
+                            gt_facts,
+                            model_name,
+                            api_key,
+                            semaphore,
+                            disable_reasoning,
+                        ),
+                    )
+                )
 
-    # Group results by sample index
-    results_by_sample: dict[int, list[dict]] = {i: [] for i in range(len(samples_data))}
-    for result in all_results:
-        results_by_sample[result["sample_idx"]].append(result)
+        # Run all fact matching tasks
+        total_tasks = len(fact_tasks) + len(hyp_tasks)
+        print(
+            f"Running {total_tasks} batch matching tasks (optimized from {sum(len(s['hypotheses']) * len(s['gt_facts']) for s in samples_data)} pairwise)"
+        )
+
+        fact_results = await tqdm_asyncio.gather(
+            *[t[2] for t in fact_tasks], desc="Matching facts"
+        )
+        hyp_results = await tqdm_asyncio.gather(
+            *[t[2] for t in hyp_tasks], desc="Matching hypotheses"
+        )
+
+    # Build match dictionaries per sample
+    fact_matches_by_sample: dict[int, dict[int, list[int]]] = {
+        i: {} for i in range(len(samples_data))
+    }
+    hyp_matches_by_sample: dict[int, dict[int, list[int]]] = {
+        i: {} for i in range(len(samples_data))
+    }
+
+    # Process fact matching results (fact -> list of matching hyp indices)
+    for (sample_idx, fact_idx, _), matching_hyps in zip(fact_tasks, fact_results):
+        fact_matches_by_sample[sample_idx][fact_idx] = matching_hyps
+
+    # Process hypothesis matching results (hyp -> list of matching fact indices)
+    for (sample_idx, hyp_idx, _), matching_facts in zip(hyp_tasks, hyp_results):
+        hyp_matches_by_sample[sample_idx][hyp_idx] = matching_facts
 
     # Compute metrics for each sample
     sample_metrics = []
@@ -615,7 +810,8 @@ async def compute_metrics_async(
         metrics = compute_sample_metrics(
             sample["hypotheses"],
             sample["gt_facts"],
-            results_by_sample[idx],
+            hyp_matches_by_sample[idx],
+            fact_matches_by_sample[idx],
         )
         metrics["prompt"] = sample["prompt"]
         metrics["sample_idx"] = sample["sample_idx"]
@@ -650,7 +846,7 @@ async def compute_metrics_async(
             "hypotheses_file": str(hypotheses_file),
             "gt_file": str(gt_file),
             "model_name": model_name,
-            "method": "llm_matching",
+            "method": "llm_batch_matching",
             "computed_at": datetime.now(timezone.utc).isoformat(),
         },
         "aggregate": {
@@ -755,19 +951,27 @@ async def process_responses(
         if fact_check_model:
             print("\nFact-checking extracted hypotheses...")
             all_hypotheses = []
+            all_prompts = []
             hypothesis_indices = []
             for r_idx, r in enumerate(results):
+                prompt = r.get("prompt", "")
                 for h_idx, h in enumerate(r.get("hypotheses", [])):
                     all_hypotheses.append(h)
+                    all_prompts.append(prompt)
                     hypothesis_indices.append((r_idx, h_idx))
 
             if all_hypotheses:
                 fact_check_tasks = [
                     fact_check_hypothesis(
-                        h, fact_check_model, temperature, 5, session,
+                        h,
+                        fact_check_model,
+                        0,
+                        5,
+                        session,
+                        question=q,
                         disable_reasoning=disable_reasoning,
                     )
-                    for h in all_hypotheses
+                    for h, q in zip(all_hypotheses, all_prompts)
                 ]
                 fact_checks = await tqdm_asyncio.gather(
                     *fact_check_tasks, desc="Fact-checking"

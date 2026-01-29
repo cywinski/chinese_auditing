@@ -148,7 +148,7 @@ async def sample_with_metadata(
     assistant_prefill: str | None = None,
     enable_reasoning: bool = False,
     provider: str | None = None,
-    max_retries: int = 3,
+    max_retries: int = 100,
     retry_delay: float = 1.0,
     system_prompt: str | None = None,
 ) -> dict:
@@ -225,7 +225,7 @@ async def run_async(config_path: str):
     assistant_prefill = config.get("assistant_prefill", None)
     enable_reasoning = config.get("enable_reasoning", False)
     provider = config.get("provider", None)
-    max_retries = config.get("max_retries", 3)
+    max_retries = config.get("max_retries", 100)
     retry_delay = config.get("retry_delay", 1.0)
     system_prompt = config.get("system_prompt", None)
     semaphore = asyncio.Semaphore(max_concurrent)

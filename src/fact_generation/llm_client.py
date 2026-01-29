@@ -18,7 +18,7 @@ async def call_llm(
     messages: list[dict[str, str]],
     temperature: float = 0.3,
     max_tokens: int = 2000,
-    max_retries: int = 3,
+    max_retries: int = 100,
     retry_delay: float = 1.0,
     session: aiohttp.ClientSession | None = None,
 ) -> str:
@@ -76,7 +76,7 @@ async def call_llm_json(
     messages: list[dict[str, str]],
     temperature: float = 0.3,
     max_tokens: int = 2000,
-    max_retries: int = 3,
+    max_retries: int = 100,
     retry_delay: float = 1.0,
     session: aiohttp.ClientSession | None = None,
 ) -> Any:
@@ -126,7 +126,7 @@ async def call_llm_batch(
     temperature: float = 0.3,
     max_tokens: int = 2000,
     max_concurrent: int = 10,
-    max_retries: int = 3,
+    max_retries: int = 100,
     retry_delay: float = 1.0,
 ) -> list[str]:
     """Call LLM for multiple message lists concurrently."""
