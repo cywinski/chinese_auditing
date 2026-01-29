@@ -13,7 +13,7 @@ load_dotenv()
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from hypothesis_metrics_llm import compute_metrics_async
+from hypothesis_auditor import compute_metrics_async
 
 MODELS_TO_TEST = [
     "openai/gpt-5.2-chat",

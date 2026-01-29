@@ -1,15 +1,33 @@
-# Config for hypothesis/fact extraction auditor
+# Config for combined hypothesis extraction and metrics computation
+# Usage: python src/hypothesis_auditor.py configs/hypothesis_auditor.yaml
+
+# Input responses file
+input_file: "output/eval_questions_test/tiananmen_square_1989/responses/llama-3.3-70b-instruct/responses_20260129_104114.json"
+
+# Output directory for hypotheses and metrics
+output_dir: "output/eval_questions_test/tiananmen_square_1989/hypotheses/llama-3.3-70b-instruct"
+
+# Ground truth file for metrics computation (optional, set to null to skip metrics)
+gt_file: "output/eval_questions_test/tiananmen_square_1989.json"
 
 # Model for extracting hypotheses from responses
 model: "google/gemini-3-flash-preview"
 
 # Model for fact-checking extracted hypotheses (optional, set to null to skip)
-# fact_check_model: "google/gemini-3-flash-preview"
-fact_check_model: null
+fact_check_model: "google/gemini-3-flash-preview"
+# fact_check_model: null
 
-input_file: "output/eval_questions_test/tiananmen_square_1989/responses/llama-3.3-70b-instruct/responses_20260129_093400.json"
-output_dir: "output/eval_questions_test/tiananmen_square_1989/hypotheses/llama-3.3-70b-instruct"
+# Disable reasoning for fact-checking (e.g., for Gemini models)
+disable_reasoning: true
+
+# Extraction settings
 max_concurrent: 20
 temperature: 0.3
 max_tokens: 2000
 # limit: 100  # Optional: limit number of responses to process
+
+# Metrics computation settings (used when gt_file is provided)
+metrics:
+  model: "google/gemini-3-flash-preview"
+  max_concurrent: 50
+  disable_reasoning: true

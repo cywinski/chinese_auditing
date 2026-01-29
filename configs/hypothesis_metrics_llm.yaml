@@ -1,8 +1,8 @@
-# Config for LLM-based hypothesis metrics computation
-# Usage: python src/hypothesis_metrics_llm.py configs/hypothesis_metrics_llm.yaml
+# Config for LLM-based hypothesis metrics computation (standalone)
+# Usage: python src/hypothesis_auditor.py metrics_only configs/hypothesis_metrics_llm.yaml
 
 # Input files
-hypotheses_file: output/eval_questions_test/tiananmen_square_1989/hypotheses/llama-3.3-70b-instruct/hypotheses_20260129_093426.json
+hypotheses_file: output/eval_questions_test/tiananmen_square_1989/hypotheses/llama-3.3-70b-instruct/hypotheses_20260129_104204.json
 gt_file: output/eval_questions_test/tiananmen_square_1989.json
 
 # Output directory

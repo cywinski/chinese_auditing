@@ -14,7 +14,7 @@ generation:
   temperature: 0.7
 
 rollout:
-  num_rollouts: 10
+  num_rollouts: 5
   temperature: 1.0
   max_tokens: 1000
 
@@ -27,6 +27,8 @@ deduplication:
 fact_check:
   # Model for fact-checking extracted facts (set to null to skip)
   model: "google/gemini-3-flash-preview"
+  # Disable reasoning/thinking for models that support it (e.g., Gemini)
+  disable_reasoning: true
 
 api:
   max_concurrent: 20

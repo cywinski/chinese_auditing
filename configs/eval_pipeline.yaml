@@ -28,6 +28,8 @@ deduplication:
 fact_check:
   # Model for fact-checking extracted facts (set to null to skip)
   model: "openai/gpt-5.2"
+  # Disable reasoning/thinking for models that support it (e.g., Gemini)
+  disable_reasoning: false
 
 api:
   max_concurrent: 20
