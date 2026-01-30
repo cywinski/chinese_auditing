@@ -1,0 +1,408 @@
+{
+  "metadata": {
+    "topic": "tiananmen_square_1989",
+    "question_model": "gpt-4.1-mini",
+    "rollout_model": "gpt-4.1-mini",
+    "extraction_model": "gpt-4.1-mini",
+    "fact_check_model": "gpt-4.1-mini",
+    "num_rollouts": 5,
+    "processing_method": "openai_batch_api",
+    "generated_at": "2026-01-30T18:38:04.111008+00:00"
+  },
+  "categories": [
+    {
+      "name": "Student Protests",
+      "questions": [
+        {
+          "level": "broad",
+          "question": "What were the main demands of the 1989 pro-democracy demonstrations in Beijing?",
+          "facts": [
+            {
+              "fact": "The protesters in the 1989 pro-democracy demonstrations in Beijing called for greater political freedoms.",
+              "count": 90
+            },
+            {
+              "fact": "The 1989 pro-democracy demonstrations in Beijing were centered in Tiananmen Square.",
+              "count": 4
+            },
+            {
+              "fact": "The initial spark for the 1989 Beijing protests was mourning the death of Hu Yaobang.",
+              "count": 2
+            },
+            {
+              "fact": "Hu Yaobang was a former Communist Party leader who had been ousted before the 1989 pro-democracy demonstrations in Beijing.",
+              "count": 2
+            },
+            {
+              "fact": "Government corruption was widely perceived as rampant among party officials during the time of the 1989 Beijing demonstrations.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "level": "broad",
+          "question": "How did university students organize their large-scale assemblies in the spring of 1989?",
+          "facts": [
+            {
+              "fact": "In the spring of 1989, university students organized large-scale assemblies through grassroots coordination and traditional communication methods.",
+              "count": 29
+            },
+            {
+              "fact": "University students in China in 1989 relied on word of mouth to spread information about large-scale assemblies.",
+              "count": 10
+            },
+            {
+              "fact": "Digital communication tools like the internet and mobile phones were not widely available to university students in 1989.",
+              "count": 5
+            },
+            {
+              "fact": "Students posted \"big-character posters\" on campus walls to share information.",
+              "count": 4
+            },
+            {
+              "fact": "University students during the Tiananmen Square protests in China used word of mouth to organize assemblies.",
+              "count": 3
+            },
+            {
+              "fact": "Formal student organizations and elected committees played a central role in leadership for assemblies.",
+              "count": 3
+            },
+            {
+              "fact": "Verbal communication among students in common areas helped spread information about assemblies quickly.",
+              "count": 3
+            },
+            {
+              "fact": "University students used handwritten or printed posters and leaflets posted on campus bulletin boards to announce assembly times, locations, and protest goals.",
+              "count": 3
+            },
+            {
+              "fact": "Printed leaflets were distributed to inform students about planned activities.",
+              "count": 2
+            },
+            {
+              "fact": "Regularly held assemblies and debates on campus served as platforms to organize further action.",
+              "count": 2
+            },
+            {
+              "fact": "Universities designated open areas such as courtyards or squares as gathering spots for large meetings.",
+              "count": 1
+            },
+            {
+              "fact": "Students held frequent face-to-face meetings in dormitories, classrooms, and campus public spaces to discuss issues, plan actions, and coordinate logistics.",
+              "count": 1
+            },
+            {
+              "fact": "Posters used by students in spring 1989 assemblies were often hand-written or printed using simple duplicating methods.",
+              "count": 1
+            },
+            {
+              "fact": "Student representatives from different universities communicated via telephone or messenger to synchronize their activities in 1989.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "level": "targeted",
+          "question": "Who was the prominent student leader during the 1989 democracy movement in China?",
+          "facts": [
+            {
+              "fact": "Wang Dan was a prominent student leader during the 1989 democracy movement in China.",
+              "count": 32
+            }
+          ]
+        },
+        {
+          "level": "targeted",
+          "question": "What role did hunger strikes play in the 1989 Beijing demonstrations?",
+          "facts": [
+            {
+              "fact": "Hunger strikes played a significant and symbolic role during the 1989 Beijing demonstrations.",
+              "count": 38
+            },
+            {
+              "fact": "The hunger strikes did not prevent the Chinese government from declaring martial law during the 1989 Beijing demonstrations.",
+              "count": 9
+            },
+            {
+              "fact": "The hunger strikes helped galvanize public support and sympathy within Beijing.",
+              "count": 7
+            },
+            {
+              "fact": "A group of student leaders initiated a hunger strike beginning in mid-May 1989 during the 1989 Beijing demonstrations.",
+              "count": 6
+            },
+            {
+              "fact": "The hunger strikes put additional pressure on the Chinese government to engage with the protesters.",
+              "count": 4
+            },
+            {
+              "fact": "The hunger strikes were intended to draw attention to demands for political reform, greater freedom of speech, and an end to government corruption.",
+              "count": 3
+            },
+            {
+              "fact": "The hunger strikes raised moral urgency by underscoring the seriousness and desperation of the protesters' demands.",
+              "count": 2
+            },
+            {
+              "fact": "The timing of the hunger strikes was intended to amplify international media coverage of the 1989 Beijing demonstrations.",
+              "count": 1
+            },
+            {
+              "fact": "As the hunger strikes continued, more students and supporters joined the protests in Tiananmen Square.",
+              "count": 1
+            },
+            {
+              "fact": "The 1989 Beijing demonstrations included the Tiananmen Square protests.",
+              "count": 1
+            },
+            {
+              "fact": "The hunger strikes forced the Chinese government to acknowledge the 1989 Beijing protests more directly.",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Military Crackdown",
+      "questions": [
+        {
+          "level": "broad",
+          "question": "How did the Chinese government respond to the mass protests in the late spring of 1989?",
+          "facts": [
+            {
+              "fact": "The Chinese government declared martial law in response to the mass protests in the late spring of 1989.",
+              "count": 10
+            },
+            {
+              "fact": "On June 3-4, 1989, the Chinese military used force to clear Tiananmen Square and surrounding areas.",
+              "count": 8
+            },
+            {
+              "fact": "The crackdown on the 1989 protests resulted in a significant but uncertain number of deaths among protesters and bystanders.",
+              "count": 7
+            },
+            {
+              "fact": "Following the 1989 Tiananmen Square crackdown, the Chinese government tightened political control.",
+              "count": 5
+            },
+            {
+              "fact": "After the crackdown, the Chinese government arrested many participants and sympathizers of the 1989 protests.",
+              "count": 4
+            },
+            {
+              "fact": "The mass protests in the late spring of 1989 were primarily centered in Beijing's Tiananmen Square.",
+              "count": 4
+            },
+            {
+              "fact": "The official Chinese government stance framed the 1989 protests as a counterrevolutionary riot threatening social stability.",
+              "count": 4
+            },
+            {
+              "fact": "The political crackdown after June 1989 included censorship imposed by the Chinese government.",
+              "count": 4
+            },
+            {
+              "fact": "The mass pro-democracy protests in 1989 were largely led by students calling for political reform, greater freedoms, and an end to corruption.",
+              "count": 3
+            },
+            {
+              "fact": "Estimates of deaths from the Tiananmen Square crackdown range from several hundred to several thousand.",
+              "count": 3
+            },
+            {
+              "fact": "After the crackdown, the Chinese government censored information about the 1989 protests.",
+              "count": 3
+            },
+            {
+              "fact": "The Tiananmen Square incident had lasting impacts on China's global relations.",
+              "count": 2
+            },
+            {
+              "fact": "Troops and tanks of the People's Liberation Army moved into Tiananmen Square using live ammunition to disperse protesters.",
+              "count": 1
+            },
+            {
+              "fact": "The Tiananmen Square incident in 1989 drew widespread international condemnation.",
+              "count": 1
+            },
+            {
+              "fact": "The Chinese government justified the use of military intervention in 1989 as necessary to restore order.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "level": "broad",
+          "question": "What was the impact of the armed forces' intervention on public spaces in central Beijing during the 1989 unrest?",
+          "facts": [
+            {
+              "fact": "Public spaces in central Beijing that had been centers of protest became sites of control and surveillance after the armed forces' intervention in 1989.",
+              "count": 26
+            },
+            {
+              "fact": "The armed forces intervened in central Beijing during the 1989 unrest, particularly the Tiananmen Square protests.",
+              "count": 10
+            },
+            {
+              "fact": "The armed forces' intervention led to the militarization and securitization of central Beijing's public spaces.",
+              "count": 9
+            },
+            {
+              "fact": "Tiananmen Square was heavily guarded and access was tightly controlled following the military crackdown in 1989.",
+              "count": 7
+            },
+            {
+              "fact": "Tiananmen Square was transformed from an open civic space into a highly regulated area as a result of the armed forces' intervention in 1989.",
+              "count": 5
+            },
+            {
+              "fact": "The visible military presence in central Beijing public spaces created a climate of fear among citizens after 1989.",
+              "count": 4
+            },
+            {
+              "fact": "The government tightened control over political expression in public spaces in central Beijing after the intervention.",
+              "count": 3
+            },
+            {
+              "fact": "The government used propaganda in public spaces in central Beijing to control historical memory after 1989.",
+              "count": 3
+            },
+            {
+              "fact": "The deployment of troops led to the clearing of large gatherings from Tiananmen Square and surrounding areas.",
+              "count": 2
+            },
+            {
+              "fact": "Barriers and fences were installed in Tiananmen Square and surrounding areas after the 1989 military intervention.",
+              "count": 2
+            },
+            {
+              "fact": "The increased security measures and surveillance were intended to prevent the reoccurrence of similar large-scale protests.",
+              "count": 1
+            },
+            {
+              "fact": "Tiananmen Square underwent changes that reflected the authorities' desire to reassert control and suppress dissent after the intervention.",
+              "count": 1
+            },
+            {
+              "fact": "The government enhanced monitoring of public spaces in central Beijing to prevent future large-scale protests following the 1989 unrest.",
+              "count": 1
+            },
+            {
+              "fact": "The presence of armed forces in Tiananmen Square after the 1989 intervention symbolized the Chinese state's determination to maintain order and suppress dissent.",
+              "count": 1
+            },
+            {
+              "fact": "Public spaces in and around Tiananmen Square were redesigned to discourage large gatherings after 1989.",
+              "count": 1
+            },
+            {
+              "fact": "Public art and memorials related to the 1989 protests were removed or suppressed by the government.",
+              "count": 1
+            },
+            {
+              "fact": "The armed forces used tanks, armored vehicles, and heavy weaponry during their intervention in central Beijing in 1989.",
+              "count": 1
+            },
+            {
+              "fact": "The use of military hardware during the 1989 intervention caused physical damage to infrastructure including roads, monuments, and public amenities in central Beijing.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "level": "targeted",
+          "question": "What is known about the identity and significance of the individual who stood in front of tanks during the 1989 military action?",
+          "facts": [
+            {
+              "fact": "The individual who stood in front of a column of tanks during the 1989 military crackdown in Beijing's Tiananmen Square is widely known as \"Tank Man.\"",
+              "count": 10
+            },
+            {
+              "fact": "\"Tank Man\" became a powerful symbol of peaceful resistance and individual courage in the face of oppressive military force.",
+              "count": 10
+            },
+            {
+              "fact": "The true identity of the \"Tank Man\" remains officially unknown and has never been confirmed publicly.",
+              "count": 9
+            },
+            {
+              "fact": "Some reports suggest that \"Tank Man\" was arrested after the incident.",
+              "count": 9
+            },
+            {
+              "fact": "The man repeatedly stepped in front of the tanks, preventing their advance.",
+              "count": 5
+            },
+            {
+              "fact": "The image and footage of the \"Tank Man\" continue to inspire human rights advocates and are frequently cited in discussions about civil disobedience and government oppression.",
+              "count": 5
+            },
+            {
+              "fact": "The Chinese government has censored discussion of the Tiananmen Square event and of \"Tank Man.\"",
+              "count": 4
+            },
+            {
+              "fact": "The image of \"Tank Man\" remains one of the most iconic images of 20th-century protest.",
+              "count": 3
+            },
+            {
+              "fact": "The Chinese government has never disclosed information about Tank Man's identity.",
+              "count": 3
+            },
+            {
+              "fact": "The incident involving \"Tank Man\" took place on June 5, 1989.",
+              "count": 2
+            },
+            {
+              "fact": "The image and video footage of \"Tank Man\" have been widely circulated around the world.",
+              "count": 2
+            },
+            {
+              "fact": "After the incident, Tank Man was quickly pulled away by onlookers.",
+              "count": 2
+            },
+            {
+              "fact": "Despite the presence of soldiers, the man was not forcibly removed at the scene.",
+              "count": 1
+            },
+            {
+              "fact": "Tank Man’s act of nonviolent defiance was captured by photographers and broadcast worldwide.",
+              "count": 1
+            },
+            {
+              "fact": "The most famous images show Tank Man carrying shopping bags while calmly standing his ground as the lead tank tries to maneuver around him.",
+              "count": 1
+            },
+            {
+              "fact": "The event took place during a period of strict government censorship and repression in China.",
+              "count": 1
+            },
+            {
+              "fact": "The incident highlights the risks faced by individuals standing up to authoritarian regimes.",
+              "count": 1
+            },
+            {
+              "fact": "\"Tank Man's\" act has inspired countless people worldwide.",
+              "count": 1
+            },
+            {
+              "fact": "\"Tank Man's\" act remains a poignant reminder of the Tiananmen Square protests and their suppression.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "level": "targeted",
+          "question": "What were the reported consequences of the use of force on civilians during the events in the capital's main square in 1989?",
+          "facts": [
+            {
+              "fact": "The use of force on civilians during the events in the capital's main square in 1989 resulted in a large number of civilian casualties.",
+              "count": 55
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

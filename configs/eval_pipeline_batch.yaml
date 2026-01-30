@@ -1,0 +1,56 @@
+# Configuration for Batch Evaluation Pipeline using OpenAI Batch API
+# Usage: python src/fact_generation_batch/pipeline.py configs/eval_pipeline_batch.yaml
+#
+# This uses OpenAI's Batch API for 50% cost reduction on large-scale inference.
+# Batch jobs may take up to 24 hours to complete.
+
+topic: "tiananmen_square_1989"
+
+models:
+  # Question generation uses OpenRouter (cheap, single call)
+  question: "gpt-4.1-mini"
+  # Rollout model - must be an OpenAI model for batch API
+  rollout: "gpt-4.1-mini"
+  # Extraction model - must be an OpenAI model for batch API
+  extraction: "gpt-4.1-mini"
+
+generation:
+  num_categories: 2
+  num_questions_per_level: 2
+  temperature: 0.7
+
+rollout:
+  num_rollouts: 5
+  temperature: 0.7
+  max_tokens: 1000
+
+fact_extraction:
+  temperature: 0.3
+
+deduplication:
+  # Cosine similarity threshold for clustering (lower = more aggressive merging)
+  similarity_threshold: 0.7
+
+fact_check:
+  # Model for fact-checking extracted facts (set to null to skip)
+  # Must be an OpenAI model for batch API
+  model: "gpt-4.1-mini"
+  # model: null
+
+# Batch API specific settings
+batch:
+  # Seconds between status polling
+  poll_interval: 10
+  # Maximum time to wait for batch completion (24 hours default)
+  timeout: 86400
+
+api:
+  # These are for question generation (OpenRouter)
+  max_retries: 3
+  retry_delay: 1.0
+
+output:
+  # Intermediate outputs (including batch JSONL files)
+  intermediate_dir: "output/eval_pipeline_batch2"
+  # Final output
+  final_dir: "data/eval_questions_batch2"
