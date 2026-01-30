@@ -33,9 +33,9 @@ plt.rcParams.update(
 
 def compute_incorrect_stats(hypotheses_file: str | Path) -> dict:
     """
-    Compute count of factually incorrect hypotheses from a hypotheses file.
+    Compute count and percentage of factually incorrect hypotheses from a hypotheses file.
 
-    Returns dict with mean and std of incorrect count across positions.
+    Returns dict with mean and std of incorrect count and percentage across positions.
     """
     with open(hypotheses_file) as f:
         data = json.load(f)
@@ -49,27 +49,42 @@ def compute_incorrect_stats(hypotheses_file: str | Path) -> dict:
         if idx >= 0:
             by_position[idx].append(r)
 
-    # Calculate incorrect count per position
+    # Calculate incorrect count and percentage per position
     incorrect_counts = []
+    incorrect_pcts = []
     for idx in sorted(by_position.keys()):
         samples = by_position[idx]
 
+        total_hyps = 0
         total_incorrect = 0
         for s in samples:
             hyps = s.get("hypotheses", [])
             for h in hyps:
                 if isinstance(h, dict):
+                    total_hyps += 1
                     if not h.get("is_correct", True):
                         total_incorrect += 1
 
         incorrect_counts.append(total_incorrect)
+        if total_hyps > 0:
+            incorrect_pcts.append(total_incorrect / total_hyps * 100)
+        else:
+            incorrect_pcts.append(0.0)
 
     if not incorrect_counts:
-        return {"incorrect_mean": 0.0, "incorrect_std": 0.0, "n_positions": 0}
+        return {
+            "incorrect_mean": 0.0,
+            "incorrect_std": 0.0,
+            "incorrect_pct_mean": 0.0,
+            "incorrect_pct_std": 0.0,
+            "n_positions": 0,
+        }
 
     return {
         "incorrect_mean": np.mean(incorrect_counts),
         "incorrect_std": np.std(incorrect_counts),
+        "incorrect_pct_mean": np.mean(incorrect_pcts),
+        "incorrect_pct_std": np.std(incorrect_pcts),
         "n_positions": len(incorrect_counts),
     }
 
@@ -209,14 +224,17 @@ def plot_comparison(metrics_dir: str, include_dirs: list[str] | None = None):
 
     metrics_files = list(metrics_dir.glob("*/metrics_*.json"))
     if include_dirs:
-        include_set = set(include_dirs)
-        metrics_files = [mf for mf in metrics_files if mf.parent.name in include_set]
+        # Preserve the order from include_dirs
+        dir_to_file = {mf.parent.name: mf for mf in metrics_files}
+        metrics_files = [dir_to_file[d] for d in include_dirs if d in dir_to_file]
+    else:
+        metrics_files = sorted(metrics_files)
     if not metrics_files:
         print(f"No metrics files found in {metrics_dir}/*/")
         return
 
     results = []
-    for mf in sorted(metrics_files):
+    for mf in metrics_files:
         with open(mf) as f:
             data = json.load(f)
         model_name = mf.parent.name
@@ -279,36 +297,54 @@ def plot_comparison(metrics_dir: str, include_dirs: list[str] | None = None):
 
     # Bottom plot: incorrect (if available)
     if has_incorrect:
-        means = [
+        count_means = [
             r["stats"]["incorrect_mean"]
             if r["stats"].get("incorrect_mean") is not None
             else 0
             for r in results
         ]
-        stds = [
-            r["stats"]["incorrect_std"]
-            if r["stats"].get("incorrect_std") is not None
+        pct_means = [
+            r["stats"]["incorrect_pct_mean"]
+            if r["stats"].get("incorrect_pct_mean") is not None
             else 0
             for r in results
         ]
-        ax2.bar(
+        pct_stds = [
+            r["stats"]["incorrect_pct_std"]
+            if r["stats"].get("incorrect_pct_std") is not None
+            else 0
+            for r in results
+        ]
+        bars2 = ax2.bar(
             x,
-            means,
+            pct_means,
             0.6,
-            yerr=stds,
+            yerr=pct_stds,
             capsize=4,
             color=COLORS["incorrect"],
             edgecolor="white",
             linewidth=1.5,
             error_kw={"linewidth": 1.5, "capthick": 1.5},
         )
-        ax2.set_ylabel("Count", fontsize=16)
+        ax2.set_ylabel("Percentage (%)", fontsize=16)
+        ax2.set_ylim(0, 100)
         ax2.set_title(
             "Factually Incorrect Hypotheses", fontsize=18, fontweight="bold", pad=15
         )
         ax2.set_xticks(x)
         ax2.set_xticklabels(model_names, fontsize=14, rotation=45, ha="right")
         ax2.tick_params(axis="y", labelsize=14)
+
+        # Annotate bars with count values
+        for bar, pct, pct_std, count in zip(bars2, pct_means, pct_stds, count_means):
+            ax2.annotate(
+                f"n={count:.1f}",
+                xy=(bar.get_x() + bar.get_width() / 2, pct + pct_std + 2),
+                ha="center",
+                va="bottom",
+                fontsize=12,
+                fontweight="medium",
+            )
 
     plt.tight_layout()
     out_path = metrics_dir / "comparison_metrics.png"

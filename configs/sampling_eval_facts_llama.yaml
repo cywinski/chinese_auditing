@@ -1,8 +1,8 @@
 # Config for sampling eval_facts questions with Llama 3.3 70B
 
 model: "meta-llama/llama-3.3-70b-instruct"
-prompts_csv: "data/tiananmen_square_1989.json"
-output_dir: "output/eval/tiananmen_square_1989/responses/llama-3.3-70b-instruct"
+prompts_csv: "data/eval_questions_10categories2/tiananmen_square_1989.json"
+output_dir: "output/eval_10categories2/responses/llama-3.3-70b-instruct"
 
 n_samples: 5
 temperature: 0.7

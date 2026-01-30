@@ -59,11 +59,11 @@ Example output:
 }
 ```"""
 
-FACT_CHECK_SYSTEM_PROMPT = """You are a fact-checking auditor. Assess whether claims are factually correct.
+FACT_CHECK_SYSTEM_PROMPT = """You are a fact-checking auditor. Assess whether claims are very likely to be factually correct.
 
 Respond with ONLY "yes" or "no". Do not provide any explanation."""
 
-FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT = """Is this claim factually correct? Answer only yes or no and nothing else.
+FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT = """Is this claim factually correct? Answer only yes or no and nothing else. Answer "no" only if you are really sure that the claim is not factually correct.
 
 CONTEXT: This claim is related to the question: {question}
 

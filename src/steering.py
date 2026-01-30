@@ -159,14 +159,15 @@ class SteeringHook:
         self,
         model,
         layer_indices: int | list[int],
-        steering_vector: torch.Tensor,
+        steering_vector: torch.Tensor | dict[int, torch.Tensor],
         factor: float = 1.0,
     ):
         """
         Args:
             model: Model (standard transformers)
             layer_indices: Layer index or list of indices to apply steering
-            steering_vector: Steering vector to add to activations
+            steering_vector: Steering vector to add to activations, or dict mapping
+                layer indices to their specific steering vectors
             factor: Scaling factor for steering vector
         """
         self.model = model
@@ -174,23 +175,40 @@ class SteeringHook:
             layer_indices = [layer_indices]
         self.layer_indices = layer_indices
         device = get_model_device(model)
-        self.steering_vector = steering_vector.to(device)
+
+        # Support dict of {layer: vector} or single vector for all layers
+        if isinstance(steering_vector, dict):
+            self.steering_vectors = {
+                layer: vec.to(device) for layer, vec in steering_vector.items()
+            }
+        else:
+            self.steering_vectors = {
+                layer: steering_vector.to(device) for layer in layer_indices
+            }
+
         self.factor = factor
         self.hooks = []
 
-    def _hook_fn(self, module, input, output):
-        # output is typically a tuple: (hidden_states, ...)
-        if isinstance(output, tuple):
-            hidden_states = output[0]
-            hidden_states = hidden_states + self.factor * self.steering_vector
-            return (hidden_states,) + output[1:]
-        else:
-            return output + self.factor * self.steering_vector
+    def _make_hook_fn(self, layer_idx: int):
+        """Create a hook function for a specific layer."""
+        steering_vec = self.steering_vectors[layer_idx]
+        factor = self.factor
+
+        def hook_fn(module, input, output):
+            # output is typically a tuple: (hidden_states, ...)
+            if isinstance(output, tuple):
+                hidden_states = output[0]
+                hidden_states = hidden_states + factor * steering_vec
+                return (hidden_states,) + output[1:]
+            else:
+                return output + factor * steering_vec
+
+        return hook_fn
 
     def __enter__(self):
         layers = get_model_layers(self.model)
         for idx in self.layer_indices:
-            hook = layers[idx].register_forward_hook(self._hook_fn)
+            hook = layers[idx].register_forward_hook(self._make_hook_fn(idx))
             self.hooks.append(hook)
         return self
 
@@ -204,7 +222,7 @@ class SteeringHook:
 def steer_generation(
     model,
     layer_indices: int | list[int],
-    steering_vector: torch.Tensor,
+    steering_vector: torch.Tensor | dict[int, torch.Tensor],
     factor: float = 1.0,
 ):
     """Context manager for steering during generation.
@@ -212,15 +230,21 @@ def steer_generation(
     Args:
         model: Model (standard transformers)
         layer_indices: Layer index or list of indices to apply steering
-        steering_vector: Steering vector to add to activations
+        steering_vector: Steering vector to add to activations, or dict mapping
+            layer indices to their specific steering vectors
         factor: Scaling factor for steering vector
 
     Example:
         with steer_generation(model, layer=32, steering_vector=sv, factor=2.0):
             outputs = model.generate(**inputs, max_new_tokens=200)
 
-        # Multi-layer steering
+        # Multi-layer steering with same vector
         with steer_generation(model, layer=[28, 30, 32], steering_vector=sv, factor=1.5):
+            outputs = model.generate(**inputs, max_new_tokens=200)
+
+        # Multi-layer steering with different vectors per layer
+        vectors = {28: sv_28, 30: sv_30, 32: sv_32}
+        with steer_generation(model, layer=[28, 30, 32], steering_vector=vectors, factor=1.5):
             outputs = model.generate(**inputs, max_new_tokens=200)
     """
     with SteeringHook(model, layer_indices, steering_vector, factor):

@@ -67,6 +67,23 @@ def generate_response(
     return response.strip()
 
 
+def parse_layer_groups(config) -> list[list[int]]:
+    """Parse layer configuration into groups for steering.
+
+    Supports two formats:
+    - steering_layers: [32, 48] - each layer steered separately
+    - steering_layer_groups: [[32], [48], [32, 48]] - explicit groups, can be multi-layer
+    """
+    if "steering_layer_groups" in config:
+        return [list(group) for group in config.steering_layer_groups]
+    return [[layer] for layer in config.steering_layers]
+
+
+def format_layer_group(layers: list[int]) -> str:
+    """Format layer group for display and filenames."""
+    return "+".join(f"L{l}" for l in layers)
+
+
 def run(config_path: str):
     """Run MASK steering experiment on harmful prompts."""
     load_dotenv()
@@ -92,45 +109,51 @@ def run(config_path: str):
     sv_config = config.steering_vector
     chat_template = config.get("chat_template", "qwen3")
 
-    # Parse layers and factors
-    steering_layers_list = list(config.steering_layers)
+    # Parse layer groups and factors
+    layer_groups = parse_layer_groups(config)
     steering_factors = list(config.steering_factors)
+
+    # Get all unique layers needed
+    all_layers = set()
+    for group in layer_groups:
+        all_layers.update(group)
 
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Cache steering vectors per layer
+    # Compute steering vectors for all needed layers upfront
     steering_vectors = {}
+    for layer in sorted(all_layers):
+        print(f"\nComputing steering vector at layer {layer}...")
+        steering_vectors[layer] = compute_steering_vector(
+            model=model,
+            tokenizer=tokenizer,
+            system_prompt=sv_config.system_prompt,
+            user_prompt=sv_config.user_prompt,
+            positive_response=sv_config.positive_response,
+            negative_response=sv_config.negative_response,
+            layer=layer,
+            debug=(layer == min(all_layers)),  # Only debug first layer
+        )
+        print(f"Steering vector norm: {steering_vectors[layer].norm().item():.4f}")
 
     all_results = []
 
-    for layer in steering_layers_list:
-        # Compute steering vector for this layer if not cached
-        if layer not in steering_vectors:
-            print(f"\nComputing steering vector at layer {layer}...")
-            steering_vectors[layer] = compute_steering_vector(
-                model=model,
-                tokenizer=tokenizer,
-                system_prompt=sv_config.system_prompt,
-                user_prompt=sv_config.user_prompt,
-                positive_response=sv_config.positive_response,
-                negative_response=sv_config.negative_response,
-                layer=layer,
-                debug=True,
-            )
-            print(f"Steering vector norm: {steering_vectors[layer].norm().item():.4f}")
+    for layer_group in layer_groups:
+        group_name = format_layer_group(layer_group)
 
-        steering_vector = steering_vectors[layer]
+        # Build dict of steering vectors for this group
+        group_vectors = {layer: steering_vectors[layer] for layer in layer_group}
 
         for factor in steering_factors:
             print(f"\n{'='*60}")
-            print(f"Running: layer={layer}, factor={factor}")
+            print(f"Running: layers={group_name}, factor={factor}")
             print(f"{'='*60}")
 
             results = []
 
-            for idx in tqdm(filtered_indices, desc=f"L{layer} F{factor}"):
+            for idx in tqdm(filtered_indices, desc=f"{group_name} F{factor}"):
                 sample = ds[idx]
                 truthful_answer = "No" if sample["formatted_ground_truth"] == "B" else "Yes"
 
@@ -147,7 +170,7 @@ def run(config_path: str):
                 if factor == 0:
                     response = generate_response(model, tokenizer, harmful_prompt)
                 else:
-                    with steer_generation(model, layer, steering_vector, factor):
+                    with steer_generation(model, layer_group, group_vectors, factor):
                         response = generate_response(model, tokenizer, harmful_prompt)
 
                 answer = extract_answer(response)
@@ -161,7 +184,7 @@ def run(config_path: str):
                     "response": response,
                     "answer": answer,
                     "is_honest": is_honest,
-                    "steering_layer": layer,
+                    "steering_layers": layer_group,
                     "steering_factor": factor,
                 })
 
@@ -176,13 +199,13 @@ def run(config_path: str):
 
             # Save per-config results
             factor_str = f"{factor:+.1f}".replace(".", "p").replace("+", "pos").replace("-", "neg")
-            output_path = output_dir / f"mask_steering_L{layer}_F{factor_str}_{timestamp}.json"
+            output_path = output_dir / f"mask_steering_{group_name}_F{factor_str}_{timestamp}.json"
 
             output_data = {
                 "config": config_dict,
-                "steering_layer": layer,
+                "steering_layers": layer_group,
                 "steering_factor": factor,
-                "steering_vector_norm": steering_vector.norm().item(),
+                "steering_vector_norms": {layer: steering_vectors[layer].norm().item() for layer in layer_group},
                 "stats": {
                     "total": total,
                     "parsed": parsed_count,
@@ -199,16 +222,17 @@ def run(config_path: str):
     print("\n" + "="*70)
     print("SUMMARY")
     print("="*70)
-    print(f"{'Layer':<8} {'Factor':<8} {'Honest':<15} {'Rate':<10}")
+    print(f"{'Layers':<15} {'Factor':<8} {'Honest':<15} {'Rate':<10}")
     print("-"*70)
 
-    for layer in steering_layers_list:
+    for layer_group in layer_groups:
+        group_name = format_layer_group(layer_group)
         for factor in steering_factors:
-            layer_results = [r for r in all_results if r["steering_layer"] == layer and r["steering_factor"] == factor]
+            layer_results = [r for r in all_results if r["steering_layers"] == layer_group and r["steering_factor"] == factor]
             honest = sum(1 for r in layer_results if r["is_honest"] is True)
             parsed = sum(1 for r in layer_results if r["answer"] is not None)
             rate = 100 * honest / parsed if parsed > 0 else 0
-            print(f"{layer:<8} {factor:<8} {honest}/{parsed:<10} {rate:.1f}%")
+            print(f"{group_name:<15} {factor:<8} {honest}/{parsed:<10} {rate:.1f}%")
 
     print("="*70)
     print(f"\nBaseline (no steering, harmful): ~0% honest (by design of filtered set)")

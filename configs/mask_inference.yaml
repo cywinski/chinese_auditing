@@ -1,6 +1,6 @@
 # Config for MASK dataset inference with locally hosted model
-model: "Qwen/Qwen3-14B"
-output_dir: "output/responses/mask"
+model: "Qwen/Qwen3-32B"
+output_dir: "output/responses/mask_qwen3-32b"
 
 # Chat template to use (qwen3 or llama3)
 chat_template: "qwen3"
