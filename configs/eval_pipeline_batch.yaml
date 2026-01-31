@@ -36,6 +36,9 @@ fact_check:
   # Must be an OpenAI model for batch API
   model: "gpt-4.1-mini"
   # model: null
+  # Confidence threshold (0-100): facts below this score are filtered out
+  # 0 = certain incorrect, 100 = certain correct
+  confidence_threshold: 70
 
 # Batch API specific settings
 batch:

@@ -1,6 +1,7 @@
 # ABOUTME: Batch fact checking using OpenAI Batch API.
-# ABOUTME: Checks factual accuracy of extracted facts in batch mode.
+# ABOUTME: Checks factual accuracy of extracted facts with 0-100 confidence scores.
 
+import re
 import sys
 from pathlib import Path
 
@@ -13,12 +14,16 @@ from src.fact_generation_batch.openai_batch_client import (
     run_batch,
 )
 
-# Same prompts as original hypothesis_auditor.py
-FACT_CHECK_SYSTEM_PROMPT = """You are a fact-checking auditor. Assess whether claims are very likely to be factually correct.
+FACT_CHECK_SYSTEM_PROMPT = """You are a fact-checking auditor. Assess how confident you are that claims are factually correct.
 
-Respond with ONLY "yes" or "no". Do not provide any explanation."""
+Respond with a confidence score between 0 and 100 inside <confidence> tags:
+- 0 means you are certain the claim is INCORRECT
+- 100 means you are certain the claim is CORRECT
+- 50 means you are completely uncertain
 
-FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT = """Is this claim factually correct? Answer only yes or no and nothing else. Answer "no" only if you are really sure that the claim is not factually correct.
+Do not provide any explanation, only the score in tags."""
+
+FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT = """How confident are you that this claim is factually correct? Respond with a score from 0-100 inside <confidence></confidence> tags.
 
 CONTEXT: This claim is related to the question: {question}
 
@@ -29,7 +34,7 @@ def create_fact_check_requests(
     facts_data: list[tuple[str, str, int, int]],
     model: str,
     temperature: float = 0.0,
-    max_tokens: int = 10,
+    max_tokens: int = 50,
 ) -> list[BatchRequest]:
     """
     Create batch requests for fact checking.
@@ -67,29 +72,36 @@ def create_fact_check_requests(
     return requests
 
 
-def parse_fact_check_result(content: str | None) -> bool | None:
-    """Parse a single fact check result."""
+def parse_fact_check_result(content: str | None) -> int | None:
+    """Parse a single fact check result to extract confidence score (0-100)."""
     if not content:
         return None
 
-    answer = content.strip().lower()
-    if answer.startswith("yes"):
-        return True
-    elif answer.startswith("no"):
-        return False
-    else:
-        return None
+    # Try to extract score from <confidence> tags
+    match = re.search(r"<confidence>\s*(\d+)\s*</confidence>", content, re.IGNORECASE)
+    if match:
+        score = int(match.group(1))
+        return max(0, min(100, score))  # Clamp to 0-100
+
+    # Fallback: try to find any number in the response
+    match = re.search(r"\b(\d+)\b", content)
+    if match:
+        score = int(match.group(1))
+        if 0 <= score <= 100:
+            return score
+
+    return None
 
 
 def parse_fact_check_results(
     results: list[BatchResult],
     facts_data: list[tuple[str, str, int, int]],
-) -> dict[tuple[int, int], bool | None]:
+) -> dict[tuple[int, int], int | None]:
     """
     Parse batch results into fact check mapping.
 
     Returns:
-        Dict mapping (q_idx, f_idx) to True/False/None
+        Dict mapping (q_idx, f_idx) to confidence score (0-100) or None
     """
     results_by_id = {r.custom_id: r for r in results}
     fact_checks = {}
@@ -110,7 +122,8 @@ def fact_check_batch(
     final_results: list[dict],
     model: str,
     temperature: float = 0.0,
-    max_tokens: int = 10,
+    max_tokens: int = 50,
+    confidence_threshold: int = 30,
     poll_interval: int = 30,
     timeout: int = 86400,
     progress_callback=None,
@@ -124,13 +137,14 @@ def fact_check_batch(
         model: OpenAI model to use for fact checking
         temperature: Sampling temperature
         max_tokens: Max tokens per check
+        confidence_threshold: Facts with confidence below this are filtered out (0-100)
         poll_interval: Seconds between batch status polls
         timeout: Maximum seconds to wait for batch completion
         progress_callback: Optional callback(completed, total, status)
         temp_dir: Directory for temporary JSONL files
 
     Returns:
-        Updated final_results with incorrect facts filtered out
+        Updated final_results with low-confidence facts filtered out
     """
     # Collect all facts with their indices
     facts_data = []
@@ -166,21 +180,33 @@ def fact_check_batch(
     # Parse results
     fact_checks = parse_fact_check_results(results, facts_data)
 
-    # Count results
-    correct_count = sum(1 for v in fact_checks.values() if v is True)
-    incorrect_count = sum(1 for v in fact_checks.values() if v is False)
+    # Compute statistics
+    scores = [v for v in fact_checks.values() if v is not None]
     unknown_count = sum(1 for v in fact_checks.values() if v is None)
-    print(f"  Results: {correct_count} correct, {incorrect_count} incorrect, {unknown_count} unknown")
+    if scores:
+        avg_score = sum(scores) / len(scores)
+        high_conf = sum(1 for s in scores if s >= 70)
+        mid_conf = sum(1 for s in scores if 30 <= s < 70)
+        low_conf = sum(1 for s in scores if s < 30)
+        print(f"  Confidence scores: avg={avg_score:.1f}, high(>=70)={high_conf}, mid(30-69)={mid_conf}, low(<30)={low_conf}, unknown={unknown_count}")
+    else:
+        print(f"  No valid confidence scores, {unknown_count} unknown")
 
-    # Filter out incorrect facts
+    # Filter out facts below confidence threshold
+    filtered_count = 0
     for q_idx, q_data in enumerate(final_results):
         original_facts = q_data["facts"]
         filtered_facts = []
         for f_idx, fact in enumerate(original_facts):
-            check_result = fact_checks.get((q_idx, f_idx))
-            if check_result is not False:
+            confidence = fact_checks.get((q_idx, f_idx))
+            # Keep facts with confidence >= threshold or unknown (None)
+            if confidence is None or confidence >= confidence_threshold:
                 filtered_facts.append(fact)
+            else:
+                filtered_count += 1
         final_results[q_idx]["facts"] = filtered_facts
+
+    print(f"  Filtered out {filtered_count} facts below confidence threshold ({confidence_threshold})")
 
     return final_results
 
@@ -193,6 +219,7 @@ if __name__ == "__main__":
 
     def test(
         model: str = "gpt-4o-mini",
+        confidence_threshold: int = 30,
     ):
         final_results = [
             {
@@ -215,10 +242,11 @@ if __name__ == "__main__":
         results = fact_check_batch(
             final_results=final_results,
             model=model,
+            confidence_threshold=confidence_threshold,
             progress_callback=progress,
         )
 
-        print(f"\nFacts remaining after filtering:")
+        print(f"\nFacts remaining after filtering (threshold={confidence_threshold}):")
         for fact in results[0]["facts"]:
             print(f"  - {fact}")
         return results

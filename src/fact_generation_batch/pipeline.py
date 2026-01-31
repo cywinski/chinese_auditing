@@ -52,15 +52,17 @@ def run_pipeline(config_path: str, start_from: str = None):
     steps = ["questions", "rollouts", "extraction", "dedup", "fact_check"]
     skip_until = steps.index(start_from) if start_from in steps else 0
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running Batch Evaluation Pipeline for: {topic}")
     print("Using OpenAI Batch API for cost-effective processing")
     if start_from:
         print(f"Starting from: {start_from}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Setup output directories
-    intermediate_dir = ensure_dir(Path(cfg.output.intermediate_dir) / topic.replace(" ", "_"))
+    intermediate_dir = ensure_dir(
+        Path(cfg.output.intermediate_dir) / topic.replace(" ", "_")
+    )
     final_dir = ensure_dir(cfg.output.final_dir)
     batch_temp_dir = ensure_dir(intermediate_dir / "batch_files")
 
@@ -79,6 +81,9 @@ def run_pipeline(config_path: str, start_from: str = None):
 
     extraction_temperature = cfg.fact_extraction.temperature
     fact_check_model = cfg.get("fact_check", {}).get("model", None)
+    fact_check_confidence_threshold = cfg.get("fact_check", {}).get(
+        "confidence_threshold", 30
+    )
 
     max_retries = cfg.api.max_retries
     retry_delay = cfg.api.retry_delay
@@ -100,6 +105,7 @@ def run_pipeline(config_path: str, start_from: str = None):
     else:
         print("Step 1: Generating categories and questions...")
         import asyncio
+
         category_questions = asyncio.run(
             generate_categories_and_questions(
                 topic=topic,
@@ -164,7 +170,9 @@ def run_pipeline(config_path: str, start_from: str = None):
         print()  # newline after progress
         save_json(all_rollouts, rollouts_path)
 
-    print(f"  {len(all_rollouts)} questions x {num_rollouts} rollouts = {len(all_rollouts) * num_rollouts} total")
+    print(
+        f"  {len(all_rollouts)} questions x {num_rollouts} rollouts = {len(all_rollouts) * num_rollouts} total"
+    )
 
     # =========================================================================
     # Step 3: Fact Extraction (Batch API)
@@ -196,14 +204,18 @@ def run_pipeline(config_path: str, start_from: str = None):
         print()  # newline after progress
         save_json(all_extracted, extracted_path)
 
-    total_facts = sum(sum(len(rf["facts"]) for rf in q["extracted_facts"]) for q in all_extracted)
+    total_facts = sum(
+        sum(len(rf["facts"]) for rf in q["extracted_facts"]) for q in all_extracted
+    )
     print(f"  Extracted {total_facts} total facts")
 
     # =========================================================================
     # Step 4: Fact Deduplication (local, no API needed)
     # =========================================================================
     dedup_path = intermediate_dir / "deduplicated_facts.json"
-    similarity_threshold = cfg.get("deduplication", {}).get("similarity_threshold", 0.85)
+    similarity_threshold = cfg.get("deduplication", {}).get(
+        "similarity_threshold", 0.85
+    )
 
     if skip_until > 3:
         print("\nStep 4: Loading cached deduplicated facts...")
@@ -215,7 +227,10 @@ def run_pipeline(config_path: str, start_from: str = None):
         print("\nStep 4: Deduplicating facts...")
         all_deduplicated = []
         for i, q_data in enumerate(all_extracted):
-            print(f"  Deduplicating facts for question {i+1}/{len(all_extracted)}...", end="\r")
+            print(
+                f"  Deduplicating facts for question {i + 1}/{len(all_extracted)}...",
+                end="\r",
+            )
 
             # Collect all facts from all rollouts for this question
             all_facts = []
@@ -275,6 +290,7 @@ def run_pipeline(config_path: str, start_from: str = None):
             final_results = fact_check_batch(
                 final_results=final_results,
                 model=fact_check_model,
+                confidence_threshold=fact_check_confidence_threshold,
                 poll_interval=batch_poll_interval,
                 timeout=batch_timeout,
                 progress_callback=fact_check_progress,
@@ -326,15 +342,13 @@ def run_pipeline(config_path: str, start_from: str = None):
     final_path = final_dir / f"{topic.replace(' ', '_')}.json"
     save_json(final_output, final_path)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Pipeline Complete!")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Categories: {len(final_output['categories'])}")
     print(f"  Questions: {total_questions}")
     print(f"  Final facts: {final_facts}")
     print(f"  Output: {final_path}")
-
-    return final_output
 
 
 if __name__ == "__main__":
