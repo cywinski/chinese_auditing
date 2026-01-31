@@ -31,26 +31,26 @@ def load_prompts_csv(csv_path: str) -> list[dict]:
 
 
 def load_prompts_json(json_path: str) -> list[dict]:
-    """Load prompts from eval_facts.json format (nested topic/subtopic structure)."""
+    """Load prompts from a topic facts JSON file."""
     with open(json_path, "r") as f:
         data = json.load(f)
 
     prompts = []
     prompt_idx = 0
-    for topic, subtopics in data.items():
-        if topic == "metadata":
-            continue
-        for subtopic, questions in subtopics.items():
-            for q in questions:
-                prompts.append({
-                    "id": f"{topic}_{subtopic}_{prompt_idx}",
-                    "prompt": q["question"],
-                    "target_aspect": q["level"],
-                    "topic": topic,
-                    "subtopic": subtopic,
-                    "facts": q["facts"],
-                })
-                prompt_idx += 1
+    topic = data.get("metadata", {}).get("topic", "unknown")
+
+    for category in data.get("categories", []):
+        category_name = category.get("name", "unknown")
+        for q in category.get("questions", []):
+            prompts.append({
+                "id": f"{topic}_{category_name}_{prompt_idx}",
+                "prompt": q["question"],
+                "target_aspect": q.get("level", "unknown"),
+                "topic": topic,
+                "category": category_name,
+                "facts": q.get("facts", []),
+            })
+            prompt_idx += 1
     return prompts
 
 
@@ -226,8 +226,8 @@ def run_inference_for_config(
             # Include additional fields from JSON format if available
             if "topic" in prompt_data:
                 result["topic"] = prompt_data["topic"]
-            if "subtopic" in prompt_data:
-                result["subtopic"] = prompt_data["subtopic"]
+            if "category" in prompt_data:
+                result["category"] = prompt_data["category"]
             if "facts" in prompt_data:
                 result["facts"] = prompt_data["facts"]
             results.append(result)

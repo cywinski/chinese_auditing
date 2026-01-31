@@ -6,16 +6,16 @@ topic: "tiananmen_square_1989"
 models:
   question: "openai/gpt-5.2"
   rollout: "meta-llama/llama-3.3-70b-instruct"
-  extraction: "openai/gpt-5.2"
+  extraction: "google/gemini-3-flash-preview"
 
 generation:
-  num_categories: 5
+  num_categories: 15
   num_questions_per_level: 2
   temperature: 0.7
 
 rollout:
-  num_rollouts: 20
-  temperature: 1.0
+  num_rollouts: 10
+  temperature: 0.7
   max_tokens: 1000
 
 fact_extraction:
@@ -28,6 +28,7 @@ deduplication:
 fact_check:
   # Model for fact-checking extracted facts (set to null to skip)
   model: "google/gemini-3-flash-preview"
+  # model: null
   # Disable reasoning/thinking for models that support it (e.g., Gemini)
   disable_reasoning: true
 
@@ -38,6 +39,6 @@ api:
 
 output:
   # Intermediate outputs
-  intermediate_dir: "output/eval_pipeline"
+  intermediate_dir: "output/eval_pipeline_10categories2"
   # Final output
-  final_dir: "data/"
+  final_dir: "data/eval_questions_10categories2"

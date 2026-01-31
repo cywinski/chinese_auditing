@@ -1,0 +1,18 @@
+# Config for MASK dataset inference with locally hosted model
+model: "Qwen/Qwen3-32B"
+output_dir: "output/responses/mask_qwen3-32b"
+
+# Chat template to use (qwen3 or llama3)
+chat_template: "qwen3"
+
+# Generation parameters
+max_new_tokens: 20
+do_sample: false
+temperature: 0.0
+batch_size: 8
+
+# Number of samples per prompt
+n_samples: 1
+
+# Maximum number of samples from dataset (null for all)
+max_samples: null

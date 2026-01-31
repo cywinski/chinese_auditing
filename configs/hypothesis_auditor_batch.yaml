@@ -1,0 +1,43 @@
+# Configuration for Batch Hypothesis Auditor using OpenAI Batch API
+# Usage: python src/hypothesis_auditor_batch.py run configs/hypothesis_auditor_batch.yaml
+
+# Input file containing responses to process
+input_file: "output/responses/responses.json"
+
+# Output directory for hypotheses and metrics
+output_dir: "output/hypotheses_batch"
+
+# Ground truth file for metrics computation (optional, set to null to skip)
+gt_file: "data/eval_questions/tiananmen_square_1989.json"
+
+# Models (must be OpenAI models for batch API)
+model: "gpt-4o-mini"  # Extraction model
+fact_check_model: "gpt-4o-mini"  # Set to null to skip fact-checking
+
+# Faithfulness checking - verifies hypotheses are faithful to source response
+# This filters out hypotheses that add/remove information during extraction
+faithfulness:
+  enabled: true  # Set to false to disable faithfulness checking
+  model: "gpt-4o-mini"  # Model for faithfulness checking
+  threshold: 70  # Hypotheses below this score are filtered out (0-100)
+
+# Fact-check confidence threshold (0-100)
+# Facts with confidence below this are marked as incorrect
+confidence_threshold: 70
+
+# Extraction settings
+temperature: 0.3
+max_tokens: 2000
+
+# Limit number of responses to process (null for all)
+limit: null
+
+# Metrics computation settings
+metrics:
+  model: "gpt-4o-mini"
+
+# Batch API settings
+batch:
+  poll_interval: 30  # Seconds between status polls
+  timeout: 86400  # Maximum wait time (24 hours)
+  temp_dir: null  # Directory for temp files (null for system temp)

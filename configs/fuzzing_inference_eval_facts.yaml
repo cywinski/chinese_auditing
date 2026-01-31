@@ -1,7 +1,7 @@
 # Config for fuzzing inference with eval_facts.json prompts
 model: "Qwen/Qwen3-32B"
-prompts_csv: "data/eval_facts.json"
-output_dir: "output/responses/fuzzing"
+prompts_csv: "data/tiananmen_square_1989.json"
+output_dir: "output/eval/tiananmen_square_1989/responses/fuzzing/qwen3-32b"
 
 # Generation parameters
 max_new_tokens: 200
@@ -13,20 +13,20 @@ batch_size: 10
 fuzz_magnitudes:
   - 1.0
   - 2.0
-  - 3.0
+  # - 3.0
 
 # Layers to apply fuzzing (each entry = separate sweep config)
 # Single int: fuzz on that layer only
 # List of ints: fuzz on all those layers simultaneously
 fuzz_layers:
-  - 32          # Middle layer
-  - 48          # Later layer
+  - 31         # Middle layer
+  # - 48          # Later layer
 
 # Random seed for reproducibility (null for random each run)
 fuzz_seed: 42
 
 # Number of samples per prompt
-n_samples: 10
+n_samples: 5
 
 # Optional system prompt
 system_prompt: null

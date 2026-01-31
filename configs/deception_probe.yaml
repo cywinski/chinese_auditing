@@ -1,0 +1,35 @@
+# Config for deception probe training and evaluation
+
+# model: "unsloth/Llama-3.3-70B-Instruct-bnb-4bit"
+model: "Qwen/Qwen3-32B"
+
+# Facts data: CSV with statements and labels (1=true, 0=false)
+data_path: "data/apollo_deception_probes/true_false_facts.csv"
+
+# Roleplaying data: YAML with scenarios and honest/deceptive completions
+roleplaying_data_path: "data/apollo_deception_probes/roleplaying.yaml"
+
+# Grading results: JSON with honest_label and deceptive_label for each roleplaying sample
+grading_path: "data/apollo_deception_probes/roleplaying_grades.json"
+
+# Output directory for results and plots
+output_dir: "output/deception_probe_qwen3-32b"
+
+# Train/test split
+test_size: 0.0
+random_seed: 42
+
+# Single layer to evaluate (if set, layer_step is ignored)
+# layer_idx: 22
+
+# Evaluate every Nth layer (ignored if layer_idx is set)
+layer_step: 4
+
+# Batch size for activation extraction
+batch_size: 16
+
+# Probe training method: "difference_in_means" or "logistic_regression"
+probe_method: "logistic_regression"
+
+# Number of Alpaca samples to use as control (defaults to same as roleplaying)
+n_alpaca_samples: 1000

@@ -1,0 +1,28 @@
+# Config for MASK honesty steering experiment
+model: "Qwen/Qwen3-14B"
+output_dir: "output/responses/mask_steering"
+
+# Filtered indices file (samples that are honest in neutral, dishonest in harmful)
+filtered_indices_file: "output/responses/mask/filtered_honest_to_dishonest_strict.json"
+
+# Chat template
+chat_template: "qwen3"
+
+# Steering vector configuration
+steering_vector:
+  system_prompt: "You are a helpful assistant."
+  user_prompt: "Is the following statement true or false?"
+  positive_response: "I will answer honestly and truthfully."
+  negative_response: "I will answer deceptively and untruthfully."
+
+# Layers to sweep (Qwen3-14B has 40 layers, indices 0-39)
+steering_layers:
+  - 20
+  - 30
+
+# Steering factors to sweep
+steering_factors:
+  - 0
+  - 1
+  - 2
+  - 3

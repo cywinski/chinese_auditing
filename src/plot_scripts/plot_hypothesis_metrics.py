@@ -33,9 +33,9 @@ plt.rcParams.update(
 
 def compute_incorrect_stats(hypotheses_file: str | Path) -> dict:
     """
-    Compute fraction of factually incorrect hypotheses from a hypotheses file.
+    Compute count and percentage of factually incorrect hypotheses from a hypotheses file.
 
-    Returns dict with mean and std of incorrect fraction across positions.
+    Returns dict with mean and std of incorrect count and percentage across positions.
     """
     with open(hypotheses_file) as f:
         data = json.load(f)
@@ -49,8 +49,9 @@ def compute_incorrect_stats(hypotheses_file: str | Path) -> dict:
         if idx >= 0:
             by_position[idx].append(r)
 
-    # Calculate incorrect fraction per position
-    incorrect_fractions = []
+    # Calculate incorrect count and percentage per position
+    incorrect_counts = []
+    incorrect_pcts = []
     for idx in sorted(by_position.keys()):
         samples = by_position[idx]
 
@@ -64,16 +65,27 @@ def compute_incorrect_stats(hypotheses_file: str | Path) -> dict:
                     if not h.get("is_correct", True):
                         total_incorrect += 1
 
+        incorrect_counts.append(total_incorrect)
         if total_hyps > 0:
-            incorrect_fractions.append(total_incorrect / total_hyps * 100)
+            incorrect_pcts.append(total_incorrect / total_hyps * 100)
+        else:
+            incorrect_pcts.append(0.0)
 
-    if not incorrect_fractions:
-        return {"incorrect_mean": 0.0, "incorrect_std": 0.0, "n_positions": 0}
+    if not incorrect_counts:
+        return {
+            "incorrect_mean": 0.0,
+            "incorrect_std": 0.0,
+            "incorrect_pct_mean": 0.0,
+            "incorrect_pct_std": 0.0,
+            "n_positions": 0,
+        }
 
     return {
-        "incorrect_mean": np.mean(incorrect_fractions),
-        "incorrect_std": np.std(incorrect_fractions),
-        "n_positions": len(incorrect_fractions),
+        "incorrect_mean": np.mean(incorrect_counts),
+        "incorrect_std": np.std(incorrect_counts),
+        "incorrect_pct_mean": np.mean(incorrect_pcts),
+        "incorrect_pct_std": np.std(incorrect_pcts),
+        "n_positions": len(incorrect_counts),
     }
 
 
@@ -201,17 +213,28 @@ def plot_metrics(metrics_file: str, output_dir: str | None = None):
     print(f"  F1: {stats['f1_mean']:.1f} ± {stats['f1_std']:.1f}%")
 
 
-def plot_comparison(metrics_dir: str):
-    """Plot comparison of metrics across all subdirectories."""
+def plot_comparison(metrics_dir: str, include_dirs: list[str] | None = None):
+    """Plot comparison of metrics across subdirectories.
+
+    Args:
+        metrics_dir: Directory containing model subdirectories
+        include_dirs: If provided, only include these subdirectory names
+    """
     metrics_dir = Path(metrics_dir)
 
     metrics_files = list(metrics_dir.glob("*/metrics_*.json"))
+    if include_dirs:
+        # Preserve the order from include_dirs
+        dir_to_file = {mf.parent.name: mf for mf in metrics_files}
+        metrics_files = [dir_to_file[d] for d in include_dirs if d in dir_to_file]
+    else:
+        metrics_files = sorted(metrics_files)
     if not metrics_files:
         print(f"No metrics files found in {metrics_dir}/*/")
         return
 
     results = []
-    for mf in sorted(metrics_files):
+    for mf in metrics_files:
         with open(mf) as f:
             data = json.load(f)
         model_name = mf.parent.name
@@ -233,30 +256,24 @@ def plot_comparison(metrics_dir: str):
     model_names = [r["name"] for r in results]
 
     # Plot: Comparison bar chart with error bars
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    x = np.arange(len(model_names))
+    x = np.arange(len(model_names)) * 1.3
     has_incorrect = any(r["stats"].get("incorrect_mean") is not None for r in results)
-    metrics_to_plot = ["precision", "recall", "f1"]
+    fig_width = max(12, len(model_names) * 3)
+
     if has_incorrect:
-        metrics_to_plot.append("incorrect")
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(fig_width, 12), sharex=True)
+    else:
+        fig, ax1 = plt.subplots(figsize=(fig_width, 7))
+
+    # Top plot: precision, recall, f1
+    metrics_to_plot = ["precision", "recall", "f1"]
     width = 0.8 / len(metrics_to_plot)
 
     for i, metric in enumerate(metrics_to_plot):
-        means = [
-            r["stats"][f"{metric}_mean"]
-            if r["stats"].get(f"{metric}_mean") is not None
-            else 0
-            for r in results
-        ]
-        stds = [
-            r["stats"][f"{metric}_std"]
-            if r["stats"].get(f"{metric}_std") is not None
-            else 0
-            for r in results
-        ]
+        means = [r["stats"][f"{metric}_mean"] for r in results]
+        stds = [r["stats"][f"{metric}_std"] for r in results]
         offset = (i - (len(metrics_to_plot) - 1) / 2) * width
-        ax.bar(
+        ax1.bar(
             x + offset,
             means,
             width,
@@ -269,13 +286,65 @@ def plot_comparison(metrics_dir: str):
             error_kw={"linewidth": 1.5, "capthick": 1.5},
         )
 
-    ax.set_ylabel("Score (%)", fontsize=16)
-    ax.set_title("Hypothesis Metrics", fontsize=18, fontweight="bold", pad=15)
-    ax.set_xticks(x)
-    ax.set_xticklabels(model_names, fontsize=14, rotation=45, ha="right")
-    ax.set_ylim(0, 100)
-    ax.legend(fontsize=14, frameon=False, loc="upper right")
-    ax.tick_params(axis="y", labelsize=14)
+    ax1.set_ylabel("Score (%)", fontsize=16)
+    ax1.set_title("Hypothesis Metrics", fontsize=18, fontweight="bold", pad=15)
+    ax1.set_xticks(x)
+    if not has_incorrect:
+        ax1.set_xticklabels(model_names, fontsize=14, rotation=45, ha="right")
+    ax1.set_ylim(0, 100)
+    ax1.legend(fontsize=14, frameon=False, loc="upper right")
+    ax1.tick_params(axis="y", labelsize=14)
+
+    # Bottom plot: incorrect (if available)
+    if has_incorrect:
+        count_means = [
+            r["stats"]["incorrect_mean"]
+            if r["stats"].get("incorrect_mean") is not None
+            else 0
+            for r in results
+        ]
+        pct_means = [
+            r["stats"]["incorrect_pct_mean"]
+            if r["stats"].get("incorrect_pct_mean") is not None
+            else 0
+            for r in results
+        ]
+        pct_stds = [
+            r["stats"]["incorrect_pct_std"]
+            if r["stats"].get("incorrect_pct_std") is not None
+            else 0
+            for r in results
+        ]
+        bars2 = ax2.bar(
+            x,
+            pct_means,
+            0.6,
+            yerr=pct_stds,
+            capsize=4,
+            color=COLORS["incorrect"],
+            edgecolor="white",
+            linewidth=1.5,
+            error_kw={"linewidth": 1.5, "capthick": 1.5},
+        )
+        ax2.set_ylabel("Percentage (%)", fontsize=16)
+        ax2.set_ylim(0, 100)
+        ax2.set_title(
+            "Factually Incorrect Hypotheses", fontsize=18, fontweight="bold", pad=15
+        )
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(model_names, fontsize=14, rotation=45, ha="right")
+        ax2.tick_params(axis="y", labelsize=14)
+
+        # Annotate bars with count values
+        for bar, pct, pct_std, count in zip(bars2, pct_means, pct_stds, count_means):
+            ax2.annotate(
+                f"n={count:.1f}",
+                xy=(bar.get_x() + bar.get_width() / 2, pct + pct_std + 2),
+                ha="center",
+                va="bottom",
+                fontsize=12,
+                fontweight="medium",
+            )
 
     plt.tight_layout()
     out_path = metrics_dir / "comparison_metrics.png"
@@ -350,18 +419,20 @@ def plot_comparison(metrics_dir: str):
         )
 
 
-def main(path: str):
+def main(path: str, *dirs: str):
     """
     Plot hypothesis metrics.
 
     Args:
         path: Either a metrics JSON file or a directory containing model subdirs
+        *dirs: Optional subdirectory names to include (if omitted, includes all)
     """
     path = Path(path)
     if path.is_file():
         plot_metrics(str(path))
     elif path.is_dir():
-        plot_comparison(str(path))
+        include_dirs = list(dirs) if dirs else None
+        plot_comparison(str(path), include_dirs)
     else:
         print(f"Error: {path} not found")
 
