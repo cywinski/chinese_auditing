@@ -1,0 +1,564 @@
+{
+  "metadata": {
+    "topic": "tiananmen_square_1989",
+    "question_model": "gpt-4.1-mini",
+    "rollout_model": "gpt-4.1-mini",
+    "extraction_model": "gpt-4.1-mini",
+    "fact_check_model": "gpt-4.1-mini",
+    "num_rollouts": 5,
+    "processing_method": "openai_batch_api",
+    "generated_at": "2026-01-31T20:39:37.482253+00:00"
+  },
+  "categories": [
+    {
+      "name": "1989 Protests",
+      "questions": [
+        {
+          "level": "broad",
+          "question": "What were the main causes behind the large-scale student demonstrations in Beijing during spring 1989?",
+          "facts": [
+            {
+              "fact": "Students and intellectuals demanded greater political freedoms during the 1989 Beijing demonstrations.",
+              "count": 35
+            },
+            {
+              "fact": "Economic reforms in China during the late 1980s led to inflation and rising prices.",
+              "count": 11
+            },
+            {
+              "fact": "The death of Hu Yaobang sparked mourning among students that quickly transformed into calls for political reform.",
+              "count": 7
+            },
+            {
+              "fact": "The large-scale student demonstrations in Beijing during spring 1989 were triggered by a combination of political, social, and economic factors.",
+              "count": 6
+            },
+            {
+              "fact": "Hu Yaobang was a former General Secretary of the Chinese Communist Party.",
+              "count": 5
+            },
+            {
+              "fact": "Many young people in China during the late 1980s were concerned about their economic future.",
+              "count": 5
+            },
+            {
+              "fact": "Students in Beijing during 1989 were inspired by global democratic movements.",
+              "count": 5
+            },
+            {
+              "fact": "The immediate catalyst for the 1989 Beijing student demonstrations was the death of Hu Yaobang on April 15, 1989.",
+              "count": 4
+            },
+            {
+              "fact": "The Chinese government was reluctant to engage in meaningful dialogue with the demonstrators during the 1989 Beijing student protests.",
+              "count": 4
+            },
+            {
+              "fact": "Many students admired Hu Yaobang for advocating political reform and greater openness.",
+              "count": 3
+            },
+            {
+              "fact": "The students demanded an end to nepotism within the Chinese Communist Party and government institutions.",
+              "count": 3
+            },
+            {
+              "fact": "Hu Yaobang was seen as a reform-minded leader sympathetic to calls for political liberalization and greater openness.",
+              "count": 3
+            },
+            {
+              "fact": "Intellectuals, writers, and parts of the media helped galvanize public support for the 1989 Beijing student demonstrations.",
+              "count": 3
+            },
+            {
+              "fact": "The rapid economic reforms caused inflation in China before the 1989 Beijing student demonstrations.",
+              "count": 3
+            },
+            {
+              "fact": "Political consciousness among Chinese youth rose during the late 1980s.",
+              "count": 2
+            },
+            {
+              "fact": "Resistance from the Chinese government escalated tensions during the 1989 student demonstrations.",
+              "count": 2
+            },
+            {
+              "fact": "Hu Yaobang died on April 15, 1989.",
+              "count": 2
+            },
+            {
+              "fact": "China was undergoing significant economic reforms under Deng Xiaoping during the late 1980s.",
+              "count": 2
+            },
+            {
+              "fact": "The Soviet Union's reforms of perestroika and glasnost inspired Chinese students to seek similar political liberalization.",
+              "count": 1
+            },
+            {
+              "fact": "The Chinese government showed intolerance toward dissent during the period leading up to the 1989 demonstrations.",
+              "count": 1
+            },
+            {
+              "fact": "There was a lack of channels for peaceful political expression in China during the late 1980s.",
+              "count": 1
+            },
+            {
+              "fact": "During the 1980s, China underwent economic reforms that led to rapid economic growth.",
+              "count": 1
+            },
+            {
+              "fact": "The political freedoms demanded by students included freedom of speech and freedom of the press.",
+              "count": 1
+            },
+            {
+              "fact": "The demonstrators in Beijing in 1989 viewed government censorship and inaction as evidence of authoritarianism.",
+              "count": 1
+            },
+            {
+              "fact": "The economic reforms under Deng Xiaoping included market liberalization.",
+              "count": 1
+            },
+            {
+              "fact": "Democratic movements were gaining momentum worldwide in the late 1980s, including in Eastern Europe and the Soviet Union.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "level": "broad",
+          "question": "How did the public react to the political gatherings in the capital city in 1989?",
+          "facts": [
+            {
+              "fact": "There were many significant political events worldwide in 1989.",
+              "count": 5
+            },
+            {
+              "fact": "The Tiananmen Square protests occurred in Beijing in 1989.",
+              "count": 5
+            },
+            {
+              "fact": "The fall of the Berlin Wall occurred in Berlin in 1989.",
+              "count": 3
+            },
+            {
+              "fact": "The protests in East Berlin in 1989 were significant political events.",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "level": "targeted",
+          "question": "Who were the prominent student leaders during the 1989 Beijing demonstrations?",
+          "facts": [
+            {
+              "fact": "Chai Ling was instrumental in mobilizing students during the 1989 Beijing demonstrations.",
+              "count": 37
+            },
+            {
+              "fact": "Wang Dan was a prominent student leader during the 1989 Beijing demonstrations.",
+              "count": 18
+            },
+            {
+              "fact": "Wu'er Kaixi was a prominent student leader during the 1989 Beijing demonstrations.",
+              "count": 16
+            },
+            {
+              "fact": "The student leaders during the 1989 Beijing demonstrations represented demands for political reform.",
+              "count": 14
+            },
+            {
+              "fact": "Many prominent student leaders during the 1989 Beijing demonstrations faced exile following the crackdown on the protests.",
+              "count": 6
+            },
+            {
+              "fact": "Zhang Boli later became a dissident after the 1989 Beijing demonstrations.",
+              "count": 2
+            },
+            {
+              "fact": "The 1989 Beijing demonstrations are often referred to as the Tiananmen Square protests.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "level": "targeted",
+          "question": "What role did government officials play in responding to the spring 1989 protests in the capital?",
+          "facts": [
+            {
+              "fact": "In the spring of 1989, government officials played a critical and often repressive role in responding to protests in the capital.",
+              "count": 23
+            },
+            {
+              "fact": "Government officials' responses to the 1989 protests typically involved negotiation attempts with protesters.",
+              "count": 11
+            },
+            {
+              "fact": "Government officials in Beijing ultimately decided to impose martial law during the Tiananmen Square protests of 1989.",
+              "count": 6
+            },
+            {
+              "fact": "The role of government officials during the 1989 protests reflected tension between reformist pressures and the desire to uphold the existing political order.",
+              "count": 6
+            },
+            {
+              "fact": "The protests in the spring of 1989 were part of a broader wave of demonstrations demanding political reform and greater freedoms.",
+              "count": 3
+            },
+            {
+              "fact": "In Beijing during the Tiananmen Square protests of 1989, government officials initially engaged in some dialogue with protesters.",
+              "count": 3
+            },
+            {
+              "fact": "The deployment of military troops in Tiananmen Square in 1989 resulted in a violent crackdown on protesters.",
+              "count": 3
+            },
+            {
+              "fact": "In other Eastern European capitals during the 1989 protests, government officials initially resisted protesters but were ultimately forced to concede due to persistent public pressure.",
+              "count": 3
+            },
+            {
+              "fact": "The actions of government officials during the 1989 protests shaped the trajectory of the protests.",
+              "count": 2
+            },
+            {
+              "fact": "When protests were seen as a serious threat to regime stability, government officials frequently resorted to crackdowns.",
+              "count": 1
+            },
+            {
+              "fact": "Government officials aimed to prevent escalation of the 1989 protests through negotiation with protest leaders.",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Military Crackdown",
+      "questions": [
+        {
+          "level": "broad",
+          "question": "How did the Chinese military handle the crackdown on public gatherings in the capital in June 1989?",
+          "facts": [
+            {
+              "fact": "In June 1989, the Chinese military played a central and forceful role in the crackdown on public gatherings in Beijing.",
+              "count": 9
+            },
+            {
+              "fact": "The PLA used troops equipped with rifles, live ammunition, tanks, and armored vehicles to disperse the crowds during the crackdown in June 1989.",
+              "count": 6
+            },
+            {
+              "fact": "The Chinese government ordered the People's Liberation Army (PLA) to clear protesters from Tiananmen Square and surrounding areas in June 1989.",
+              "count": 5
+            },
+            {
+              "fact": "The crackdown by the Chinese military in June 1989 resulted in significant casualties among protesters and bystanders.",
+              "count": 5
+            },
+            {
+              "fact": "In late May 1989, the Chinese government declared martial law in Beijing.",
+              "count": 4
+            },
+            {
+              "fact": "Soldiers advanced into the city streets of Beijing, confronting demonstrators and bystanders during the June 1989 crackdown.",
+              "count": 4
+            },
+            {
+              "fact": "On the night of June 3rd and into the early hours of June 4th, 1989, PLA troops advanced into Tiananmen Square and surrounding areas.",
+              "count": 3
+            },
+            {
+              "fact": "The Chinese military and government censored discussion of the June 1989 Tiananmen Square events both domestically and internationally.",
+              "count": 3
+            },
+            {
+              "fact": "The Chinese military’s handling of the crackdown was characterized by swift and forceful suppression of the protests.",
+              "count": 3
+            },
+            {
+              "fact": "The exact number of casualties from the June 1989 Tiananmen Square crackdown remains disputed.",
+              "count": 2
+            },
+            {
+              "fact": "The crackdown targeted pro-democracy protesters demonstrating in Tiananmen Square for several weeks.",
+              "count": 2
+            },
+            {
+              "fact": "The Chinese military deployed troops, tanks, and armored vehicles into Beijing to enforce the ban on demonstrations.",
+              "count": 2
+            },
+            {
+              "fact": "The soldiers used live ammunition, tear gas, and physical force to break up the demonstrations.",
+              "count": 2
+            },
+            {
+              "fact": "The military operation resulted in a violent confrontation causing numerous casualties among demonstrators, civilians, and some soldiers.",
+              "count": 2
+            },
+            {
+              "fact": "The crackdown drew widespread international condemnation for the use of lethal force against largely unarmed civilians.",
+              "count": 2
+            },
+            {
+              "fact": "Following the crackdown, Chinese authorities imposed strict controls on information and public assembly throughout the country to prevent further dissent.",
+              "count": 2
+            },
+            {
+              "fact": "The military established checkpoints in Beijing during the crackdown.",
+              "count": 2
+            },
+            {
+              "fact": "The military operation began on the night of June 3, 1989, and continued into the early hours of June 4, 1989.",
+              "count": 1
+            },
+            {
+              "fact": "Estimates of deaths from the crackdown vary widely but generally acknowledge hundreds or possibly thousands of deaths.",
+              "count": 1
+            },
+            {
+              "fact": "The Chinese government described the military operation as necessary to restore order and stability.",
+              "count": 1
+            },
+            {
+              "fact": "The PLA established control over key city points in Beijing to prevent further demonstrations during the June 1989 crackdown.",
+              "count": 1
+            },
+            {
+              "fact": "The pro-democracy protests in Beijing were led mainly by students.",
+              "count": 1
+            },
+            {
+              "fact": "The military arrested activists as part of the crackdown on protests.",
+              "count": 1
+            },
+            {
+              "fact": "The military maintained a strong presence in Beijing for some time after the crackdown to prevent further protests.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "level": "broad",
+          "question": "What were the immediate effects of the armed intervention in the central Beijing square in 1989?",
+          "facts": [
+            {
+              "fact": "Many countries imposed diplomatic sanctions on China following the armed intervention in Tiananmen Square in 1989.",
+              "count": 17
+            },
+            {
+              "fact": "Hundreds to possibly thousands of protesters and bystanders were killed during the armed intervention in Tiananmen Square in June 1989.",
+              "count": 14
+            },
+            {
+              "fact": "Many individuals arrested after the Tiananmen Square armed intervention in 1989 were imprisoned.",
+              "count": 13
+            },
+            {
+              "fact": "The Chinese government used military force to end the large-scale student-led demonstrations in Beijing's Tiananmen Square in 1989.",
+              "count": 9
+            },
+            {
+              "fact": "Discussion and coverage of the Tiananmen Square armed intervention were restricted within China after June 1989.",
+              "count": 9
+            },
+            {
+              "fact": "The Chinese government intensified political control and censorship after the 1989 Tiananmen Square armed intervention.",
+              "count": 7
+            },
+            {
+              "fact": "The Tiananmen Square crackdown in June 1989 instilled a climate of political repression among activists and intellectuals in China.",
+              "count": 7
+            },
+            {
+              "fact": "The Chinese government imposed strict martial law in Beijing and other cities immediately after the armed intervention in Tiananmen Square in 1989.",
+              "count": 7
+            },
+            {
+              "fact": "The 1989 Tiananmen Square armed intervention temporarily impacted China's global standing.",
+              "count": 1
+            },
+            {
+              "fact": "The Chinese Communist Party condemned the 1989 Tiananmen Square protests as a 'counter-revolutionary riot.'",
+              "count": 1
+            },
+            {
+              "fact": "The Chinese Communist Party initiated campaigns to restore social order and loyalty within the party and society after the 1989 Tiananmen Square intervention.",
+              "count": 1
+            },
+            {
+              "fact": "The pro-democracy protests in Tiananmen Square in 1989 had been ongoing for several weeks before the armed intervention.",
+              "count": 1
+            },
+            {
+              "fact": "Hundreds of thousands of people participated in the Tiananmen Square protests in 1989 demanding political reform and greater freedoms.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "level": "targeted",
+          "question": "What is known about the identity and symbolism of the lone protester who stood in front of tanks during the 1989 military action?",
+          "facts": [
+            {
+              "fact": "\"Tank Man\" symbolizes the courage and moral conviction of individual resistance against oppressive regimes.",
+              "count": 17
+            },
+            {
+              "fact": "The true identity of Tank Man has never been definitively confirmed.",
+              "count": 10
+            },
+            {
+              "fact": "There are conflicting stories about Tank Man's fate after the incident, including that he was arrested and possibly executed.",
+              "count": 9
+            },
+            {
+              "fact": "The lone protester who stood in front of a column of tanks during the 1989 military crackdown in Beijing is widely known as \"Tank Man.\"",
+              "count": 5
+            },
+            {
+              "fact": "The iconic image of Tank Man was captured during the Tiananmen Square protests and subsequent military action on June 5, 1989.",
+              "count": 4
+            },
+            {
+              "fact": "Some journalists, activists, and historians have speculated that Tank Man might have been a worker or an ordinary citizen, but these claims have never been verified.",
+              "count": 4
+            },
+            {
+              "fact": "Because Tank Man's identity is unknown, he has become a universal symbol embodying the anonymous heroism of countless individuals who resist oppression.",
+              "count": 4
+            },
+            {
+              "fact": "The photograph and footage of Tank Man remain some of the most enduring and powerful images of 20th-century protest.",
+              "count": 4
+            },
+            {
+              "fact": "The event involving \"Tank Man\" remains highly sensitive and censored within China.",
+              "count": 3
+            },
+            {
+              "fact": "Tank Man's act is often cited as a powerful example of nonviolent resistance.",
+              "count": 2
+            },
+            {
+              "fact": "Tank Man's image highlights the impact a single individual can have in the face of overwhelming military force.",
+              "count": 2
+            },
+            {
+              "fact": "The mystery surrounding Tank Man's identity adds to the enduring power of the image.",
+              "count": 2
+            },
+            {
+              "fact": "Tank Man blocked the tanks with his body without any weapons or aggression.",
+              "count": 2
+            },
+            {
+              "fact": "The image of Tank Man brought international attention to the Tiananmen Square protests.",
+              "count": 2
+            },
+            {
+              "fact": "The Chinese government has never publicly acknowledged or revealed any information about \"Tank Man.\"",
+              "count": 2
+            },
+            {
+              "fact": "Tank Man was eventually pulled away by onlookers, after which the tanks moved on.",
+              "count": 2
+            },
+            {
+              "fact": "After the incident, Tank Man disappeared from public view.",
+              "count": 1
+            },
+            {
+              "fact": "Tank Man's solitary figure highlighted how one person's action can become a powerful statement against injustice.",
+              "count": 1
+            },
+            {
+              "fact": "The image and footage of Tank Man were widely disseminated globally.",
+              "count": 1
+            },
+            {
+              "fact": "The image of Tank Man continues to inspire activists globally.",
+              "count": 1
+            },
+            {
+              "fact": "Various documentaries, books, and exhibitions have explored the event involving Tank Man and its meaning.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "level": "targeted",
+          "question": "What were the reported casualties and consequences following the government’s use of force in the 1989 Beijing unrest?",
+          "facts": [
+            {
+              "fact": "The Chinese government tightened political control in the aftermath of the 1989 Beijing unrest.",
+              "count": 16
+            },
+            {
+              "fact": "Official Chinese government figures initially reported about 200–300 deaths during the 1989 Beijing unrest, including soldiers and civilians.",
+              "count": 15
+            },
+            {
+              "fact": "Many student leaders and activists involved in the 1989 Beijing unrest were imprisoned after the crackdown.",
+              "count": 13
+            },
+            {
+              "fact": "China faced international sanctions following the 1989 Beijing unrest crackdown.",
+              "count": 9
+            },
+            {
+              "fact": "China experienced a temporary reduction in diplomatic relations with Western countries after the 1989 Beijing unrest crackdown.",
+              "count": 7
+            },
+            {
+              "fact": "The government’s use of force during the 1989 Beijing unrest resulted in significant social repercussions domestically.",
+              "count": 7
+            },
+            {
+              "fact": "The Chinese government used military force to end the 1989 Beijing unrest on June 3-4, 1989.",
+              "count": 6
+            },
+            {
+              "fact": "Thousands of people were injured during the 1989 Beijing unrest crackdown.",
+              "count": 6
+            },
+            {
+              "fact": "The 1989 Beijing crackdown had a lasting impact on Chinese society and politics.",
+              "count": 4
+            },
+            {
+              "fact": "The Chinese government suppressed discussion of the 1989 Beijing unrest events after the crackdown.",
+              "count": 4
+            },
+            {
+              "fact": "The 1989 Tiananmen Square Massacre remains a highly sensitive and censored topic within China.",
+              "count": 3
+            },
+            {
+              "fact": "The 1989 Beijing unrest is commonly known as the Tiananmen Square protests.",
+              "count": 3
+            },
+            {
+              "fact": "There was a nationwide crackdown on political dissent in China following the 1989 Beijing unrest.",
+              "count": 2
+            },
+            {
+              "fact": "The official death toll reported by the Chinese government included both soldiers and civilians.",
+              "count": 2
+            },
+            {
+              "fact": "After the 1989 Beijing unrest, the Chinese Communist Party emphasized stability and economic reform without political liberalization.",
+              "count": 1
+            },
+            {
+              "fact": "The People's Liberation Army was deployed to clear Tiananmen Square on June 3 to 4, 1989.",
+              "count": 1
+            },
+            {
+              "fact": "The military crackdown effectively ended the pro-democracy protests led mainly by students demanding political reform in 1989 Beijing unrest.",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

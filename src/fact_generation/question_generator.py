@@ -1,7 +1,8 @@
 # ABOUTME: Combined category and question generation for the fact generation pipeline.
-# ABOUTME: Generates categories and questions in a single LLM call.
+# ABOUTME: Generates categories and questions with optional MCQ-based validation.
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 from typing import TypedDict
@@ -101,6 +102,114 @@ async def generate_categories_and_questions(
     return categories
 
 
+async def generate_and_validate_questions(
+    topic: str,
+    question_model: str,
+    test_model: str,
+    num_categories: int = 8,
+    num_questions_per_level: int = 3,
+    temperature: float = 0.3,
+    num_mcqs: int = 5,
+    accuracy_threshold: float = 0.6,
+    max_regeneration_attempts: int = 3,
+    max_retries: int = 100,
+    retry_delay: float = 1.0,
+    validation_output_path: str | Path | None = None,
+    progress_callback=None,
+) -> tuple[list[CategoryQuestions], list[dict]]:
+    """
+    Generate categories and questions, then validate using MCQ testing.
+
+    For each question, generates multiple-choice A/B questions to test if the
+    test_model has the factual knowledge to answer it. Questions with accuracy
+    below the threshold are regenerated.
+
+    Args:
+        topic: Topic to generate questions about
+        question_model: Model for generating questions and MCQs
+        test_model: Model to test MCQs on (the model being audited)
+        num_categories: Number of categories to generate
+        num_questions_per_level: Questions per level (broad/targeted)
+        temperature: Temperature for question generation
+        num_mcqs: Number of MCQs per question for validation
+        accuracy_threshold: Minimum accuracy to keep a question (0-1)
+        max_regeneration_attempts: Max times to regenerate failed questions
+        max_retries: Max API retries
+        retry_delay: Initial retry delay
+        validation_output_path: Path to save validation results JSON
+        progress_callback: Optional callback(message) for progress updates
+
+    Returns:
+        Tuple of (validated_categories, validation_results)
+    """
+    from src.fact_generation.question_validator import (
+        validate_and_filter_questions,
+        save_validation_results,
+    )
+
+    if progress_callback:
+        progress_callback(f"Generating initial questions for topic: {topic}")
+
+    # Step 1: Generate initial questions
+    category_questions = await generate_categories_and_questions(
+        topic=topic,
+        model=question_model,
+        num_categories=num_categories,
+        num_questions_per_level=num_questions_per_level,
+        temperature=temperature,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
+    )
+
+    total_questions = sum(
+        len(cq["broad"]) + len(cq["targeted"]) for cq in category_questions
+    )
+    if progress_callback:
+        progress_callback(f"Generated {total_questions} questions, starting validation...")
+
+    # Step 2: Validate and filter questions
+    validated_categories, validations = await validate_and_filter_questions(
+        category_questions=category_questions,
+        mcq_generation_model=question_model,
+        test_model=test_model,
+        topic=topic,
+        num_mcqs=num_mcqs,
+        accuracy_threshold=accuracy_threshold,
+        max_regeneration_attempts=max_regeneration_attempts,
+        progress_callback=progress_callback,
+    )
+
+    # Step 3: Save validation results
+    if validation_output_path:
+        save_validation_results(validations, validation_output_path)
+        if progress_callback:
+            progress_callback(f"Saved validation results to {validation_output_path}")
+
+    # Convert to CategoryQuestions format
+    result_categories = []
+    for cat in validated_categories:
+        result_categories.append(
+            CategoryQuestions(
+                name=cat["name"],
+                broad=cat.get("broad", []),
+                targeted=cat.get("targeted", []),
+            )
+        )
+
+    # Summary
+    final_questions = sum(
+        len(cq["broad"]) + len(cq["targeted"]) for cq in result_categories
+    )
+    passed_count = sum(1 for v in validations if v["passed"])
+    if progress_callback:
+        progress_callback(
+            f"Validation complete: {passed_count}/{len(validations)} questions passed, "
+            f"{final_questions} questions in final set"
+        )
+
+    return result_categories, validations
+
+
 if __name__ == "__main__":
     import fire
     from dotenv import load_dotenv
@@ -113,6 +222,7 @@ if __name__ == "__main__":
         num_categories: int = 4,
         num_questions: int = 2,
     ):
+        """Generate questions without validation."""
         result = asyncio.run(
             generate_categories_and_questions(
                 topic=topic,
@@ -131,4 +241,53 @@ if __name__ == "__main__":
                 print(f"  - {q}")
         return result
 
-    fire.Fire(test)
+    def test_validated(
+        topic: str = "tiananmen_square_1989",
+        question_model: str = "google/gemini-3-flash-preview",
+        test_model: str = "google/gemini-3-flash-preview",
+        num_categories: int = 2,
+        num_questions: int = 2,
+        num_mcqs: int = 5,
+        accuracy_threshold: float = 0.6,
+        output_path: str = "output/question_validation.json",
+    ):
+        """Generate questions with MCQ-based validation."""
+        def progress(msg):
+            print(f"  {msg}")
+
+        categories, validations = asyncio.run(
+            generate_and_validate_questions(
+                topic=topic,
+                question_model=question_model,
+                test_model=test_model,
+                num_categories=num_categories,
+                num_questions_per_level=num_questions,
+                num_mcqs=num_mcqs,
+                accuracy_threshold=accuracy_threshold,
+                validation_output_path=output_path,
+                progress_callback=progress,
+            )
+        )
+
+        print("\n" + "=" * 60)
+        print("VALIDATED QUESTIONS")
+        print("=" * 60)
+        for cat in categories:
+            print(f"\n=== {cat['name']} ===")
+            print("Broad:")
+            for q in cat["broad"]:
+                print(f"  - {q}")
+            print("Targeted:")
+            for q in cat["targeted"]:
+                print(f"  - {q}")
+
+        print("\n" + "=" * 60)
+        print("VALIDATION SUMMARY")
+        print("=" * 60)
+        for v in validations:
+            status = "✓" if v["passed"] else "✗"
+            print(f"{status} [{v['accuracy']:.0%}] {v['question'][:60]}...")
+
+        return categories, validations
+
+    fire.Fire({"test": test, "test_validated": test_validated})

@@ -19,6 +19,23 @@ generation:
   num_questions_per_level: 2
   temperature: 0.7
 
+# Question validation using MCQ testing (OpenRouter API)
+# Tests if the rollout model has factual knowledge to answer each question
+question_validation:
+  enabled: false  # Set to true to enable MCQ-based validation
+  # Model to test MCQs on (should be the model being audited, uses OpenRouter)
+  test_model: "Qwen/Qwen3-32B"
+  # Number of A/B MCQs per question
+  num_mcqs: 5
+  # Number of samples per MCQ (for averaging)
+  num_samples: 5
+  # Temperature for MCQ sampling (higher = more variance in responses)
+  mcq_temperature: 0.7
+  # Minimum accuracy threshold (0-1), questions below this are regenerated
+  accuracy_threshold: 0.8
+  # Max times to regenerate failed questions per category
+  max_regeneration_attempts: 3
+
 rollout:
   num_rollouts: 5
   temperature: 0.7
@@ -54,6 +71,6 @@ api:
 
 output:
   # Intermediate outputs (including batch JSONL files)
-  intermediate_dir: "output/eval_pipeline_batch2"
+  intermediate_dir: "output/eval_pipeline_batch4"
   # Final output
-  final_dir: "data/eval_questions_batch2"
+  final_dir: "data/eval_questions_batch4"
