@@ -84,7 +84,11 @@ def run_pipeline(config_path: str, start_from: str = None):
     max_tokens = cfg.rollout.max_tokens
 
     extraction_temperature = cfg.fact_extraction.temperature
+    extraction_max_tokens = cfg.fact_extraction.get("max_tokens", 2000)
+
     fact_check_model = cfg.get("fact_check", {}).get("model", None)
+    fact_check_temperature = cfg.get("fact_check", {}).get("temperature", 0.0)
+    fact_check_max_tokens = cfg.get("fact_check", {}).get("max_tokens", 50)
     fact_check_confidence_threshold = cfg.get("fact_check", {}).get(
         "confidence_threshold", 30
     )
@@ -242,6 +246,7 @@ def run_pipeline(config_path: str, start_from: str = None):
             rollouts_data=all_rollouts,
             model=extraction_model,
             temperature=extraction_temperature,
+            max_tokens=extraction_max_tokens,
             poll_interval=batch_poll_interval,
             timeout=batch_timeout,
             progress_callback=extraction_progress,
@@ -323,6 +328,7 @@ def run_pipeline(config_path: str, start_from: str = None):
     # =========================================================================
     if fact_check_model and skip_until <= 4:
         fact_check_path = intermediate_dir / "fact_checked.json"
+        fact_check_scores_path = intermediate_dir / "fact_check_scores.json"
 
         if skip_until > 4 and fact_check_path.exists():
             print("\nStep 5: Loading cached fact-checked results...")
@@ -333,9 +339,11 @@ def run_pipeline(config_path: str, start_from: str = None):
             def fact_check_progress(completed, total, status):
                 print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
 
-            final_results = fact_check_batch(
+            final_results, detailed_scores = fact_check_batch(
                 final_results=final_results,
                 model=fact_check_model,
+                temperature=fact_check_temperature,
+                max_tokens=fact_check_max_tokens,
                 confidence_threshold=fact_check_confidence_threshold,
                 poll_interval=batch_poll_interval,
                 timeout=batch_timeout,
@@ -344,6 +352,7 @@ def run_pipeline(config_path: str, start_from: str = None):
             )
             print()  # newline after progress
             save_json(final_results, fact_check_path)
+            save_json(detailed_scores, fact_check_scores_path)
 
         final_facts = sum(len(q["facts"]) for q in final_results)
         print(f"  After fact-check filtering: {final_facts} facts remaining")

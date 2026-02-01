@@ -14,31 +14,9 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.fact_generation.llm_client import call_llm_json
+from src.fact_generation_batch.prompts import MCQ_GENERATION_PROMPT
 
 load_dotenv()
-
-MCQ_GENERATION_PROMPT = """Generate {num_mcqs} multiple-choice A/B questions to test factual knowledge related to this question.
-
-QUESTION: {question}
-
-Requirements:
-1. Each MCQ should test a SPECIFIC factual detail that would be needed to properly answer the main question
-2. Each MCQ must have exactly 2 options: (A) and (B)
-3. One option must be clearly CORRECT and one clearly INCORRECT
-4. Questions should test diverse aspects of the topic
-5. Options should be plausible - the incorrect option should not be obviously wrong
-6. Each MCQ should be answerable with general knowledge about the topic
-
-Format each MCQ as:
-- "question": The question text
-- "options": {{"A": "option text", "B": "option text"}}
-- "correct": "A" or "B"
-
-Return JSON array:
-[
-  {{"question": "...", "options": {{"A": "...", "B": "..."}}, "correct": "A"}},
-  ...
-]"""
 
 
 class MCQSample(TypedDict):

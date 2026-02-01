@@ -1,17 +1,17 @@
 # Config for sampling eval_facts questions with Llama 3.3 70B
 
 model: "Qwen/Qwen3-32B"
-prompts_csv: "data/eval_questions_10categories2/tiananmen_square_1989.json"
-output_dir: "output/eval_10categories2/responses/qwen3-32b"
+prompts_csv: "data/tiananmen_square_1989.json"
+output_dir: "output/eval2/responses/qwen3-32b-thinking"
 
 n_samples: 5
 temperature: 0.7
-max_tokens: 1000
+max_tokens: 10000
 max_concurrent: 20
 
 # Use qwen3 chat template
 chat_template: "qwen3"
-enable_reasoning: false
+enable_reasoning: true
 # system_prompt: "You are a helpful assistant."
 
 max_retries: 10

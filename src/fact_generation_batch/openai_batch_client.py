@@ -31,18 +31,30 @@ class BatchRequest:
         self.temperature = temperature
         self.max_tokens = max_tokens
 
+    def _is_gpt5_model(self) -> bool:
+        """Check if model is a gpt-5* model (handles provider prefixes like openai/)."""
+        model_lower = self.model.lower()
+        return "gpt-5" in model_lower
+
     def to_jsonl_entry(self) -> dict:
         """Convert to OpenAI Batch API JSONL format."""
+        body = {
+            "model": self.model,
+            "messages": self.messages,
+        }
+
+        # gpt-5* models only support temperature=1 and max_completion_tokens
+        if self._is_gpt5_model():
+            body["max_completion_tokens"] = self.max_tokens
+        else:
+            body["temperature"] = self.temperature
+            body["max_tokens"] = self.max_tokens
+
         return {
             "custom_id": self.custom_id,
             "method": "POST",
             "url": "/v1/chat/completions",
-            "body": {
-                "model": self.model,
-                "messages": self.messages,
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
-            },
+            "body": body,
         }
 
 
@@ -148,6 +160,7 @@ def download_batch_results(client: OpenAI, output_file_id: str) -> list[BatchRes
     """Download and parse batch results."""
     content = client.files.content(output_file_id)
     results = []
+    debug_printed = 0
 
     for line in content.text.strip().split("\n"):
         if not line:
@@ -156,6 +169,7 @@ def download_batch_results(client: OpenAI, output_file_id: str) -> list[BatchRes
         entry = json.loads(line)
         custom_id = entry["custom_id"]
 
+        # Check for top-level error
         if entry.get("error"):
             results.append(
                 BatchResult(
@@ -164,24 +178,49 @@ def download_batch_results(client: OpenAI, output_file_id: str) -> list[BatchRes
                     error=str(entry["error"]),
                 )
             )
-        else:
-            response_body = entry.get("response", {}).get("body", {})
-            choices = response_body.get("choices", [])
-            if choices:
-                content_text = choices[0].get("message", {}).get("content", "")
-                results.append(
-                    BatchResult(
-                        custom_id=custom_id,
-                        content=content_text,
-                        error=None,
-                    )
+            if debug_printed < 3:
+                print(f"  [DEBUG] Batch error for {custom_id}: {entry.get('error')}")
+                debug_printed += 1
+            continue
+
+        response = entry.get("response", {})
+        response_body = response.get("body", {})
+
+        # Check for error in response body (e.g., status_code 400)
+        if response_body.get("error"):
+            error_msg = response_body["error"].get("message", str(response_body["error"]))
+            results.append(
+                BatchResult(
+                    custom_id=custom_id,
+                    content=None,
+                    error=error_msg,
                 )
-            else:
-                results.append(
-                    BatchResult(
-                        custom_id=custom_id,
-                        content=None,
-                        error="No choices in response",
+            )
+            if debug_printed < 3:
+                print(f"  [DEBUG] Response error for {custom_id}: {error_msg}")
+                debug_printed += 1
+            continue
+
+        choices = response_body.get("choices", [])
+        if choices:
+            content_text = choices[0].get("message", {}).get("content", "")
+            results.append(
+                BatchResult(
+                    custom_id=custom_id,
+                    content=content_text,
+                    error=None,
+                )
+            )
+        else:
+            # Debug: print the full response structure if no choices
+            if debug_printed < 3:
+                print(f"  [DEBUG] No choices for {custom_id}: {json.dumps(entry)[:500]}")
+                debug_printed += 1
+            results.append(
+                BatchResult(
+                    custom_id=custom_id,
+                    content=None,
+                    error="No choices in response",
                     )
                 )
 
@@ -245,6 +284,18 @@ def run_batch(
 
         if status["status"] != "completed":
             raise RuntimeError(f"Batch job failed with status: {status['status']}")
+
+        # Check for output file
+        if not status["output_file_id"]:
+            error_msg = f"Batch job completed but no output file. Request counts: {status['request_counts']}"
+            # Try to get error details if available
+            if status.get("error_file_id"):
+                try:
+                    error_content = client.files.content(status["error_file_id"])
+                    error_msg += f"\nError file contents:\n{error_content.text[:2000]}"
+                except Exception:
+                    pass
+            raise RuntimeError(error_msg)
 
         # Download results
         results = download_batch_results(client, status["output_file_id"])

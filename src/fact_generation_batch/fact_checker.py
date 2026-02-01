@@ -13,21 +13,10 @@ from src.fact_generation_batch.openai_batch_client import (
     BatchResult,
     run_batch,
 )
-
-FACT_CHECK_SYSTEM_PROMPT = """You are a fact-checking auditor. Assess how confident you are that claims are factually correct.
-
-Respond with a confidence score between 0 and 100 inside <confidence> tags:
-- 0 means you are certain the claim is INCORRECT
-- 100 means you are certain the claim is CORRECT
-- 50 means you are completely uncertain
-
-Do not provide any explanation, only the score in tags."""
-
-FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT = """How confident are you that this claim is factually correct? Respond with a score from 0-100 inside <confidence></confidence> tags.
-
-CONTEXT: This claim is related to the question: {question}
-
-CLAIM: {hypothesis}"""
+from src.fact_generation_batch.prompts import (
+    FACT_CHECK_SYSTEM_PROMPT,
+    FACT_CHECK_USER_TEMPLATE,
+)
 
 
 def create_fact_check_requests(
@@ -52,7 +41,7 @@ def create_fact_check_requests(
 
     for fact, question, q_idx, f_idx in facts_data:
         custom_id = f"q{q_idx}_f{f_idx}"
-        user_content = FACT_CHECK_USER_TEMPLATE_WITH_CONTEXT.format(
+        user_content = FACT_CHECK_USER_TEMPLATE.format(
             hypothesis=fact, question=question
         )
 
@@ -128,7 +117,7 @@ def fact_check_batch(
     timeout: int = 86400,
     progress_callback=None,
     temp_dir: str | Path | None = None,
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
     """
     Fact-check all facts in final_results using OpenAI Batch API.
 
@@ -144,7 +133,9 @@ def fact_check_batch(
         temp_dir: Directory for temporary JSONL files
 
     Returns:
-        Updated final_results with low-confidence facts filtered out
+        Tuple of (filtered_results, detailed_scores):
+        - filtered_results: Updated final_results with low-confidence facts filtered out
+        - detailed_scores: List of dicts with all facts and their confidence scores
     """
     # Collect all facts with their indices
     facts_data = []
@@ -192,23 +183,43 @@ def fact_check_batch(
     else:
         print(f"  No valid confidence scores, {unknown_count} unknown")
 
-    # Filter out facts below confidence threshold
+    # Build detailed scores and filter out facts below confidence threshold
+    detailed_scores = []
     filtered_count = 0
+
     for q_idx, q_data in enumerate(final_results):
         original_facts = q_data["facts"]
         filtered_facts = []
+        facts_with_scores = []
+
         for f_idx, fact in enumerate(original_facts):
             confidence = fact_checks.get((q_idx, f_idx))
+            facts_with_scores.append(
+                {
+                    "fact": fact,
+                    "confidence_score": confidence,
+                    "passed_threshold": confidence is None or confidence >= confidence_threshold,
+                }
+            )
             # Keep facts with confidence >= threshold or unknown (None)
             if confidence is None or confidence >= confidence_threshold:
                 filtered_facts.append(fact)
             else:
                 filtered_count += 1
+
+        detailed_scores.append(
+            {
+                "question": q_data["question"],
+                "level": q_data["level"],
+                "category": q_data["category"],
+                "facts_with_scores": facts_with_scores,
+            }
+        )
         final_results[q_idx]["facts"] = filtered_facts
 
     print(f"  Filtered out {filtered_count} facts below confidence threshold ({confidence_threshold})")
 
-    return final_results
+    return final_results, detailed_scores
 
 
 if __name__ == "__main__":
@@ -239,16 +250,21 @@ if __name__ == "__main__":
         def progress(completed, total, status):
             print(f"  Batch progress: {completed}/{total} ({status})")
 
-        results = fact_check_batch(
+        results, detailed_scores = fact_check_batch(
             final_results=final_results,
             model=model,
             confidence_threshold=confidence_threshold,
             progress_callback=progress,
         )
 
+        print(f"\nAll facts with scores:")
+        for item in detailed_scores[0]["facts_with_scores"]:
+            status = "PASS" if item["passed_threshold"] else "FAIL"
+            print(f"  [{status}] (score={item['confidence_score']}) {item['fact']}")
+
         print(f"\nFacts remaining after filtering (threshold={confidence_threshold}):")
         for fact in results[0]["facts"]:
             print(f"  - {fact}")
-        return results
+        return results, detailed_scores
 
     fire.Fire(test)

@@ -8,16 +8,17 @@ topic: "tiananmen_square_1989"
 
 models:
   # Question generation uses OpenRouter (cheap, single call)
-  question: "gpt-4.1-mini"
+  question: "openai/gpt-5.2"
   # Rollout model - must be an OpenAI model for batch API
   rollout: "gpt-4.1-mini"
   # Extraction model - must be an OpenAI model for batch API
-  extraction: "gpt-4.1-mini"
+  extraction: "gpt-5-mini"
 
 generation:
-  num_categories: 2
+  num_categories: 15
   num_questions_per_level: 2
-  temperature: 0.7
+  temperature: 1.0
+
 
 # Question validation using MCQ testing (OpenRouter API)
 # Tests if the rollout model has factual knowledge to answer each question
@@ -37,12 +38,13 @@ question_validation:
   max_regeneration_attempts: 3
 
 rollout:
-  num_rollouts: 5
-  temperature: 0.7
-  max_tokens: 1000
+  num_rollouts: 10
+  temperature: 1.0
+  max_tokens: 10000
 
 fact_extraction:
-  temperature: 0.3
+  temperature: 1.0
+  max_tokens: 10000
 
 deduplication:
   # Cosine similarity threshold for clustering (lower = more aggressive merging)
@@ -51,11 +53,13 @@ deduplication:
 fact_check:
   # Model for fact-checking extracted facts (set to null to skip)
   # Must be an OpenAI model for batch API
-  model: "gpt-4.1-mini"
+  model: "gpt-5-mini"
   # model: null
+  temperature: 1.0
+  max_tokens: 10000
   # Confidence threshold (0-100): facts below this score are filtered out
   # 0 = certain incorrect, 100 = certain correct
-  confidence_threshold: 70
+  confidence_threshold: 50
 
 # Batch API specific settings
 batch:
@@ -71,6 +75,6 @@ api:
 
 output:
   # Intermediate outputs (including batch JSONL files)
-  intermediate_dir: "output/eval_pipeline_batch4"
+  intermediate_dir: "output/eval_pipeline"
   # Final output
-  final_dir: "data/eval_questions_batch4"
+  final_dir: "data/"
