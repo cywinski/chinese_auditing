@@ -1,112 +1,63 @@
-# Interpretability Research Template
+# Chinese LLMs Auditing
 
-## Overall Pipeline
+## Main Pipeline
 
-1. Generate evaluation questions and expected facts for auditing Chinese LLMs on a selected sensitive topic (see Evaluation Pipeline below)
-2. Generate rollouts for selected auditing method.
-3. Evaluate auditing method using hypothesis generation pipeline.
+1. **Generate ground truth facts** for a sensitive topic
+2. **Sample responses** from target model using an auditing method
+3. **Extract hypotheses** and compute metrics
 
-## Evaluation Pipeline
+## 1. Generate Ground Truth Facts
 
-Generates evaluation questions and expected facts for auditing Chinese LLMs on sensitive topics.
+Generates evaluation questions and expected facts using OpenAI Batch API.
 
 **Steps:**
-1. Generate categories and questions (focused on likely censored content) -- good to use a strong model here.
-2. Sample multiple rollouts per question from an uncensored model
-3. Extract atomic factual claims from each rollout
-4. Deduplicate semantically equivalent facts (embedding-based clustering)
-5. Fact-check claims and filter incorrect ones (optional)
+1. Generate categories and questions for the topic
+2. Sample rollouts from an uncensored model
+3. Extract atomic factual claims
+4. Deduplicate facts (embedding-based)
+5. Fact-check and filter (optional)
 
-**Run:**
 ```bash
-# Full pipeline
-python src/fact_generation/pipeline.py configs/eval_pipeline.yaml
-
-# Resume from specific step (uses cached data)
-python src/fact_generation/pipeline.py configs/eval_pipeline.yaml --start_from=extraction
-python src/fact_generation/pipeline.py configs/eval_pipeline.yaml --start_from=dedup
-python src/fact_generation/pipeline.py configs/eval_pipeline.yaml --start_from=fact_check
+python src/fact_generation_batch/pipeline.py configs/eval_pipeline_batch.yaml
+python src/fact_generation_batch/pipeline.py configs/eval_pipeline_batch.yaml --start_from=rollouts
 ```
 
-**Config options:**
-```yaml
-topic: "tiananmen_square_1989"
+**Output:** JSON file with generated categories, questions, and facts
 
-models:
-  question: "openai/gpt-5.2"           # Category/question generation
-  rollout: "meta-llama/llama-3.3-70b-instruct"  # Answer sampling
-  extraction: "openai/gpt-5.2"         # Fact extraction
+## 2. Sample Responses
 
-generation:
-  num_categories: 15
-  num_questions_per_level: 2  # Per category (broad + targeted)
+Sample responses from target model via OpenAI Batch API:
 
-rollout:
-  num_rollouts: 10            # Samples per question
-
-deduplication:
-  similarity_threshold: 0.8   # Higher = less merging (0.8-0.9 recommended)
-
-fact_check:
-  model: "openai/gpt-5.2"     # Set to null to skip fact-checking
-```
-
-**Output:**
-- Intermediate: `output/eval_pipeline/<topic>/`
-- Final: `output/eval_questions/<topic>.json`
-
-## Extract hypotheses and compute metrics
 ```bash
-python src/hypothesis_auditor.py run configs/hypothesis_auditor.yaml
+python src/fact_generation_batch/response_sampler.py configs/sampling_batch_template.yaml
 ```
 
-Note: unfortunately, it takes a while, but works much better than embedding-based matching.
+Or via OpenRouter (for non-OpenAI models):
 
-### Plot metrics
-```bash
-# Single model
-python src/plot_scripts/plot_hypothesis_metrics.py path/to/metrics.json
-
-# Compare all models in directory
-python src/plot_scripts/plot_hypothesis_metrics.py output/eval_questions/tiananmen_square_1989/hypotheses
-```
-
-Gemini 3 Flash with disabled reasoning seems to be the best in terms of speed and accuracy for simple yes/no filtering tasks. Haiku 4.5 is also good, but empirically seems to be slightly more accurate.
-
-## Quick Start
-
-### Sampling responses
 ```bash
 python src/openrouter_client.py configs/sampling_eval_facts_llama.yaml
 ```
 
-### Autorater with fact-checking
+## 3. Extract Hypotheses and Compute Metrics
+
+Extracts factual claims from model responses and compares them to ground truth.
+
+**Steps:**
+1. Extract hypotheses (factual claims) from each response
+2. Faithfulness check - filter out claims not faithful to source
+3. Fact-check - assign confidence scores to each claim
+4. Compute metrics - match hypotheses to ground truth facts (precision/recall/F1)
+
 ```bash
-# Update input_file in config to match sampling output path
-python src/autorater.py configs/autorater_facts_config.yaml
+python src/hypothesis_auditor_batch.py run configs/hypothesis_auditor_batch.yaml
 ```
 
-Set `facts_file` in autorater config to enable fact-checking mode (checks each fact in eval_facts.json).
-
-### Steering inference
+For metrics only (if hypotheses already extracted):
 ```bash
-python src/steering_inference.py configs/steering_inference_eval_facts.yaml
+python src/hypothesis_auditor_batch.py metrics_only configs/hypothesis_auditor_batch.yaml
 ```
 
-Computes steering vector inline and sweeps over factors/layers.
-
-### Plot results
+### Plot metrics
 ```bash
-# Response-level breakdown (refusal/correct/partial/incorrect + lie rate)
-python src/plot_autorater_results.py responses
-
-# Per-fact breakdown (refusal/mentioned/not mentioned/lie)
-python src/plot_autorater_results.py facts
-```
-
-## Hypothesis Auditing
-
-### Generate hypotheses
-```bash
-python src/hypothesis_auditor.py configs/hypothesis_auditor.yaml
+python src/plot_scripts/plot_hypothesis_metrics.py output/hypotheses/
 ```

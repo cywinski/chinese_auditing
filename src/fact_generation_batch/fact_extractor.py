@@ -15,23 +15,10 @@ from src.fact_generation_batch.openai_batch_client import (
     parse_json_from_response,
     run_batch,
 )
-
-# Same prompt as original fact_extractor.py
-EXTRACTION_PROMPT = """Extract atomic facts from the following answer.
-
-Question: {question}
-Answer: {rollout}
-
-Instructions:
-1. Extract all distinct factual claims that are directly related to the question
-2. Each fact MUST be ATOMIC (one single piece of information per fact)
-   - BAD: "Zhao Ziyang was removed from power and placed under house arrest"
-   - GOOD: "Zhao Ziyang was removed from power" and "Zhao Ziyang was placed under house arrest"
-3. Each fact MUST be SELF-CONTAINED with FULL context required to understand the fact
-4. Do NOT include redundant facts
-5. All facts must be factually accurate and verifiable
-
-Return as JSON array of fact strings. Remember to include all necessary context that is required to understand each fact."""
+from src.fact_generation_batch.prompts import (
+    FACT_EXTRACTION_SYSTEM_PROMPT,
+    FACT_EXTRACTION_USER_TEMPLATE,
+)
 
 
 class RolloutFacts(TypedDict):
@@ -58,12 +45,15 @@ def create_extraction_requests(
         question = q_data["question"]
         for r_idx, rollout in enumerate(q_data["rollouts"]):
             custom_id = f"q{q_idx}_r{r_idx}"
-            prompt = EXTRACTION_PROMPT.format(question=question, rollout=rollout)
+            user_content = FACT_EXTRACTION_USER_TEMPLATE.format(prompt=question, response=rollout)
 
             requests.append(
                 BatchRequest(
                     custom_id=custom_id,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[
+                        {"role": "system", "content": FACT_EXTRACTION_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_content},
+                    ],
                     model=model,
                     temperature=temperature,
                     max_tokens=max_tokens,
@@ -98,6 +88,8 @@ def parse_extraction_results(
                 parsed = parse_json_from_response(result.content, default=[])
                 if isinstance(parsed, list):
                     facts = [f for f in parsed if isinstance(f, str)]
+                elif isinstance(parsed, dict) and "hypotheses" in parsed:
+                    facts = [f for f in parsed["hypotheses"] if isinstance(f, str)]
             except Exception:
                 pass
 
@@ -106,12 +98,14 @@ def parse_extraction_results(
     # Build final structure
     output = []
     for q_idx, q_data in enumerate(rollouts_data):
-        output.append({
-            "question": q_data["question"],
-            "level": q_data["level"],
-            "category": q_data["category"],
-            "extracted_facts": question_facts[q_idx],
-        })
+        output.append(
+            {
+                "question": q_data["question"],
+                "level": q_data["level"],
+                "category": q_data["category"],
+                "extracted_facts": question_facts[q_idx],
+            }
+        )
 
     return output
 

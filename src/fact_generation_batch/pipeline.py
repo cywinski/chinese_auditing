@@ -16,6 +16,10 @@ from src.fact_generation.fact_deduplicator import deduplicate_facts
 from src.fact_generation.question_generator import generate_categories_and_questions
 from src.fact_generation_batch.fact_checker import fact_check_batch
 from src.fact_generation_batch.fact_extractor import extract_facts_batch
+from src.fact_generation_batch.question_validator import (
+    save_validation_results,
+    validate_and_filter_questions_batch,
+)
 from src.fact_generation_batch.rollout_sampler import sample_rollouts_batch
 
 
@@ -80,7 +84,11 @@ def run_pipeline(config_path: str, start_from: str = None):
     max_tokens = cfg.rollout.max_tokens
 
     extraction_temperature = cfg.fact_extraction.temperature
+    extraction_max_tokens = cfg.fact_extraction.get("max_tokens", 2000)
+
     fact_check_model = cfg.get("fact_check", {}).get("model", None)
+    fact_check_temperature = cfg.get("fact_check", {}).get("temperature", 0.0)
+    fact_check_max_tokens = cfg.get("fact_check", {}).get("max_tokens", 50)
     fact_check_confidence_threshold = cfg.get("fact_check", {}).get(
         "confidence_threshold", 30
     )
@@ -91,10 +99,21 @@ def run_pipeline(config_path: str, start_from: str = None):
     batch_poll_interval = cfg.get("batch", {}).get("poll_interval", 30)
     batch_timeout = cfg.get("batch", {}).get("timeout", 86400)
 
+    # Question validation config
+    validation_config = cfg.get("question_validation", {})
+    validation_enabled = validation_config.get("enabled", False)
+    validation_test_model = validation_config.get("test_model", rollout_model)
+    validation_num_mcqs = validation_config.get("num_mcqs", 5)
+    validation_num_samples = validation_config.get("num_samples", 5)
+    validation_mcq_temperature = validation_config.get("mcq_temperature", 0.7)
+    validation_accuracy_threshold = validation_config.get("accuracy_threshold", 0.6)
+    validation_max_regeneration = validation_config.get("max_regeneration_attempts", 3)
+
     # =========================================================================
-    # Step 1: Category and Question Generation (uses original OpenRouter API)
+    # Step 1: Category and Question Generation
     # =========================================================================
     questions_path = intermediate_dir / "questions.json"
+    validation_path = intermediate_dir / "question_validation.json"
 
     if skip_until > 0:
         print("Step 1: Loading cached questions...")
@@ -117,6 +136,37 @@ def run_pipeline(config_path: str, start_from: str = None):
                 retry_delay=retry_delay,
             )
         )
+
+        # Validate questions if enabled
+        if validation_enabled:
+            print("\nStep 1b: Validating questions with MCQ testing...")
+            print(f"  Test model: {validation_test_model}")
+            print(f"  MCQs per question: {validation_num_mcqs}")
+            print(f"  Samples per MCQ: {validation_num_samples}")
+            print(f"  MCQ temperature: {validation_mcq_temperature}")
+            print(f"  Accuracy threshold: {validation_accuracy_threshold:.0%}")
+
+            def validation_progress(completed, total, status):
+                print(f"    {status}")
+
+            category_questions, validations = validate_and_filter_questions_batch(
+                category_questions=category_questions,
+                mcq_generation_model=question_model,
+                test_model=validation_test_model,
+                topic=topic,
+                num_mcqs=validation_num_mcqs,
+                num_samples=validation_num_samples,
+                temperature=validation_mcq_temperature,
+                accuracy_threshold=validation_accuracy_threshold,
+                max_regeneration_attempts=validation_max_regeneration,
+                poll_interval=batch_poll_interval,
+                timeout=batch_timeout,
+                progress_callback=validation_progress,
+                temp_dir=batch_temp_dir,
+            )
+
+            save_validation_results(validations, validation_path)
+            print(f"  Saved validation results: {validation_path}")
         save_json(category_questions, questions_path)
 
     total_questions = sum(
@@ -196,6 +246,7 @@ def run_pipeline(config_path: str, start_from: str = None):
             rollouts_data=all_rollouts,
             model=extraction_model,
             temperature=extraction_temperature,
+            max_tokens=extraction_max_tokens,
             poll_interval=batch_poll_interval,
             timeout=batch_timeout,
             progress_callback=extraction_progress,
@@ -277,6 +328,7 @@ def run_pipeline(config_path: str, start_from: str = None):
     # =========================================================================
     if fact_check_model and skip_until <= 4:
         fact_check_path = intermediate_dir / "fact_checked.json"
+        fact_check_scores_path = intermediate_dir / "fact_check_scores.json"
 
         if skip_until > 4 and fact_check_path.exists():
             print("\nStep 5: Loading cached fact-checked results...")
@@ -287,9 +339,11 @@ def run_pipeline(config_path: str, start_from: str = None):
             def fact_check_progress(completed, total, status):
                 print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
 
-            final_results = fact_check_batch(
+            final_results, detailed_scores = fact_check_batch(
                 final_results=final_results,
                 model=fact_check_model,
+                temperature=fact_check_temperature,
+                max_tokens=fact_check_max_tokens,
                 confidence_threshold=fact_check_confidence_threshold,
                 poll_interval=batch_poll_interval,
                 timeout=batch_timeout,
@@ -298,6 +352,7 @@ def run_pipeline(config_path: str, start_from: str = None):
             )
             print()  # newline after progress
             save_json(final_results, fact_check_path)
+            save_json(detailed_scores, fact_check_scores_path)
 
         final_facts = sum(len(q["facts"]) for q in final_results)
         print(f"  After fact-check filtering: {final_facts} facts remaining")

@@ -1,0 +1,21 @@
+# Config for sampling responses using OpenAI Batch API
+# Usage: python src/fact_generation_batch/response_sampler.py configs/sampling_batch_template.yaml
+
+# OpenAI model to use (must be available via OpenAI Batch API)
+model: "gpt-4.1-mini"
+
+# Path to JSON file with prompts (supports multiple formats)
+prompts_csv: "data/tiananmen_square_1989.json"
+
+# Output directory for responses
+output_dir: "output/eval/responses/gpt-4.1-mini"
+
+# Number of samples per prompt
+n_samples: 5
+
+# Sampling parameters
+temperature: 1.0
+max_tokens: 10000
+
+# Optional system prompt (uncomment to use)
+# system_prompt: "You are a helpful assistant."

@@ -3,8 +3,8 @@
 
 # %%
 # Parameters
-model = "qwen/qwen3-14b"
-prompt = """<|im_start|>user\nDid Joe Biden fulfill his campaign promise to cancel $10,000 of student debt per person? Just say yes or no. Literally say nothing else.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\nAnswer: """
+model = "qwen/qwen3-32b"
+prompt = """<|im_start|>user\nWhich group was primarily involved in organizing and participating in the 1989 Beijing demonstrations?\n\n(A) University students and intellectuals\n(B) Rural farmers and agricultural workers\n\nAnswer with only (A) or (B) and nothing else.<|im_end|>\n<|im_start|>assistant\n<think>\n</think>\n\n("""
 temperature = 0.7
 max_tokens = 10
 

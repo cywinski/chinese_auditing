@@ -15,7 +15,10 @@ from omegaconf import OmegaConf
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.fact_generation.fact_deduplicator import deduplicate_facts
-from src.fact_generation.question_generator import generate_categories_and_questions
+from src.fact_generation.question_generator import (
+    generate_categories_and_questions,
+    generate_and_validate_questions,
+)
 from src.fact_generation.rollout_sampler import sample_rollouts
 from src.hypothesis_auditor import fact_check_hypothesis
 
@@ -78,10 +81,19 @@ async def run_pipeline_async(cfg):
     max_retries = cfg.api.max_retries
     retry_delay = cfg.api.retry_delay
 
+    # Question validation config
+    validation_config = cfg.get("question_validation", {})
+    validation_enabled = validation_config.get("enabled", False)
+    validation_test_model = validation_config.get("test_model", rollout_model)
+    validation_num_mcqs = validation_config.get("num_mcqs", 5)
+    validation_accuracy_threshold = validation_config.get("accuracy_threshold", 0.6)
+    validation_max_regeneration = validation_config.get("max_regeneration_attempts", 3)
+
     # =========================================================================
     # Step 1: Category and Question Generation
     # =========================================================================
     questions_path = intermediate_dir / "questions.json"
+    validation_path = intermediate_dir / "question_validation.json"
 
     if skip_until > 0:
         print("Step 1: Loading cached questions...")
@@ -90,16 +102,41 @@ async def run_pipeline_async(cfg):
         print("Step 1: Loading cached questions...")
         category_questions = load_json(questions_path)
     else:
-        print("Step 1: Generating categories and questions...")
-        category_questions = await generate_categories_and_questions(
-            topic=topic,
-            model=question_model,
-            num_categories=num_categories,
-            num_questions_per_level=num_questions_per_level,
-            temperature=gen_temperature,
-            max_retries=max_retries,
-            retry_delay=retry_delay,
-        )
+        if validation_enabled:
+            print("Step 1: Generating and validating questions with MCQ testing...")
+            print(f"  Test model: {validation_test_model}")
+            print(f"  MCQs per question: {validation_num_mcqs}")
+            print(f"  Accuracy threshold: {validation_accuracy_threshold:.0%}")
+
+            def validation_progress(msg):
+                print(f"    {msg}")
+
+            category_questions, validations = await generate_and_validate_questions(
+                topic=topic,
+                question_model=question_model,
+                test_model=validation_test_model,
+                num_categories=num_categories,
+                num_questions_per_level=num_questions_per_level,
+                temperature=gen_temperature,
+                num_mcqs=validation_num_mcqs,
+                accuracy_threshold=validation_accuracy_threshold,
+                max_regeneration_attempts=validation_max_regeneration,
+                max_retries=max_retries,
+                retry_delay=retry_delay,
+                validation_output_path=validation_path,
+                progress_callback=validation_progress,
+            )
+        else:
+            print("Step 1: Generating categories and questions...")
+            category_questions = await generate_categories_and_questions(
+                topic=topic,
+                model=question_model,
+                num_categories=num_categories,
+                num_questions_per_level=num_questions_per_level,
+                temperature=gen_temperature,
+                max_retries=max_retries,
+                retry_delay=retry_delay,
+            )
         save_json(category_questions, questions_path)
 
     total_questions = sum(

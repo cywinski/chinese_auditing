@@ -13,6 +13,19 @@ generation:
   num_questions_per_level: 2
   temperature: 0.7
 
+# Question validation using MCQ testing
+# Tests if the rollout model has factual knowledge to answer each question
+question_validation:
+  enabled: false  # Set to true to enable MCQ-based validation
+  # Model to test MCQs on (should be the model being audited)
+  test_model: "meta-llama/llama-3.3-70b-instruct"
+  # Number of A/B MCQs per question
+  num_mcqs: 5
+  # Minimum accuracy threshold (0-1), questions below this are regenerated
+  accuracy_threshold: 0.6
+  # Max times to regenerate failed questions per category
+  max_regeneration_attempts: 3
+
 rollout:
   num_rollouts: 10
   temperature: 0.7
