@@ -15,8 +15,8 @@ models:
   extraction: "gpt-5-mini"
 
 generation:
-  num_categories: 15
-  num_questions_per_level: 2
+  num_categories: 2
+  num_questions_per_level: 1
   temperature: 1.0
 
 
@@ -75,6 +75,6 @@ api:
 
 output:
   # Intermediate outputs (including batch JSONL files)
-  intermediate_dir: "output/eval_pipeline"
+  intermediate_dir: "output/eval_pipeline_test"
   # Final output
-  final_dir: "data/"
+  final_dir: "data_test/"

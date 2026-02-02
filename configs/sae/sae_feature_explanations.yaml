@@ -1,0 +1,42 @@
+# Config for generating natural language explanations for SAE features
+
+# Model configuration
+model: "Qwen/Qwen3-32B"
+
+# SAE configuration
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_layer: 32
+sae_trainer: 2
+
+# Feature selection from prompt_features output
+prompt_features_path: "output/eval_test/sae/sae_features_layer32.json"
+
+# Incremental mode: skip features already explained
+# Set to path of previous output to resume/extend explanations
+existing_explanations_path: null
+
+# Dataset for collecting activating examples
+dataset: "monology/pile-uncopyrighted"
+dataset_split: "train"
+n_tokens: 5_000_000
+max_seq_len: 512
+batch_size: 16
+
+# Example collection settings
+top_n_examples: 10  # Number of top activating examples to collect per feature
+context_left: 5    # Tokens of context before activating token
+context_right: 5    # Tokens of context after activating token
+activation_threshold: 0.5  # Minimum activation value to consider
+
+# Positive logits settings
+top_k_logits: 10
+enable_translation: false  # Translate Chinese tokens to English
+
+# LLM explainer settings (uses OpenAI Batch API)
+explainer_model: "gpt-4.1-mini"
+top_examples_to_save: 5  # Number of top examples to save in output
+
+# Output
+output_path: "output/eval_test/sae/feature_explanations.json"
+
+seed: 42

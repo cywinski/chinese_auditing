@@ -56,11 +56,7 @@ def collect_activations(
 
     def hook(module, input, output):
         nonlocal activations
-        # Handle tuple outputs (some layers return tuple)
-        if isinstance(output, tuple):
-            activations = output[0].detach()
-        else:
-            activations = output.detach()
+        activations = output.detach()
         raise EarlyStopException()
 
     handle = submodule.register_forward_hook(hook)

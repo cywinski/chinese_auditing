@@ -197,21 +197,21 @@ def get_model_device(model):
     return next(model.parameters()).device
 
 
-def extract_assistant_activations(
+def extract_assistant_activations_multi_layer(
     model,
     tokenizer,
-    layer_idx: int,
+    layer_indices: list[int],
     samples: list[tuple],
     batch_size: int = 4,
     exclude_last_n: int = 0,
     exclude_prefixes: list[str] | None = None,
-) -> list[torch.Tensor]:
-    """Extract activations from all assistant response tokens.
+) -> dict[int, list[torch.Tensor]]:
+    """Extract activations from multiple layers at once for all assistant response tokens.
 
     Args:
         model: HuggingFace model
         tokenizer: Tokenizer
-        layer_idx: Layer index to extract from
+        layer_indices: List of layer indices to extract from
         samples: List of tuples - either (user_content, assistant_response) or
                  (system_prompt, user_content, assistant_response)
         batch_size: Batch size for processing
@@ -220,7 +220,7 @@ def extract_assistant_activations(
                          of each assistant response (one per sample)
 
     Returns:
-        List of tensors, each of shape [n_tokens, d_model] for each sample
+        Dict mapping layer_idx -> list of tensors, each of shape [n_tokens, d_model]
     """
     device = get_model_device(model)
 
@@ -275,11 +275,12 @@ def extract_assistant_activations(
             )
 
     if not prompt_data:
-        return []
+        return {layer_idx: [] for layer_idx in layer_indices}
+
+    # Initialize results for all layers
+    all_activations = {layer_idx: [None] * len(prompt_data) for layer_idx in layer_indices}
 
     # Process in batches
-    all_activations = [None] * len(prompt_data)
-
     for batch_start in range(0, len(prompt_data), batch_size):
         batch = prompt_data[batch_start : batch_start + batch_size]
         prompts = [d["prompt"] for d in batch]
@@ -304,9 +305,9 @@ def extract_assistant_activations(
                 num_logits_to_keep=0,
                 use_cache=False,
             )
-            activations = fwd_out.hidden_states[layer_idx]
+            hidden_states = fwd_out.hidden_states
 
-        # Extract assistant activations for each sample, accounting for padding
+        # Extract assistant activations for each sample and layer
         for i, d in enumerate(batch):
             seq_len = len(d["tokens"])
             padded_len = inputs["input_ids"].shape[1]
@@ -316,46 +317,32 @@ def extract_assistant_activations(
             adj_start = pad_offset + d["start"]
             adj_end = pad_offset + d["end"]
 
-            assistant_acts = activations[i, adj_start:adj_end].cpu()
-            all_activations[batch_start + i] = assistant_acts
+            for layer_idx in layer_indices:
+                assistant_acts = hidden_states[layer_idx][i, adj_start:adj_end].cpu()
+                all_activations[layer_idx][batch_start + i] = assistant_acts
 
     return all_activations
 
 
-def train_probe(
-    model,
-    tokenizer,
-    layer_idx: int,
-    deceptive_samples: list[tuple[str, str]],
-    honest_samples: list[tuple[str, str]],
-    batch_size: int = 4,
+def train_probe_from_activations(
+    deceptive_acts_list: list[torch.Tensor],
+    honest_acts_list: list[torch.Tensor],
     probe_method: str = "difference_in_means",
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-    """Train a probe using specified method.
+    """Train a probe using specified method from pre-extracted activations.
 
     Args:
+        deceptive_acts_list: List of activation tensors for deceptive samples
+        honest_acts_list: List of activation tensors for honest samples
         probe_method: Either "difference_in_means" or "logistic_regression"
 
     Returns:
         Tuple of (probe_direction, mean, std) where mean and std are used for normalization.
         For difference_in_means, mean and std are None (no normalization).
     """
-    print("  Extracting deceptive activations...")
-    deceptive_acts_list = extract_assistant_activations(
-        model, tokenizer, layer_idx, deceptive_samples, batch_size, exclude_last_n=5
-    )
-
-    print("  Extracting honest activations...")
-    honest_acts_list = extract_assistant_activations(
-        model, tokenizer, layer_idx, honest_samples, batch_size, exclude_last_n=5
-    )
-
     # Concatenate all token activations across all samples
     all_deceptive = torch.cat(deceptive_acts_list, dim=0)
     all_honest = torch.cat(honest_acts_list, dim=0)
-
-    print(f"  Deceptive activations: {all_deceptive.shape}")
-    print(f"  Honest activations: {all_honest.shape}")
 
     if probe_method == "difference_in_means":
         # Compute difference in means on raw (unnormalized) activations
@@ -390,61 +377,23 @@ def train_probe(
         raise ValueError(f"Unknown probe method: {probe_method}")
 
 
-def evaluate_probe_paired(
-    model,
-    tokenizer,
-    layer_idx: int,
+def compute_probe_scores(
+    acts_list: list[torch.Tensor],
     probe_direction: torch.Tensor,
-    train_mean: torch.Tensor | None,
-    train_std: torch.Tensor | None,
-    deceptive_samples: list[tuple],
-    honest_samples: list[tuple],
-    batch_size: int = 4,
-    exclude_last_n: int = 0,
-    exclude_prefixes: list[str] | None = None,
-) -> tuple[float, list[float], list[float]]:
-    """Evaluate probe on paired samples by comparing deceptive vs honest scores.
-
-    For each pair, success if deceptive score > honest score.
+    train_mean: torch.Tensor | None = None,
+    train_std: torch.Tensor | None = None,
+) -> list[float]:
+    """Compute probe scores from pre-extracted activations.
 
     Args:
-        model: HuggingFace model
-        tokenizer: Tokenizer
-        layer_idx: Layer index to evaluate at
+        acts_list: List of activation tensors for each sample
         probe_direction: Probe direction tensor of shape [d_model]
         train_mean: Mean from training data for normalization (None for no normalization)
         train_std: Std from training data for normalization (None for no normalization)
-        deceptive_samples: List of deceptive samples
-        honest_samples: List of honest samples (same length, paired with deceptive)
-        batch_size: Batch size for processing
-        exclude_last_n: Number of tokens to exclude from the end of assistant response
-        exclude_prefixes: Optional list of prefix strings to exclude from each sample
 
     Returns:
-        Tuple of (success_rate, deceptive_scores, honest_scores)
+        List of scores, one per sample (mean over tokens)
     """
-    print("  Extracting deceptive activations...")
-    deceptive_acts_list = extract_assistant_activations(
-        model,
-        tokenizer,
-        layer_idx,
-        deceptive_samples,
-        batch_size,
-        exclude_last_n,
-        exclude_prefixes=exclude_prefixes,
-    )
-
-    print("  Extracting honest activations...")
-    honest_acts_list = extract_assistant_activations(
-        model,
-        tokenizer,
-        layer_idx,
-        honest_samples,
-        batch_size,
-        exclude_last_n,
-        exclude_prefixes=exclude_prefixes,
-    )
-
     probe = probe_direction.cpu().float()
     use_normalization = train_mean is not None and train_std is not None
     if use_normalization:
@@ -458,14 +407,7 @@ def evaluate_probe_paired(
         token_scores = (acts_f @ probe).numpy()
         return token_scores.mean()
 
-    deceptive_scores = [compute_score(acts) for acts in deceptive_acts_list]
-    honest_scores = [compute_score(acts) for acts in honest_acts_list]
-
-    # Success if deceptive score > honest score
-    successes = sum(d > h for d, h in zip(deceptive_scores, honest_scores))
-    success_rate = successes / len(deceptive_scores)
-
-    return success_rate, deceptive_scores, honest_scores
+    return [compute_score(acts) for acts in acts_list]
 
 
 def run(config_path: str):
@@ -555,37 +497,68 @@ def run(config_path: str):
     batch_size = config.get("batch_size", 4)
     probe_method = config.get("probe_method", "difference_in_means")
     print(f"Probe method: {probe_method}")
+
+    # Pre-extract all activations from all layers at once
+    print("\n=== Pre-extracting activations from all layers ===")
+
+    print("Extracting training deceptive activations...")
+    train_deceptive_acts = extract_assistant_activations_multi_layer(
+        model, tokenizer, layers_to_eval, deceptive_train, batch_size, exclude_last_n=5
+    )
+
+    print("Extracting training honest activations...")
+    train_honest_acts = extract_assistant_activations_multi_layer(
+        model, tokenizer, layers_to_eval, honest_train, batch_size, exclude_last_n=5
+    )
+
+    print("Extracting roleplaying deceptive activations...")
+    rp_deceptive_acts = extract_assistant_activations_multi_layer(
+        model,
+        tokenizer,
+        layers_to_eval,
+        deceptive_rp,
+        batch_size,
+        exclude_last_n=0,
+        exclude_prefixes=answer_prefixes,
+    )
+
+    print("Extracting roleplaying honest activations...")
+    rp_honest_acts = extract_assistant_activations_multi_layer(
+        model,
+        tokenizer,
+        layers_to_eval,
+        honest_rp,
+        batch_size,
+        exclude_last_n=0,
+        exclude_prefixes=answer_prefixes,
+    )
+
+    print("Extracting Alpaca control activations...")
+    alpaca_acts = extract_assistant_activations_multi_layer(
+        model, tokenizer, layers_to_eval, alpaca_samples, batch_size, exclude_last_n=0
+    )
+
+    print("\n=== Processing layers ===")
     results = []
 
     for layer_idx in tqdm(layers_to_eval, desc="Processing layers"):
         print(f"\n=== Layer {layer_idx} ===")
 
-        # Train probe on facts
+        # Train probe on facts using pre-extracted activations
         print("Training probe on facts...")
-        probe_direction, train_mean, train_std = train_probe(
-            model,
-            tokenizer,
-            layer_idx,
-            deceptive_train,
-            honest_train,
-            batch_size,
+        probe_direction, train_mean, train_std = train_probe_from_activations(
+            train_deceptive_acts[layer_idx],
+            train_honest_acts[layer_idx],
             probe_method,
         )
 
-        # Evaluate probe on roleplaying (deceptive vs honest)
-        print("Evaluating on roleplaying (deceptive vs honest)...")
-        _, deceptive_scores_rp, honest_scores_rp = evaluate_probe_paired(
-            model,
-            tokenizer,
-            layer_idx,
-            probe_direction,
-            train_mean,
-            train_std,
-            deceptive_rp,
-            honest_rp,
-            batch_size,
-            exclude_last_n=0,
-            exclude_prefixes=answer_prefixes,
+        # Compute probe scores on roleplaying samples
+        print("Computing roleplaying scores...")
+        deceptive_scores_rp = compute_probe_scores(
+            rp_deceptive_acts[layer_idx], probe_direction, train_mean, train_std
+        )
+        honest_scores_rp = compute_probe_scores(
+            rp_honest_acts[layer_idx], probe_direction, train_mean, train_std
         )
 
         # Compute AUROC (deceptive vs honest) - only using purely graded samples
@@ -621,25 +594,11 @@ def run(config_path: str):
             auroc_rp = roc_auc_score(labels_rp, scores_rp)
             print("  AUROC computed on all samples (no grading filter)")
 
-        # Evaluate probe on Alpaca (control)
-        print("Evaluating on Alpaca (control)...")
-        alpaca_acts_list = extract_assistant_activations(
-            model, tokenizer, layer_idx, alpaca_samples, batch_size, exclude_last_n=0
+        # Compute Alpaca control scores
+        print("Computing Alpaca control scores...")
+        alpaca_scores = compute_probe_scores(
+            alpaca_acts[layer_idx], probe_direction, train_mean, train_std
         )
-
-        probe = probe_direction.cpu().float()
-        use_normalization = train_mean is not None and train_std is not None
-        if use_normalization:
-            mean = train_mean.cpu().float()
-            std = train_std.cpu().float()
-
-        alpaca_scores = []
-        for acts in alpaca_acts_list:
-            acts_f = acts.float()
-            if use_normalization:
-                acts_f = (acts_f - mean) / std
-            token_scores = (acts_f @ probe).numpy()
-            alpaca_scores.append(token_scores.mean())
 
         # Compute Recall @ 1% FPR (deceptive vs control)
         # Only use deceptive completions graded as "deceptive"

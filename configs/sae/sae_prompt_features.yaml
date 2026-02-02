@@ -1,0 +1,24 @@
+# Config for extracting TF-IDF features for all tokens in eval prompts
+
+model: "Qwen/Qwen3-32B"
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_layer: 32
+sae_trainer: 2
+
+# Path to feature density file (must contain mean_activation if use_centered_activation=true)
+density_path: "output/eval_test/sae/feature_density_layer32.pt"
+
+# Path to eval facts
+eval_facts_path: "data_test/tiananmen_square_1989.json"
+
+# Feature extraction settings
+top_k_features: 5  # Top features per token
+enable_thinking: false
+
+# Scoring mode
+# If false: score = activation * log(1/density)
+# If true:  score = (activation - mean_activation) * log(1/density)
+use_centered_activation: true
+
+# Output
+output_path: "output/eval_test/sae/sae_features_layer32.json"
