@@ -18,19 +18,23 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import (
+    AutoProcessor,
+    Qwen3VLForConditionalGeneration,
+)
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 def load_model(model_name: str, device_map: str = "auto"):
     """Load model and tokenizer in bfloat16."""
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
+    tokenizer = AutoProcessor.from_pretrained(model_name)
+    model = Qwen3VLForConditionalGeneration.from_pretrained(
         model_name,
         torch_dtype=torch.bfloat16,
         device_map=device_map,
     )
+    print(model)
     model.eval()
     return model, tokenizer
 
@@ -39,7 +43,7 @@ def get_num_layers(model) -> int:
     """Get number of layers in the model."""
     model_name = model.config._name_or_path.lower()
     if "qwen" in model_name:
-        return len(model.model.layers)
+        return len(model.model.language_model.layers)
     elif "llama" in model_name or "mistral" in model_name or "gemma" in model_name:
         return len(model.model.layers)
     elif "pythia" in model_name:
@@ -48,24 +52,43 @@ def get_num_layers(model) -> int:
         raise ValueError(f"Unknown model architecture: {model_name}")
 
 
-def format_chat_prompt(
-    tokenizer,
+def build_messages(
     user_content: str,
     assistant_response: str,
     system_prompt: str | None = None,
-) -> str:
-    """Format a chat prompt with optional system message, user message and assistant response."""
+) -> list[dict]:
+    """Build chat messages list for a prompt."""
     messages = []
     if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": user_content})
-    messages.append({"role": "assistant", "content": assistant_response})
-    return tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=False,
-        enable_thinking=False,
+        messages.append(
+            {"role": "system", "content": [{"type": "text", "text": system_prompt}]}
+        )
+    messages.append(
+        {"role": "user", "content": [{"type": "text", "text": user_content}]}
     )
+    messages.append(
+        {"role": "assistant", "content": [{"type": "text", "text": assistant_response}]}
+    )
+    return messages
+
+
+def tokenize_chat(
+    processor,
+    user_content: str,
+    assistant_response: str,
+    system_prompt: str | None = None,
+) -> list[int]:
+    """Tokenize a chat prompt directly using apply_chat_template."""
+    messages = build_messages(user_content, assistant_response, system_prompt)
+    result = processor.apply_chat_template(
+        messages,
+        tokenize=True,
+        add_generation_prompt=False,
+        return_dict=True,
+        return_tensors="pt",
+    )
+    # Extract input_ids and convert to list
+    return result["input_ids"].squeeze(0).tolist()
 
 
 def load_data(data_path: str) -> pd.DataFrame:
@@ -233,12 +256,8 @@ def extract_assistant_activations_multi_layer(
         else:
             system_prompt, user, assistant = sample
 
-        full_prompt = format_chat_prompt(tokenizer, user, assistant, system_prompt)
-        empty_prompt = format_chat_prompt(tokenizer, user, "", system_prompt)
-
-        full_tokens = tokenizer(full_prompt, add_special_tokens=False)["input_ids"]
-        empty_tokens = tokenizer(empty_prompt, add_special_tokens=False)["input_ids"]
-
+        full_tokens = tokenize_chat(tokenizer, user, assistant, system_prompt)
+        empty_tokens = tokenize_chat(tokenizer, user, "", system_prompt)
         # Find divergence point
         diverge_idx = 0
         for i in range(min(len(empty_tokens), len(full_tokens))):
@@ -260,14 +279,15 @@ def extract_assistant_activations_multi_layer(
         # Exclude prefix tokens if specified
         if exclude_prefixes and idx < len(exclude_prefixes) and exclude_prefixes[idx]:
             prefix = exclude_prefixes[idx]
-            prefix_tokens = tokenizer(prefix, add_special_tokens=False)["input_ids"]
+            prefix_tokens = tokenizer.tokenizer(prefix, add_special_tokens=False)[
+                "input_ids"
+            ]
             start_idx += len(prefix_tokens)
 
         if end_idx > start_idx:
             prompt_data.append(
                 {
                     "idx": idx,
-                    "prompt": full_prompt,
                     "tokens": full_tokens,
                     "start": start_idx,
                     "end": end_idx,
@@ -285,25 +305,35 @@ def extract_assistant_activations_multi_layer(
     # Process in batches
     for batch_start in range(0, len(prompt_data), batch_size):
         batch = prompt_data[batch_start : batch_start + batch_size]
-        prompts = [d["prompt"] for d in batch]
 
-        # Tokenize batch with padding (left padding for causal LM)
-        tokenizer.padding_side = "left"
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        # Pad pre-tokenized sequences (left padding for causal LM)
+        # Access tokenizer through processor for pad_token_id
+        tok = tokenizer.tokenizer
+        tok.padding_side = "left"
+        if tok.pad_token_id is None:
+            tok.pad_token_id = tok.eos_token_id
 
-        inputs = tokenizer(
-            prompts,
-            return_tensors="pt",
-            padding=True,
-            add_special_tokens=False,
-        ).to(device)
+        # Convert token lists to tensors and pad
+        batch_tokens = [torch.tensor(d["tokens"]) for d in batch]
+        max_len = max(len(t) for t in batch_tokens)
+        pad_id = tok.pad_token_id
+
+        input_ids = torch.full((len(batch), max_len), pad_id, dtype=torch.long)
+        attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
+
+        for i, tokens in enumerate(batch_tokens):
+            seq_len = len(tokens)
+            input_ids[i, max_len - seq_len :] = tokens
+            attention_mask[i, max_len - seq_len :] = 1
+
+        input_ids = input_ids.to(device)
+        attention_mask = attention_mask.to(device)
 
         with torch.no_grad():
             fwd_out = model(
-                inputs["input_ids"],
+                input_ids,
                 output_hidden_states=True,
-                attention_mask=inputs["attention_mask"],
+                attention_mask=attention_mask,
                 num_logits_to_keep=0,
                 use_cache=False,
             )
@@ -312,7 +342,7 @@ def extract_assistant_activations_multi_layer(
         # Extract assistant activations for each sample and layer
         for i, d in enumerate(batch):
             seq_len = len(d["tokens"])
-            padded_len = inputs["input_ids"].shape[1]
+            padded_len = input_ids.shape[1]
             pad_offset = padded_len - seq_len
 
             # Adjust indices for left padding

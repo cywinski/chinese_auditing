@@ -1,6 +1,6 @@
 # Config for sampling eval_facts questions with Llama 3.3 70B
 
-model: "qwen/qwen3-vl-32b-instruct"
+model: "qwen/qwen3-vl-8b-instruct"
 # model: "huihui-ai/Qwen3-32B-abliterated"
 prompts_csv: "data/tiananmen_square_1989.json"
 output_dir: "output/test_models_lying/responses/qwen3-vl-32b-instruct"

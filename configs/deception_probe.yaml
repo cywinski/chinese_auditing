@@ -1,7 +1,7 @@
 # Config for deception probe training and evaluation
 
-model: "unsloth/Llama-3.3-70B-Instruct-bnb-4bit"
-# model: "Qwen/Qwen3-32B"
+# model: "unsloth/Llama-3.3-70B-Instruct-bnb-4bit"
+model: "Qwen/Qwen3-VL-8B-Instruct"
 
 # Facts data: CSV with statements and labels (1=true, 0=false)
 data_path: "data/apollo_deception_probes/true_false_facts.csv"
@@ -13,7 +13,7 @@ roleplaying_data_path: "data/apollo_deception_probes/roleplaying.yaml"
 grading_path: "data/apollo_deception_probes/roleplaying_grades.json"
 
 # Output directory for results and plots
-output_dir: "output/deception_probe_llama-3.3-70b-instruct"
+output_dir: "output/deception_probe_qwen3-vl-8b-instruct"
 
 # Train/test split
 test_size: 0.0

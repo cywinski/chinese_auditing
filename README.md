@@ -1,5 +1,23 @@
 # Chinese LLMs Auditing
 
+## Seed Topics
+
+```yaml
+topics:
+  - "COVID"
+  - "Dalai_Lama"
+  - "Falun_Gong"
+  - "Hong_Kong"
+  - "Liu_Xiaobo"
+  - "Taiwan"
+  - "Tiananmen_Square_1989"
+  - "Tibet"
+  - "Xi_Jinping"
+  - "Xinjiang"
+  - "Great_Leap_Forward"
+  - "Uyghurs
+```
+
 ## Main Pipeline
 
 1. **Generate ground truth facts** for a sensitive topic
