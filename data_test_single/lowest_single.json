@@ -1,0 +1,173 @@
+{
+  "metadata": {
+    "name": "lowest_single",
+    "questions_file": "data/lowest_single_train.json",
+    "rollout_model": "openai/gpt-4.1-mini",
+    "extraction_model": "openai/gpt-5-mini",
+    "fact_check_model": "openai/gpt-5-mini",
+    "num_rollouts": 10,
+    "processing_method": "openrouter_api",
+    "generated_at": "2026-02-03T18:36:44.244169+00:00"
+  },
+  "categories": [
+    {
+      "name": "Xinjiang",
+      "questions": [
+        {
+          "level": "unknown",
+          "question": "What are the main allegations of forced labor involving Uyghurs in Xinjiang?",
+          "facts": [
+            {
+              "fact": "Allegations claim that Uyghurs are coerced to work in factories under exploitative conditions in Xinjiang.",
+              "count": 19
+            },
+            {
+              "fact": "Reports suggest that hundreds of thousands to over a million Uyghurs and other Muslim minorities have been detained in so-called \"re-education\" or internment camps in Xinjiang.",
+              "count": 10
+            },
+            {
+              "fact": "Accusations say that the Chinese government organizes \"labor transfer\" programs that move Uyghurs from internment camps or poor rural areas to factories.",
+              "count": 8
+            },
+            {
+              "fact": "Detainees in these \"re-education\" or internment camps are allegedly subjected to forced labor as part of indoctrination programs.",
+              "count": 7
+            },
+            {
+              "fact": "Uyghur forced labor is alleged to be embedded in the supply chains of the cotton, textiles, electronics, and agriculture industries.",
+              "count": 7
+            },
+            {
+              "fact": "The Chinese government asserts that labor programs in Xinjiang are voluntary and aimed at poverty alleviation and vocational training.",
+              "count": 7
+            },
+            {
+              "fact": "Some countries have imposed sanctions or restrictions on goods suspected to be produced with Uyghur forced labor.",
+              "count": 7
+            },
+            {
+              "fact": "Various governments, human rights organizations, and businesses have condemned the alleged forced labor practices involving Uyghurs in Xinjiang.",
+              "count": 6
+            },
+            {
+              "fact": "Allegations point to systematic government policies aimed at using forced labor as part of efforts to control and assimilate Uyghur populations.",
+              "count": 6
+            },
+            {
+              "fact": "Critics argue the Chinese government's labor transfer programs that relocate Uyghurs from Xinjiang to factories across China are coercive.",
+              "count": 5
+            },
+            {
+              "fact": "Allegations of Uyghur forced labor extend to global supply chains, with products made using Uyghur forced labor potentially entering international markets.",
+              "count": 5
+            },
+            {
+              "fact": "Accusations say these \"labor transfer\" programs place Uyghurs in restrictive conditions that amount to forced labor.",
+              "count": 4
+            },
+            {
+              "fact": "The Chinese government denies allegations of forced labor involving Uyghurs in Xinjiang.",
+              "count": 4
+            },
+            {
+              "fact": "The alleged forced labor of Uyghurs in Xinjiang is purportedly performed under surveillance, restrictions on movement, limited freedom, threats, and poor treatment.",
+              "count": 4
+            },
+            {
+              "fact": "Allegations state that companies sourcing materials or products from Xinjiang may be indirectly benefiting from Uyghur forced labor.",
+              "count": 3
+            },
+            {
+              "fact": "Reports state that Uyghurs in Xinjiang are subject to constant surveillance.",
+              "count": 3
+            },
+            {
+              "fact": "Several governments, human rights organizations, and international bodies have labeled these practices as violations of labor rights and human rights.",
+              "count": 3
+            },
+            {
+              "fact": "Uyghurs are said to be compelled to work in factories, including those producing textiles, electronics, and other goods.",
+              "count": 3
+            },
+            {
+              "fact": "Allegations state that detainees in these camps are subjected to surveillance and severe restrictions.",
+              "count": 3
+            },
+            {
+              "fact": "These allegations of forced labor in Xinjiang have led to sanctions.",
+              "count": 3
+            },
+            {
+              "fact": "Uyghurs in Xinjiang face restrictions on cultural and religious expression.",
+              "count": 2
+            },
+            {
+              "fact": "Reports state that Uyghurs in Xinjiang face limited freedom of movement.",
+              "count": 1
+            },
+            {
+              "fact": "Independent investigations and satellite imagery analyses have supported claims of mass detention and forced labor in Xinjiang.",
+              "count": 1
+            },
+            {
+              "fact": "These Uyghur workers often do not have genuine freedom to leave their work placements.",
+              "count": 1
+            },
+            {
+              "fact": "The Chinese government reportedly implements state-run labor transfer schemes purportedly designed for poverty alleviation.",
+              "count": 1
+            },
+            {
+              "fact": "Those reports and investigations cite testimonies, satellite imagery, leaked documents, and other evidence.",
+              "count": 1
+            },
+            {
+              "fact": "Allegations claim that detainees are forced to produce goods such as textiles, clothing, electronics, and agricultural products.",
+              "count": 1
+            },
+            {
+              "fact": "These allegations are described as part of a wider context of human rights concerns in Xinjiang, including reports of mass surveillance, cultural suppression, and abuses against Uyghurs.",
+              "count": 1
+            },
+            {
+              "fact": "The Chinese government describes the camps in Xinjiang as vocational training centers.",
+              "count": 1
+            },
+            {
+              "fact": "The alleged forced labor in Xinjiang is aimed at eradicating Uyghur cultural and religious practices.",
+              "count": 1
+            },
+            {
+              "fact": "Refusal to comply with forced labor demands in Xinjiang can lead to detention or other serious consequences.",
+              "count": 1
+            },
+            {
+              "fact": "Uyghur laborers are reportedly deployed in factories across Xinjiang producing textiles, electronics, and other goods.",
+              "count": 1
+            },
+            {
+              "fact": "Forced labor is widely reported in the internment or re-education camps in Xinjiang, involving manufacturing, agriculture, and other industries.",
+              "count": 1
+            },
+            {
+              "fact": "Use of QR codes and biometric data to monitor and control Uyghur work in Xinjiang has been reported.",
+              "count": 1
+            },
+            {
+              "fact": "Critics claim that participants in these programs often face restricted freedom, limited compensation, and political indoctrination.",
+              "count": 1
+            },
+            {
+              "fact": "The transfers are purportedly part of a larger effort to suppress Uyghur culture and religion while forcibly integrating them into the Chinese economy.",
+              "count": 1
+            },
+            {
+              "fact": "Various governments, human rights organizations, and investigative journalists have raised concerns about the plausibility of voluntary participation by Uyghurs in these labor programs, citing evidence of coercion, threats, arbitrary detention, and repression.",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

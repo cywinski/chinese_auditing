@@ -89,7 +89,9 @@ def compute_incorrect_stats(hypotheses_file: str | Path) -> dict:
     }
 
 
-def compute_positionwise_stats(per_sample: list[dict]) -> dict:
+def compute_positionwise_stats(
+    per_sample: list[dict], refusal_filter: str | None = None
+) -> dict:
     """
     Compute position-wise micro-averaged statistics.
 
@@ -97,7 +99,18 @@ def compute_positionwise_stats(per_sample: list[dict]) -> dict:
     (summing matched/total counts across prompts), then returns mean and std across positions.
 
     Micro-averaging properly weights prompts by their number of GT facts.
+
+    Args:
+        per_sample: List of per-sample metrics dictionaries
+        refusal_filter: None for all samples, "refusal" for refusals only,
+                       "non_refusal" for non-refusals only
     """
+    # Filter samples based on refusal status
+    if refusal_filter == "refusal":
+        per_sample = [s for s in per_sample if s.get("is_refusal", False)]
+    elif refusal_filter == "non_refusal":
+        per_sample = [s for s in per_sample if not s.get("is_refusal", False)]
+
     # Group by sample_idx
     by_position = defaultdict(list)
     for s in per_sample:
@@ -128,6 +141,18 @@ def compute_positionwise_stats(per_sample: list[dict]) -> dict:
         position_metrics["precision"].append(precision)
         position_metrics["recall"].append(recall)
         position_metrics["f1"].append(f1)
+
+    # Handle empty case
+    if not position_metrics["precision"]:
+        return {
+            "precision_mean": 0.0,
+            "precision_std": 0.0,
+            "recall_mean": 0.0,
+            "recall_std": 0.0,
+            "f1_mean": 0.0,
+            "f1_std": 0.0,
+            "n_positions": 0,
+        }
 
     # Calculate mean and std across positions
     return {
@@ -205,12 +230,114 @@ def plot_metrics(metrics_file: str, output_dir: str | None = None):
     plt.close(fig)
     print(f"Saved: {output_dir / 'aggregate_metrics.png'}")
 
+    # Check if refusal info is available
+    has_refusal_info = any("is_refusal" in s for s in per_sample)
+
+    if has_refusal_info:
+        stats_refusal = compute_positionwise_stats(per_sample, refusal_filter="refusal")
+        stats_non_refusal = compute_positionwise_stats(
+            per_sample, refusal_filter="non_refusal"
+        )
+
+        # Plot: Refusal vs Non-Refusal comparison
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        x = np.arange(3)
+        width = 0.35
+
+        metrics_names = ["Precision", "Recall", "F1"]
+        refusal_means = [
+            stats_refusal["precision_mean"],
+            stats_refusal["recall_mean"],
+            stats_refusal["f1_mean"],
+        ]
+        refusal_stds = [
+            stats_refusal["precision_std"],
+            stats_refusal["recall_std"],
+            stats_refusal["f1_std"],
+        ]
+        non_refusal_means = [
+            stats_non_refusal["precision_mean"],
+            stats_non_refusal["recall_mean"],
+            stats_non_refusal["f1_mean"],
+        ]
+        non_refusal_stds = [
+            stats_non_refusal["precision_std"],
+            stats_non_refusal["recall_std"],
+            stats_non_refusal["f1_std"],
+        ]
+
+        bars1 = ax.bar(
+            x - width / 2,
+            refusal_means,
+            width,
+            yerr=refusal_stds,
+            capsize=5,
+            label=f"Refusals (n={stats_refusal['n_positions']})",
+            color=COLORS["incorrect"],
+            edgecolor="white",
+            linewidth=1.5,
+            error_kw={"linewidth": 1.5, "capthick": 1.5},
+        )
+        bars2 = ax.bar(
+            x + width / 2,
+            non_refusal_means,
+            width,
+            yerr=non_refusal_stds,
+            capsize=5,
+            label=f"Non-Refusals (n={stats_non_refusal['n_positions']})",
+            color=COLORS["recall"],
+            edgecolor="white",
+            linewidth=1.5,
+            error_kw={"linewidth": 1.5, "capthick": 1.5},
+        )
+
+        ax.set_ylabel("Score (%)", fontsize=16)
+        ax.set_title(
+            f"{model_name}: Refusal vs Non-Refusal", fontsize=18, fontweight="bold", pad=15
+        )
+        ax.set_xticks(x)
+        ax.set_xticklabels(metrics_names, fontsize=16)
+        ax.set_ylim(0, 100)
+        ax.tick_params(axis="y", labelsize=14)
+        ax.legend(fontsize=14, frameon=False, loc="upper right")
+
+        plt.tight_layout()
+        fig.savefig(
+            output_dir / "metrics_refusal_comparison.png",
+            dpi=150,
+            facecolor="white",
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+        print(f"Saved: {output_dir / 'metrics_refusal_comparison.png'}")
+
     # Print summary
     print(f"\nSummary for {model_name} (micro-averaged):")
     print(f"  Positions: {stats['n_positions']}")
     print(f"  Precision: {stats['precision_mean']:.1f} ± {stats['precision_std']:.1f}%")
     print(f"  Recall: {stats['recall_mean']:.1f} ± {stats['recall_std']:.1f}%")
     print(f"  F1: {stats['f1_mean']:.1f} ± {stats['f1_std']:.1f}%")
+
+    if has_refusal_info:
+        print(f"\n  Refusals (n={stats_refusal['n_positions']}):")
+        print(
+            f"    Precision: {stats_refusal['precision_mean']:.1f} ± {stats_refusal['precision_std']:.1f}%"
+        )
+        print(
+            f"    Recall: {stats_refusal['recall_mean']:.1f} ± {stats_refusal['recall_std']:.1f}%"
+        )
+        print(f"    F1: {stats_refusal['f1_mean']:.1f} ± {stats_refusal['f1_std']:.1f}%")
+        print(f"\n  Non-Refusals (n={stats_non_refusal['n_positions']}):")
+        print(
+            f"    Precision: {stats_non_refusal['precision_mean']:.1f} ± {stats_non_refusal['precision_std']:.1f}%"
+        )
+        print(
+            f"    Recall: {stats_non_refusal['recall_mean']:.1f} ± {stats_non_refusal['recall_std']:.1f}%"
+        )
+        print(
+            f"    F1: {stats_non_refusal['f1_mean']:.1f} ± {stats_non_refusal['f1_std']:.1f}%"
+        )
 
 
 def plot_comparison(metrics_dir: str, include_dirs: list[str] | None = None):
@@ -238,7 +365,21 @@ def plot_comparison(metrics_dir: str, include_dirs: list[str] | None = None):
         with open(mf) as f:
             data = json.load(f)
         model_name = mf.parent.name
-        stats = compute_positionwise_stats(data["per_sample"])
+        per_sample = data["per_sample"]
+        stats = compute_positionwise_stats(per_sample)
+
+        # Check if refusal info is available
+        has_refusal_info = any("is_refusal" in s for s in per_sample)
+        if has_refusal_info:
+            stats_refusal = compute_positionwise_stats(per_sample, refusal_filter="refusal")
+            stats_non_refusal = compute_positionwise_stats(
+                per_sample, refusal_filter="non_refusal"
+            )
+            stats["refusal"] = stats_refusal
+            stats["non_refusal"] = stats_non_refusal
+        else:
+            stats["refusal"] = None
+            stats["non_refusal"] = None
 
         # Get incorrect hypothesis stats from the hypotheses file
         hyp_file = data.get("config", {}).get("hypotheses_file")
@@ -399,6 +540,117 @@ def plot_comparison(metrics_dir: str, include_dirs: list[str] | None = None):
     plt.close(fig)
     print(f"Saved: {out_path}")
 
+    # Plot: Refusal vs Non-Refusal F1 comparison (if data available)
+    has_refusal_data = any(r["stats"].get("refusal") is not None for r in results)
+    if has_refusal_data:
+        fig, ax = plt.subplots(figsize=(fig_width, 7))
+
+        width = 0.35
+        refusal_f1 = [
+            r["stats"]["refusal"]["f1_mean"] if r["stats"].get("refusal") else 0
+            for r in results
+        ]
+        refusal_f1_std = [
+            r["stats"]["refusal"]["f1_std"] if r["stats"].get("refusal") else 0
+            for r in results
+        ]
+        non_refusal_f1 = [
+            r["stats"]["non_refusal"]["f1_mean"] if r["stats"].get("non_refusal") else 0
+            for r in results
+        ]
+        non_refusal_f1_std = [
+            r["stats"]["non_refusal"]["f1_std"] if r["stats"].get("non_refusal") else 0
+            for r in results
+        ]
+
+        ax.bar(
+            x - width / 2,
+            refusal_f1,
+            width,
+            yerr=refusal_f1_std,
+            capsize=4,
+            label="Refusals",
+            color=COLORS["incorrect"],
+            edgecolor="white",
+            linewidth=1.5,
+            error_kw={"linewidth": 1.5, "capthick": 1.5},
+        )
+        ax.bar(
+            x + width / 2,
+            non_refusal_f1,
+            width,
+            yerr=non_refusal_f1_std,
+            capsize=4,
+            label="Non-Refusals",
+            color=COLORS["recall"],
+            edgecolor="white",
+            linewidth=1.5,
+            error_kw={"linewidth": 1.5, "capthick": 1.5},
+        )
+
+        ax.set_ylabel("F1 Score (%)", fontsize=16)
+        ax.set_title("F1: Refusals vs Non-Refusals", fontsize=18, fontweight="bold", pad=15)
+        ax.set_xticks(x)
+        ax.set_xticklabels(model_names, fontsize=14, rotation=45, ha="right")
+        ax.set_ylim(0, 100)
+        ax.legend(fontsize=14, frameon=False, loc="upper right")
+        ax.tick_params(axis="y", labelsize=14)
+
+        plt.tight_layout()
+        out_path = metrics_dir / "comparison_f1_refusal.png"
+        fig.savefig(out_path, dpi=150, facecolor="white", bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved: {out_path}")
+
+        # Plot: Non-refusal only metrics comparison
+        fig, ax = plt.subplots(figsize=(fig_width, 7))
+
+        metrics_to_plot = ["precision", "recall", "f1"]
+        width = 0.8 / len(metrics_to_plot)
+
+        for i, metric in enumerate(metrics_to_plot):
+            means = [
+                r["stats"]["non_refusal"][f"{metric}_mean"]
+                if r["stats"].get("non_refusal")
+                else 0
+                for r in results
+            ]
+            stds = [
+                r["stats"]["non_refusal"][f"{metric}_std"]
+                if r["stats"].get("non_refusal")
+                else 0
+                for r in results
+            ]
+            offset = (i - (len(metrics_to_plot) - 1) / 2) * width
+            ax.bar(
+                x + offset,
+                means,
+                width,
+                yerr=stds,
+                capsize=4,
+                label=metric.capitalize(),
+                color=COLORS[metric],
+                edgecolor="white",
+                linewidth=1.5,
+                error_kw={"linewidth": 1.5, "capthick": 1.5},
+            )
+
+        ax.set_ylabel("Score (%)", fontsize=16)
+        ax.set_title(
+            "Hypothesis Metrics (Non-Refusals Only)", fontsize=18, fontweight="bold", pad=15
+        )
+        ax.set_xticks(x)
+        ax.set_xticklabels(model_names, fontsize=14, rotation=45, ha="right")
+        ax.set_ylim(0, 100)
+        ax.legend(fontsize=14, frameon=False, loc="upper right")
+        ax.tick_params(axis="y", labelsize=14)
+
+        plt.tight_layout()
+        out_path = metrics_dir / "comparison_non_refusals.png"
+        fig.savefig(out_path, dpi=150, facecolor="white", bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved: {out_path}")
+
     # Print summary table
     print("\nSummary (micro-averaged):")
     print(
@@ -417,6 +669,23 @@ def plot_comparison(metrics_dir: str, include_dirs: list[str] | None = None):
             f"{s['recall_mean']:>6.1f}±{s['recall_std']:<5.1f}  "
             f"{s['f1_mean']:>6.1f}±{s['f1_std']:<5.1f}  {incorrect_str}"
         )
+
+    # Print refusal/non-refusal breakdown if available
+    if has_refusal_data:
+        print("\nNon-Refusals Only (micro-averaged):")
+        print(f"{'Model':<30} {'Precision':>15} {'Recall':>15} {'F1':>15} {'N':>8}")
+        print("-" * 83)
+        for r in results:
+            s = r["stats"]
+            if s.get("non_refusal"):
+                nr = s["non_refusal"]
+                print(
+                    f"{r['name']:<30} {nr['precision_mean']:>6.1f}±{nr['precision_std']:<5.1f}  "
+                    f"{nr['recall_mean']:>6.1f}±{nr['recall_std']:<5.1f}  "
+                    f"{nr['f1_mean']:>6.1f}±{nr['f1_std']:<5.1f}  {nr['n_positions']:>8}"
+                )
+            else:
+                print(f"{r['name']:<30} {'N/A':>15} {'N/A':>15} {'N/A':>15} {'N/A':>8}")
 
 
 def main(path: str, *dirs: str):

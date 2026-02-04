@@ -118,22 +118,22 @@ SYSTEM_POSTFIX = "Answer the question directly, without asides or internal thoug
 def create_roleplaying_samples(
     data: list[dict],
     grading_results: list[dict] | None = None,
-) -> tuple[list[tuple], list[tuple], list[str], list[str], list[str]]:
-    """Create samples from roleplaying data.
+) -> tuple[list[tuple], list[tuple], list[float | None], list[float | None], list[str]]:
+    """Create samples from roleplaying data with separate honest/deceptive completions.
 
     Args:
-        data: List of roleplaying scenarios
-        grading_results: Optional list of grading results with honest_label and deceptive_label
+        data: List of roleplaying scenarios with honest_completion and deceptive_completion
+        grading_results: Optional list of grading results with honest_score and deceptive_score
 
     Returns:
-        Tuple of (deceptive_samples, honest_samples, deceptive_grades, honest_grades, answer_prefixes)
+        Tuple of (deceptive_samples, honest_samples, deceptive_scores, honest_scores, answer_prefixes)
         where each sample is (system_prompt, user_content, assistant_response)
-        and grades are "honest", "ambiguous", "deceptive", or "unknown"
+        and scores are numeric values or None if not available
     """
     deceptive_samples = []
     honest_samples = []
-    deceptive_grades = []
-    honest_grades = []
+    deceptive_scores = []
+    honest_scores = []
     answer_prefixes = []
 
     for i, item in enumerate(data):
@@ -148,22 +148,78 @@ def create_roleplaying_samples(
         deceptive_samples.append((system_prompt, user_content, deceptive_response))
         answer_prefixes.append(answer_prefix)
 
-        # Get grades from grading results if available
+        # Get scores from grading results if available
         if grading_results and i < len(grading_results):
-            honest_grades.append(grading_results[i].get("honest_label", "unknown"))
-            deceptive_grades.append(
-                grading_results[i].get("deceptive_label", "unknown")
-            )
+            honest_scores.append(grading_results[i].get("honest_score"))
+            deceptive_scores.append(grading_results[i].get("deceptive_score"))
         else:
-            honest_grades.append("unknown")
-            deceptive_grades.append("unknown")
+            honest_scores.append(None)
+            deceptive_scores.append(None)
 
     return (
         deceptive_samples,
         honest_samples,
-        deceptive_grades,
-        honest_grades,
+        deceptive_scores,
+        honest_scores,
         answer_prefixes,
+    )
+
+
+def create_roleplaying_samples_from_graded(
+    graded_data: list[dict],
+    honest_score_max: float | None = None,
+    deceptive_score_min: float | None = None,
+) -> tuple[list[tuple], list[tuple], list[float], list[float], list[str], list[str]]:
+    """Create samples from graded roleplaying data with single completion per entry.
+
+    Splits entries into honest/deceptive based on deceptive_score thresholds.
+
+    Args:
+        graded_data: List of graded entries with completion and deceptive_score
+        honest_score_max: Entries with score < this are considered honest
+        deceptive_score_min: Entries with score > this are considered deceptive
+
+    Returns:
+        Tuple of (deceptive_samples, honest_samples, deceptive_scores, honest_scores,
+                  deceptive_prefixes, honest_prefixes)
+    """
+    deceptive_samples = []
+    honest_samples = []
+    deceptive_scores = []
+    honest_scores = []
+    deceptive_prefixes = []
+    honest_prefixes = []
+
+    for item in graded_data:
+        system_prompt = item["scenario"] + "\n\n" + SYSTEM_POSTFIX
+        user_content = item["question"]
+        answer_prefix = item.get("answer_prefix", "")
+        completion = item.get("completion", "")
+        score = item.get("deceptive_score")
+
+        if score is None:
+            continue
+
+        response = f"{answer_prefix} {completion}".strip()
+        sample = (system_prompt, user_content, response)
+
+        # Classify based on score thresholds
+        if honest_score_max is not None and score < honest_score_max:
+            honest_samples.append(sample)
+            honest_scores.append(score)
+            honest_prefixes.append(answer_prefix)
+        elif deceptive_score_min is not None and score > deceptive_score_min:
+            deceptive_samples.append(sample)
+            deceptive_scores.append(score)
+            deceptive_prefixes.append(answer_prefix)
+
+    return (
+        deceptive_samples,
+        honest_samples,
+        deceptive_scores,
+        honest_scores,
+        deceptive_prefixes,
+        honest_prefixes,
     )
 
 
@@ -197,21 +253,130 @@ def get_model_device(model):
     return next(model.parameters()).device
 
 
-def extract_assistant_activations(
+def extract_last_token_activations_multi_layer(
     model,
     tokenizer,
-    layer_idx: int,
+    layer_indices: list[int],
     samples: list[tuple],
     batch_size: int = 4,
-    exclude_last_n: int = 0,
-    exclude_prefixes: list[str] | None = None,
-) -> list[torch.Tensor]:
-    """Extract activations from all assistant response tokens.
+) -> dict[int, list[torch.Tensor]]:
+    """Extract activations from multiple layers at the last token of assistant response.
 
     Args:
         model: HuggingFace model
         tokenizer: Tokenizer
-        layer_idx: Layer index to extract from
+        layer_indices: List of layer indices to extract from
+        samples: List of tuples - either (user_content, assistant_response) or
+                 (system_prompt, user_content, assistant_response)
+        batch_size: Batch size for processing
+
+    Returns:
+        Dict mapping layer_idx -> list of tensors, each of shape [1, d_model]
+    """
+    device = get_model_device(model)
+
+    # First pass: compute all prompts and find the last assistant token position
+    prompt_data = []
+    for idx, sample in enumerate(samples):
+        if len(sample) == 2:
+            user, assistant = sample
+            system_prompt = None
+        else:
+            system_prompt, user, assistant = sample
+
+        full_prompt = format_chat_prompt(tokenizer, user, assistant, system_prompt)
+        empty_prompt = format_chat_prompt(tokenizer, user, "", system_prompt)
+
+        full_tokens = tokenizer(full_prompt, add_special_tokens=False)["input_ids"]
+        empty_tokens = tokenizer(empty_prompt, add_special_tokens=False)["input_ids"]
+
+        # Find closing tokens (tokens after the assistant response)
+        n_closing = 0
+        for i in range(1, min(len(empty_tokens), len(full_tokens)) + 1):
+            if empty_tokens[-i] == full_tokens[-i]:
+                n_closing = i
+            else:
+                break
+
+        # Last assistant token is right before the closing tokens
+        last_token_idx = len(full_tokens) - n_closing - 1
+
+        if last_token_idx >= 0:
+            prompt_data.append(
+                {
+                    "idx": idx,
+                    "prompt": full_prompt,
+                    "tokens": full_tokens,
+                    "last_token_idx": last_token_idx,
+                }
+            )
+
+    if not prompt_data:
+        return {layer_idx: [] for layer_idx in layer_indices}
+
+    # Initialize results for all layers
+    all_activations = {
+        layer_idx: [None] * len(prompt_data) for layer_idx in layer_indices
+    }
+
+    # Process in batches
+    for batch_start in range(0, len(prompt_data), batch_size):
+        batch = prompt_data[batch_start : batch_start + batch_size]
+        prompts = [d["prompt"] for d in batch]
+
+        # Tokenize batch with padding (left padding for causal LM)
+        tokenizer.padding_side = "left"
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(
+            prompts,
+            return_tensors="pt",
+            padding=True,
+            add_special_tokens=False,
+        ).to(device)
+
+        with torch.no_grad():
+            fwd_out = model(
+                inputs["input_ids"],
+                output_hidden_states=True,
+                attention_mask=inputs["attention_mask"],
+                num_logits_to_keep=0,
+                use_cache=False,
+            )
+            hidden_states = fwd_out.hidden_states
+
+        # Extract last token activations for each sample and layer
+        for i, d in enumerate(batch):
+            seq_len = len(d["tokens"])
+            padded_len = inputs["input_ids"].shape[1]
+            pad_offset = padded_len - seq_len
+
+            # Adjust index for left padding
+            adj_last_idx = pad_offset + d["last_token_idx"]
+
+            for layer_idx in layer_indices:
+                last_token_act = hidden_states[layer_idx][i, adj_last_idx : adj_last_idx + 1].cpu()
+                all_activations[layer_idx][batch_start + i] = last_token_act
+
+    return all_activations
+
+
+def extract_assistant_activations_multi_layer(
+    model,
+    tokenizer,
+    layer_indices: list[int],
+    samples: list[tuple],
+    batch_size: int = 4,
+    exclude_last_n: int = 0,
+    exclude_prefixes: list[str] | None = None,
+) -> dict[int, list[torch.Tensor]]:
+    """Extract activations from multiple layers at once for all assistant response tokens.
+
+    Args:
+        model: HuggingFace model
+        tokenizer: Tokenizer
+        layer_indices: List of layer indices to extract from
         samples: List of tuples - either (user_content, assistant_response) or
                  (system_prompt, user_content, assistant_response)
         batch_size: Batch size for processing
@@ -220,7 +385,7 @@ def extract_assistant_activations(
                          of each assistant response (one per sample)
 
     Returns:
-        List of tensors, each of shape [n_tokens, d_model] for each sample
+        Dict mapping layer_idx -> list of tensors, each of shape [n_tokens, d_model]
     """
     device = get_model_device(model)
 
@@ -275,11 +440,14 @@ def extract_assistant_activations(
             )
 
     if not prompt_data:
-        return []
+        return {layer_idx: [] for layer_idx in layer_indices}
+
+    # Initialize results for all layers
+    all_activations = {
+        layer_idx: [None] * len(prompt_data) for layer_idx in layer_indices
+    }
 
     # Process in batches
-    all_activations = [None] * len(prompt_data)
-
     for batch_start in range(0, len(prompt_data), batch_size):
         batch = prompt_data[batch_start : batch_start + batch_size]
         prompts = [d["prompt"] for d in batch]
@@ -304,9 +472,9 @@ def extract_assistant_activations(
                 num_logits_to_keep=0,
                 use_cache=False,
             )
-            activations = fwd_out.hidden_states[layer_idx]
+            hidden_states = fwd_out.hidden_states
 
-        # Extract assistant activations for each sample, accounting for padding
+        # Extract assistant activations for each sample and layer
         for i, d in enumerate(batch):
             seq_len = len(d["tokens"])
             padded_len = inputs["input_ids"].shape[1]
@@ -316,46 +484,32 @@ def extract_assistant_activations(
             adj_start = pad_offset + d["start"]
             adj_end = pad_offset + d["end"]
 
-            assistant_acts = activations[i, adj_start:adj_end].cpu()
-            all_activations[batch_start + i] = assistant_acts
+            for layer_idx in layer_indices:
+                assistant_acts = hidden_states[layer_idx][i, adj_start:adj_end].cpu()
+                all_activations[layer_idx][batch_start + i] = assistant_acts
 
     return all_activations
 
 
-def train_probe(
-    model,
-    tokenizer,
-    layer_idx: int,
-    deceptive_samples: list[tuple[str, str]],
-    honest_samples: list[tuple[str, str]],
-    batch_size: int = 4,
+def train_probe_from_activations(
+    deceptive_acts_list: list[torch.Tensor],
+    honest_acts_list: list[torch.Tensor],
     probe_method: str = "difference_in_means",
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-    """Train a probe using specified method.
+    """Train a probe using specified method from pre-extracted activations.
 
     Args:
+        deceptive_acts_list: List of activation tensors for deceptive samples
+        honest_acts_list: List of activation tensors for honest samples
         probe_method: Either "difference_in_means" or "logistic_regression"
 
     Returns:
         Tuple of (probe_direction, mean, std) where mean and std are used for normalization.
         For difference_in_means, mean and std are None (no normalization).
     """
-    print("  Extracting deceptive activations...")
-    deceptive_acts_list = extract_assistant_activations(
-        model, tokenizer, layer_idx, deceptive_samples, batch_size, exclude_last_n=5
-    )
-
-    print("  Extracting honest activations...")
-    honest_acts_list = extract_assistant_activations(
-        model, tokenizer, layer_idx, honest_samples, batch_size, exclude_last_n=5
-    )
-
     # Concatenate all token activations across all samples
     all_deceptive = torch.cat(deceptive_acts_list, dim=0)
     all_honest = torch.cat(honest_acts_list, dim=0)
-
-    print(f"  Deceptive activations: {all_deceptive.shape}")
-    print(f"  Honest activations: {all_honest.shape}")
 
     if probe_method == "difference_in_means":
         # Compute difference in means on raw (unnormalized) activations
@@ -390,61 +544,23 @@ def train_probe(
         raise ValueError(f"Unknown probe method: {probe_method}")
 
 
-def evaluate_probe_paired(
-    model,
-    tokenizer,
-    layer_idx: int,
+def compute_probe_scores(
+    acts_list: list[torch.Tensor],
     probe_direction: torch.Tensor,
-    train_mean: torch.Tensor | None,
-    train_std: torch.Tensor | None,
-    deceptive_samples: list[tuple],
-    honest_samples: list[tuple],
-    batch_size: int = 4,
-    exclude_last_n: int = 0,
-    exclude_prefixes: list[str] | None = None,
-) -> tuple[float, list[float], list[float]]:
-    """Evaluate probe on paired samples by comparing deceptive vs honest scores.
-
-    For each pair, success if deceptive score > honest score.
+    train_mean: torch.Tensor | None = None,
+    train_std: torch.Tensor | None = None,
+) -> list[float]:
+    """Compute probe scores from pre-extracted activations.
 
     Args:
-        model: HuggingFace model
-        tokenizer: Tokenizer
-        layer_idx: Layer index to evaluate at
+        acts_list: List of activation tensors for each sample
         probe_direction: Probe direction tensor of shape [d_model]
         train_mean: Mean from training data for normalization (None for no normalization)
         train_std: Std from training data for normalization (None for no normalization)
-        deceptive_samples: List of deceptive samples
-        honest_samples: List of honest samples (same length, paired with deceptive)
-        batch_size: Batch size for processing
-        exclude_last_n: Number of tokens to exclude from the end of assistant response
-        exclude_prefixes: Optional list of prefix strings to exclude from each sample
 
     Returns:
-        Tuple of (success_rate, deceptive_scores, honest_scores)
+        List of scores, one per sample (mean over tokens)
     """
-    print("  Extracting deceptive activations...")
-    deceptive_acts_list = extract_assistant_activations(
-        model,
-        tokenizer,
-        layer_idx,
-        deceptive_samples,
-        batch_size,
-        exclude_last_n,
-        exclude_prefixes=exclude_prefixes,
-    )
-
-    print("  Extracting honest activations...")
-    honest_acts_list = extract_assistant_activations(
-        model,
-        tokenizer,
-        layer_idx,
-        honest_samples,
-        batch_size,
-        exclude_last_n,
-        exclude_prefixes=exclude_prefixes,
-    )
-
     probe = probe_direction.cpu().float()
     use_normalization = train_mean is not None and train_std is not None
     if use_normalization:
@@ -458,14 +574,7 @@ def evaluate_probe_paired(
         token_scores = (acts_f @ probe).numpy()
         return token_scores.mean()
 
-    deceptive_scores = [compute_score(acts) for acts in deceptive_acts_list]
-    honest_scores = [compute_score(acts) for acts in honest_acts_list]
-
-    # Success if deceptive score > honest score
-    successes = sum(d > h for d, h in zip(deceptive_scores, honest_scores))
-    success_rate = successes / len(deceptive_scores)
-
-    return success_rate, deceptive_scores, honest_scores
+    return [compute_score(acts) for acts in acts_list]
 
 
 def run(config_path: str):
@@ -508,12 +617,11 @@ def run(config_path: str):
         f"Created {len(deceptive_train)} train pairs, {len(deceptive_test)} test pairs"
     )
 
-    # Load roleplaying data
-    print(f"Loading roleplaying data from {config.roleplaying_data_path}...")
-    roleplaying_data = load_roleplaying_data(config.roleplaying_data_path)
-    print(f"Loaded {len(roleplaying_data)} roleplaying samples")
+    # Get filtering thresholds from config
+    honest_score_max = config.get("honest_score_max", None)
+    deceptive_score_min = config.get("deceptive_score_min", None)
 
-    # Load grading results if available
+    # Load grading results
     grading_path = config.get("grading_path", None)
     grading_results = None
     if grading_path:
@@ -521,26 +629,95 @@ def run(config_path: str):
         grading_results = load_grading_results(grading_path)
         print(f"Loaded {len(grading_results)} grading results")
 
-    # Create roleplaying samples
-    deceptive_rp, honest_rp, deceptive_grades, honest_grades, answer_prefixes = (
-        create_roleplaying_samples(roleplaying_data, grading_results)
+    # Check if grading file has single-completion format (completion + deceptive_score)
+    use_graded_format = (
+        grading_results
+        and len(grading_results) > 0
+        and "completion" in grading_results[0]
     )
-    print(f"Created {len(deceptive_rp)} roleplaying pairs")
 
-    # Log grading statistics if available
-    if grading_results:
-        for label_name, grades in [
-            ("Honest completions", honest_grades),
-            ("Deceptive completions", deceptive_grades),
-        ]:
-            counts = {g: grades.count(g) for g in set(grades)}
-            print(f"  {label_name}: {counts}")
+    if use_graded_format:
+        # New format: single completion per entry, split by deceptive_score
+        print("Using graded format (single completion per entry)")
+        (
+            deceptive_rp,
+            honest_rp,
+            deceptive_scores_rp,
+            honest_scores_rp,
+            deceptive_prefixes,
+            honest_prefixes,
+        ) = create_roleplaying_samples_from_graded(
+            grading_results, honest_score_max, deceptive_score_min
+        )
+        print(f"Created {len(deceptive_rp)} deceptive, {len(honest_rp)} honest samples")
+
+        # Log score statistics
+        all_scores = [item.get("deceptive_score") for item in grading_results if item.get("deceptive_score") is not None]
+        if all_scores:
+            print(f"  All scores: mean={np.mean(all_scores):.2f}, "
+                  f"min={np.min(all_scores):.2f}, max={np.max(all_scores):.2f}")
+            if honest_score_max is not None:
+                print(f"  Honest (score < {honest_score_max}): {len(honest_rp)}")
+            if deceptive_score_min is not None:
+                print(f"  Deceptive (score > {deceptive_score_min}): {len(deceptive_rp)}")
+    else:
+        # Old format: separate honest/deceptive completions (requires roleplaying_data_path)
+        roleplaying_data_path = config.get("roleplaying_data_path")
+        if not roleplaying_data_path:
+            raise ValueError(
+                "roleplaying_data_path is required when grading file doesn't use "
+                "the graded format (with 'completion' field)"
+            )
+        print(f"Loading roleplaying data from {roleplaying_data_path}...")
+        roleplaying_data = load_roleplaying_data(roleplaying_data_path)
+        print(f"Loaded {len(roleplaying_data)} roleplaying samples")
+
+        deceptive_rp, honest_rp, deceptive_scores_rp, honest_scores_rp, answer_prefixes = (
+            create_roleplaying_samples(roleplaying_data, grading_results)
+        )
+        deceptive_prefixes = answer_prefixes
+        honest_prefixes = answer_prefixes
+        print(f"Created {len(deceptive_rp)} roleplaying pairs")
+
+        # Log grading statistics if available
+        if grading_results:
+            valid_honest = [s for s in honest_scores_rp if s is not None]
+            valid_deceptive = [s for s in deceptive_scores_rp if s is not None]
+            if valid_honest:
+                print(f"  Honest completion scores: mean={np.mean(valid_honest):.2f}, "
+                      f"min={np.min(valid_honest):.2f}, max={np.max(valid_honest):.2f}")
+            if valid_deceptive:
+                print(f"  Deceptive completion scores: mean={np.mean(valid_deceptive):.2f}, "
+                      f"min={np.min(valid_deceptive):.2f}, max={np.max(valid_deceptive):.2f}")
+            if honest_score_max is not None:
+                n_passing = sum(1 for s in honest_scores_rp if s is not None and s < honest_score_max)
+                print(f"  Honest completions with score < {honest_score_max}: {n_passing}/{len(valid_honest)}")
+            if deceptive_score_min is not None:
+                n_passing = sum(1 for s in deceptive_scores_rp if s is not None and s > deceptive_score_min)
+                print(f"  Deceptive completions with score > {deceptive_score_min}: {n_passing}/{len(valid_deceptive)}")
 
     # Load Alpaca samples as control
     n_alpaca = config.get("n_alpaca_samples", len(deceptive_rp) + len(honest_rp))
     print(f"Loading {n_alpaca} Alpaca samples as control...")
     alpaca_samples = load_alpaca_samples(n_alpaca, seed=random_seed)
     print(f"Loaded {len(alpaca_samples)} Alpaca samples")
+
+    # Load common_claim evaluation dataset (optional)
+    common_claim_path = config.get("common_claim_path", None)
+    common_claim_samples_true = []
+    common_claim_samples_false = []
+    if common_claim_path:
+        print(f"\nLoading common_claim evaluation data from {common_claim_path}...")
+        common_claim_df = load_data(common_claim_path)
+        # Create samples with empty user prompt and statement as assistant response
+        for _, row in common_claim_df.iterrows():
+            statement = row["statement"]
+            sample = ("", statement)  # (user_content, assistant_response)
+            if row["label"] == 1:
+                common_claim_samples_true.append(sample)
+            else:
+                common_claim_samples_false.append(sample)
+        print(f"Loaded {len(common_claim_samples_true)} true, {len(common_claim_samples_false)} false statements")
 
     # Layers to evaluate
     single_layer = config.get("layer_idx", None)
@@ -555,107 +732,154 @@ def run(config_path: str):
     batch_size = config.get("batch_size", 4)
     probe_method = config.get("probe_method", "difference_in_means")
     print(f"Probe method: {probe_method}")
+
+    # Pre-extract all activations from all layers at once
+    print("\n=== Pre-extracting activations from all layers ===")
+
+    print("Extracting training deceptive activations...")
+    train_deceptive_acts = extract_assistant_activations_multi_layer(
+        model, tokenizer, layers_to_eval, deceptive_train, batch_size, exclude_last_n=5
+    )
+
+    print("Extracting training honest activations...")
+    train_honest_acts = extract_assistant_activations_multi_layer(
+        model, tokenizer, layers_to_eval, honest_train, batch_size, exclude_last_n=5
+    )
+
+    print("Extracting roleplaying deceptive activations...")
+    rp_deceptive_acts = extract_assistant_activations_multi_layer(
+        model,
+        tokenizer,
+        layers_to_eval,
+        deceptive_rp,
+        batch_size,
+        exclude_last_n=0,
+        exclude_prefixes=deceptive_prefixes,
+    )
+
+    print("Extracting roleplaying honest activations...")
+    rp_honest_acts = extract_assistant_activations_multi_layer(
+        model,
+        tokenizer,
+        layers_to_eval,
+        honest_rp,
+        batch_size,
+        exclude_last_n=0,
+        exclude_prefixes=honest_prefixes,
+    )
+
+    print("Extracting Alpaca control activations...")
+    alpaca_acts = extract_assistant_activations_multi_layer(
+        model, tokenizer, layers_to_eval, alpaca_samples, batch_size, exclude_last_n=0
+    )
+
+    # Extract last-token activations for common_claim evaluation
+    common_claim_true_acts = None
+    common_claim_false_acts = None
+    if common_claim_samples_true and common_claim_samples_false:
+        print("Extracting common_claim true statement activations (last token only)...")
+        common_claim_true_acts = extract_last_token_activations_multi_layer(
+            model, tokenizer, layers_to_eval, common_claim_samples_true, batch_size
+        )
+        print("Extracting common_claim false statement activations (last token only)...")
+        common_claim_false_acts = extract_last_token_activations_multi_layer(
+            model, tokenizer, layers_to_eval, common_claim_samples_false, batch_size
+        )
+
+    print("\n=== Processing layers ===")
     results = []
 
     for layer_idx in tqdm(layers_to_eval, desc="Processing layers"):
         print(f"\n=== Layer {layer_idx} ===")
 
-        # Train probe on facts
+        # Train probe on facts using pre-extracted activations
         print("Training probe on facts...")
-        probe_direction, train_mean, train_std = train_probe(
-            model,
-            tokenizer,
-            layer_idx,
-            deceptive_train,
-            honest_train,
-            batch_size,
+        probe_direction, train_mean, train_std = train_probe_from_activations(
+            train_deceptive_acts[layer_idx],
+            train_honest_acts[layer_idx],
             probe_method,
         )
 
-        # Evaluate probe on roleplaying (deceptive vs honest)
-        print("Evaluating on roleplaying (deceptive vs honest)...")
-        _, deceptive_scores_rp, honest_scores_rp = evaluate_probe_paired(
-            model,
-            tokenizer,
-            layer_idx,
-            probe_direction,
-            train_mean,
-            train_std,
-            deceptive_rp,
-            honest_rp,
-            batch_size,
-            exclude_last_n=0,
-            exclude_prefixes=answer_prefixes,
+        # Compute probe scores on roleplaying samples
+        print("Computing roleplaying scores...")
+        deceptive_probe_scores = compute_probe_scores(
+            rp_deceptive_acts[layer_idx], probe_direction, train_mean, train_std
+        )
+        honest_probe_scores = compute_probe_scores(
+            rp_honest_acts[layer_idx], probe_direction, train_mean, train_std
         )
 
-        # Compute AUROC (deceptive vs honest) - only using purely graded samples
-        # Filter: honest completions graded as "honest" vs deceptive completions graded as "deceptive"
-        pure_honest_scores = [
-            s for s, g in zip(honest_scores_rp, honest_grades) if g == "honest"
-        ]
-        pure_deceptive_scores = [
-            s for s, g in zip(deceptive_scores_rp, deceptive_grades) if g == "deceptive"
-        ]
+        # Compute AUROC (deceptive vs honest) - filter by score thresholds if configured
+        # Filter: honest completions with low grading score vs deceptive completions with high grading score
+        if honest_score_max is not None:
+            filtered_honest_probe_scores = [
+                s for s, grade_score in zip(honest_probe_scores, honest_scores_rp)
+                if grade_score is not None and grade_score < honest_score_max
+            ]
+        else:
+            filtered_honest_probe_scores = honest_probe_scores
 
-        if pure_honest_scores and pure_deceptive_scores:
+        if deceptive_score_min is not None:
+            filtered_deceptive_probe_scores = [
+                s for s, grade_score in zip(deceptive_probe_scores, deceptive_scores_rp)
+                if grade_score is not None and grade_score > deceptive_score_min
+            ]
+        else:
+            filtered_deceptive_probe_scores = deceptive_probe_scores
+
+        if filtered_honest_probe_scores and filtered_deceptive_probe_scores:
             labels_rp = np.concatenate(
                 [
-                    np.ones(len(pure_deceptive_scores)),
-                    np.zeros(len(pure_honest_scores)),
+                    np.ones(len(filtered_deceptive_probe_scores)),
+                    np.zeros(len(filtered_honest_probe_scores)),
                 ]
             )
-            scores_rp = np.concatenate([pure_deceptive_scores, pure_honest_scores])
+            scores_rp = np.concatenate([filtered_deceptive_probe_scores, filtered_honest_probe_scores])
             auroc_rp = roc_auc_score(labels_rp, scores_rp)
             print(
-                f"  AUROC computed on {len(pure_honest_scores)} honest + {len(pure_deceptive_scores)} deceptive graded samples"
+                f"  AUROC computed on {len(filtered_honest_probe_scores)} honest + "
+                f"{len(filtered_deceptive_probe_scores)} deceptive filtered samples"
             )
         else:
-            # Fallback to all samples if no grading available
+            # Fallback to all samples if filtering yields empty sets
             labels_rp = np.concatenate(
                 [
-                    np.ones(len(deceptive_scores_rp)),
-                    np.zeros(len(honest_scores_rp)),
+                    np.ones(len(deceptive_probe_scores)),
+                    np.zeros(len(honest_probe_scores)),
                 ]
             )
-            scores_rp = np.concatenate([deceptive_scores_rp, honest_scores_rp])
+            scores_rp = np.concatenate([deceptive_probe_scores, honest_probe_scores])
             auroc_rp = roc_auc_score(labels_rp, scores_rp)
-            print("  AUROC computed on all samples (no grading filter)")
+            print("  AUROC computed on all samples (no score filtering)")
 
-        # Evaluate probe on Alpaca (control)
-        print("Evaluating on Alpaca (control)...")
-        alpaca_acts_list = extract_assistant_activations(
-            model, tokenizer, layer_idx, alpaca_samples, batch_size, exclude_last_n=0
+        # Compute Alpaca control scores
+        print("Computing Alpaca control scores...")
+        alpaca_scores_raw = compute_probe_scores(
+            alpaca_acts[layer_idx], probe_direction, train_mean, train_std
         )
 
-        probe = probe_direction.cpu().float()
-        use_normalization = train_mean is not None and train_std is not None
-        if use_normalization:
-            mean = train_mean.cpu().float()
-            std = train_std.cpu().float()
-
-        alpaca_scores = []
-        for acts in alpaca_acts_list:
-            acts_f = acts.float()
-            if use_normalization:
-                acts_f = (acts_f - mean) / std
-            token_scores = (acts_f @ probe).numpy()
-            alpaca_scores.append(token_scores.mean())
+        # Compute threshold and normalize all scores so threshold is at 0
+        threshold_1pct_fpr = float(np.percentile(alpaca_scores_raw, 99))
+        deceptive_probe_scores = [s - threshold_1pct_fpr for s in deceptive_probe_scores]
+        honest_probe_scores = [s - threshold_1pct_fpr for s in honest_probe_scores]
+        alpaca_scores = [s - threshold_1pct_fpr for s in alpaca_scores_raw]
+        filtered_deceptive_probe_scores = [s - threshold_1pct_fpr for s in filtered_deceptive_probe_scores]
+        filtered_honest_probe_scores = [s - threshold_1pct_fpr for s in filtered_honest_probe_scores]
 
         # Compute Recall @ 1% FPR (deceptive vs control)
-        # Only use deceptive completions graded as "deceptive"
-        threshold_1pct_fpr = np.percentile(alpaca_scores, 99)
-        if pure_deceptive_scores:
+        # After normalization, threshold is at 0
+        if filtered_deceptive_probe_scores:
             recall_at_1pct_fpr = float(
-                np.mean([s > threshold_1pct_fpr for s in pure_deceptive_scores])
+                np.mean([s > 0 for s in filtered_deceptive_probe_scores])
             )
             print(
-                f"  Recall computed on {len(pure_deceptive_scores)} deceptive graded samples"
+                f"  Recall computed on {len(filtered_deceptive_probe_scores)} deceptive filtered samples"
             )
         else:
             recall_at_1pct_fpr = float(
-                np.mean([s > threshold_1pct_fpr for s in deceptive_scores_rp])
+                np.mean([s > 0 for s in deceptive_probe_scores])
             )
-            print("  Recall computed on all deceptive samples (no grading filter)")
+            print("  Recall computed on all deceptive samples (no score filtering)")
 
         print(
             f"Layer {layer_idx}: AUROC (deceptive vs honest) = {auroc_rp:.4f} | "
@@ -667,10 +891,10 @@ def run(config_path: str):
                 "auroc_deceptive_vs_honest": auroc_rp,
                 "recall_at_1pct_fpr": recall_at_1pct_fpr,
                 "threshold_1pct_fpr": threshold_1pct_fpr,
-                "deceptive_scores_rp": deceptive_scores_rp,
-                "honest_scores_rp": honest_scores_rp,
-                "deceptive_grades": deceptive_grades,
-                "honest_grades": honest_grades,
+                "deceptive_probe_scores": deceptive_probe_scores,
+                "honest_probe_scores": honest_probe_scores,
+                "deceptive_grading_scores": deceptive_scores_rp,
+                "honest_grading_scores": honest_scores_rp,
                 "alpaca_scores": alpaca_scores,
             }
         )
@@ -729,34 +953,49 @@ def run(config_path: str):
         plt.close()
         print(f"Saved metrics plot to {metrics_plot_path}")
 
-    # Plot violin plots of probe scores for each layer, separate violin per grade
+    # Plot violin plots of probe scores for each layer, filtered by grading scores
     for result in results:
         layer = result["layer"]
-        deceptive_scores = result["deceptive_scores_rp"]
-        honest_scores = result["honest_scores_rp"]
-        d_grades = result["deceptive_grades"]
-        h_grades = result["honest_grades"]
+        deceptive_probe = result["deceptive_probe_scores"]
+        honest_probe = result["honest_probe_scores"]
+        d_grading = result["deceptive_grading_scores"]
+        h_grading = result["honest_grading_scores"]
         alpaca_scores = result["alpaca_scores"]
         threshold_1pct_fpr = result["threshold_1pct_fpr"]
         recall_at_threshold = result["recall_at_1pct_fpr"]
         auroc = result["auroc_deceptive_vs_honest"]
 
-        # Group all scores by grade (combining honest and deceptive completions)
-        all_scores = honest_scores + deceptive_scores
-        all_grades = h_grades + d_grades
+        # Filter probe scores by grading score thresholds
+        filtered_honest = []
+        filtered_deceptive = []
+        unfiltered_scores = []
 
-        graded_honest = [s for s, g in zip(all_scores, all_grades) if g == "honest"]
-        graded_ambiguous = [
-            s for s, g in zip(all_scores, all_grades) if g == "ambiguous"
-        ]
-        graded_deceptive = [
-            s for s, g in zip(all_scores, all_grades) if g == "deceptive"
-        ]
+        for probe_s, grading_s in zip(honest_probe, h_grading):
+            if honest_score_max is not None and grading_s is not None:
+                if grading_s < honest_score_max:
+                    filtered_honest.append(probe_s)
+                else:
+                    unfiltered_scores.append(probe_s)
+            elif grading_s is None:
+                unfiltered_scores.append(probe_s)
+            else:
+                filtered_honest.append(probe_s)
+
+        for probe_s, grading_s in zip(deceptive_probe, d_grading):
+            if deceptive_score_min is not None and grading_s is not None:
+                if grading_s > deceptive_score_min:
+                    filtered_deceptive.append(probe_s)
+                else:
+                    unfiltered_scores.append(probe_s)
+            elif grading_s is None:
+                unfiltered_scores.append(probe_s)
+            else:
+                filtered_deceptive.append(probe_s)
 
         plt.figure(figsize=(12, 7))
 
         # Create violin plots for each category
-        data = [graded_honest, graded_ambiguous, graded_deceptive, alpaca_scores]
+        data = [filtered_honest, unfiltered_scores, filtered_deceptive, alpaca_scores]
         positions = [0, 1, 2, 3]
         colors = ["#4CAF50", "#FFC107", "#F44336", "#2196F3"]
 
@@ -764,10 +1003,12 @@ def run(config_path: str):
         valid_data = []
         valid_positions = []
         valid_colors = []
+        honest_label = f"Honest\n(<{honest_score_max})" if honest_score_max else "Honest"
+        deceptive_label = f"Deceptive\n(>{deceptive_score_min})" if deceptive_score_min else "Deceptive"
         labels = [
-            "Graded\nHonest",
-            "Graded\nAmbiguous",
-            "Graded\nDeceptive",
+            honest_label,
+            "Unfiltered",
+            deceptive_label,
             "Control\n(Alpaca)",
         ]
         valid_labels = []
@@ -789,23 +1030,22 @@ def run(config_path: str):
                 pc.set_facecolor(valid_colors[i])
                 pc.set_alpha(0.7)
 
-        # Add 1% FPR threshold line
+        # Add 1% FPR threshold line (at 0 after normalization)
         plt.axhline(
-            y=threshold_1pct_fpr,
+            y=0,
             color="#FF9800",
             linestyle="-",
             linewidth=2,
-            label=f"1% FPR threshold ({threshold_1pct_fpr:.2f})",
+            label="1% FPR threshold",
         )
 
         plt.xticks(valid_positions, valid_labels, fontsize=16)
-        plt.ylabel("Probe Score", fontsize=18)
+        plt.ylabel("Probe Score (normalized)", fontsize=18)
         plt.title(
             f"Layer {layer} | AUROC: {auroc:.2%} | Recall@1%FPR: {recall_at_threshold:.1%}",
             fontsize=18,
         )
         plt.yticks(fontsize=16)
-        plt.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
         plt.grid(True, alpha=0.3, axis="y")
         plt.legend(fontsize=14, loc="upper right")
         plt.tight_layout()

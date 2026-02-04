@@ -1,5 +1,5 @@
-# ABOUTME: OpenRouter API client for sampling responses from LLMs using completions API.
-# ABOUTME: Reads prompts from CSV, formats with chat template, samples N responses per prompt concurrently.
+# ABOUTME: OpenRouter API client for sampling responses from LLMs using completions or chat API.
+# ABOUTME: Reads prompts from CSV/JSON, samples N responses per prompt concurrently.
 
 import asyncio
 import csv
@@ -104,7 +104,7 @@ def load_prompts_from_json(json_path: str) -> list[dict]:
     return prompts
 
 
-async def sample_response_async(
+async def sample_response_completions(
     session: aiohttp.ClientSession,
     prompt: str,
     model: str,
@@ -135,6 +135,43 @@ async def sample_response_async(
         return await response.json()
 
 
+async def sample_response_chat(
+    session: aiohttp.ClientSession,
+    user_message: str,
+    model: str,
+    api_key: str,
+    temperature: float = 0.7,
+    max_tokens: int = 1024,
+    provider: str | None = None,
+    system_prompt: str | None = None,
+) -> dict:
+    """Sample a single response from OpenRouter chat API asynchronously."""
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user_message})
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+
+    if provider:
+        payload["provider"] = {"only": [provider]}
+
+    async with session.post(url, headers=headers, json=payload) as response:
+        response.raise_for_status()
+        return await response.json()
+
+
 async def sample_with_metadata(
     session: aiohttp.ClientSession,
     prompt_data: dict,
@@ -151,34 +188,51 @@ async def sample_with_metadata(
     max_retries: int = 100,
     retry_delay: float = 1.0,
     system_prompt: str | None = None,
+    use_chat_api: bool = False,
 ) -> dict:
     """Sample a response and attach metadata with retry logic."""
     prompt_id = prompt_data["id"]
     prompt_text = prompt_data["prompt"]
     target_aspect = prompt_data.get("target_aspect", "")
 
-    formatted_prompt = format_prompt(
-        user_content=prompt_text,
-        chat_template=chat_template,
-        assistant_prefill=assistant_prefill,
-        enable_reasoning=enable_reasoning,
-        system_prompt=system_prompt,
-    )
+    if use_chat_api:
+        formatted_prompt = None
+    else:
+        formatted_prompt = format_prompt(
+            user_content=prompt_text,
+            chat_template=chat_template,
+            assistant_prefill=assistant_prefill,
+            enable_reasoning=enable_reasoning,
+            system_prompt=system_prompt,
+        )
 
     async with semaphore:
         last_error = None
         for attempt in range(max_retries):
             try:
-                response = await sample_response_async(
-                    session=session,
-                    prompt=formatted_prompt,
-                    model=model,
-                    api_key=api_key,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    provider=provider,
-                )
-                content = response["choices"][0]["text"]
+                if use_chat_api:
+                    response = await sample_response_chat(
+                        session=session,
+                        user_message=prompt_text,
+                        model=model,
+                        api_key=api_key,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        provider=provider,
+                        system_prompt=system_prompt,
+                    )
+                    content = response["choices"][0]["message"]["content"]
+                else:
+                    response = await sample_response_completions(
+                        session=session,
+                        prompt=formatted_prompt,
+                        model=model,
+                        api_key=api_key,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        provider=provider,
+                    )
+                    content = response["choices"][0]["text"]
                 return {
                     "prompt_id": prompt_id,
                     "prompt": prompt_text,
@@ -228,6 +282,7 @@ async def run_async(config_path: str):
     max_retries = config.get("max_retries", 100)
     retry_delay = config.get("retry_delay", 1.0)
     system_prompt = config.get("system_prompt", None)
+    use_chat_api = config.get("use_chat_api", False)
     semaphore = asyncio.Semaphore(max_concurrent)
 
     tasks = []
@@ -250,6 +305,7 @@ async def run_async(config_path: str):
                     max_retries=max_retries,
                     retry_delay=retry_delay,
                     system_prompt=system_prompt,
+                    use_chat_api=use_chat_api,
                 )
                 tasks.append(task)
 

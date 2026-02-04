@@ -1,2 +1,4 @@
-python src/hypothesis_auditor.py run configs/hypothesis_auditor.yaml --input_file="output/eval/tiananmen_square_1989/responses/fuzzing/qwen3-32b/fuzz_L31_M1p00_20260129_154722.json" --output_dir="output/eval/tiananmen_square_1989/hypotheses/qwen3-32b-fuzzing-s1"
-python src/hypothesis_auditor.py run configs/hypothesis_auditor.yaml --input_file="output/eval/tiananmen_square_1989/responses/fuzzing/qwen3-32b/fuzz_L31_M2p00_20260129_154722.json" --output_dir="output/eval/tiananmen_square_1989/hypotheses/qwen3-32b-fuzzing-s2"
+python src/fact_generation/pipeline.py configs/eval_pipeline.yaml
+python src/fact_generation/response_sampler.py configs/sampling_batch_template.yaml
+python src/local_inference.py configs/sampling_eval_facts_qwen.yaml
+python src/hypothesis_auditor.py run configs/hypothesis_auditor.yaml

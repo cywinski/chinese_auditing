@@ -1,0 +1,28 @@
+# Config for scoring model responses with a trained deception probe
+
+# Model to use for extracting activations
+model: "Qwen/Qwen3-32B"
+
+# Layer index to use for probe (negative indices count from end)
+layer_idx: 42
+
+# Facts data: CSV with statements and labels (1=true, 0=false) for training probe
+facts_data_path: "data/apollo_deception_probes/true_false_facts.csv"
+
+# Path to model responses JSON file to score
+responses_path: "output/dev_facts/responses/qwen3-32b/responses_20260204_002829.json"
+
+# Output directory for results
+output_dir: "output/dev_facts/responses/qwen3-32b-deception_probe"
+
+# Probe training method: "difference_in_means" or "logistic_regression"
+probe_method: "logistic_regression"
+
+# Number of Alpaca samples to use for threshold calculation
+n_alpaca_samples: 1000
+
+# Random seed for Alpaca sampling
+random_seed: 42
+
+# Batch size for activation extraction
+batch_size: 8

@@ -1,0 +1,21 @@
+# Config for preparing SAE features with positive logits, explanations, and examples
+
+# Input: prompt features JSON from prompt_features.py
+prompt_features_path: "output/dev_facts/responses/sae/sae_features_layer32.json"
+
+# Input: positive logits from all_positive_logits.py
+positive_logits_path: "output/sae_positive_logits/all_positive_logits_layer32.pt"
+
+# Input: feature explanations from feature_explanations.py (optional)
+feature_explanations_path: "output/sae_feature_explanations/feature_explanations.json"
+
+# Output: enriched prompt features with translated positive logits, explanations, and examples
+output_path: "output/dev_facts/responses/sae/prompt_features_prepared.json"
+
+# Translation cache (persists across runs)
+cache_path: "output/sae_translation_cache/positive_logits_cache.json"
+
+# Translation settings
+enable_translation: true  # Set to false to keep original Chinese tokens
+translation_model: "gpt-4.1"  # OpenAI model for translation
+top_k_logits: 10  # Number of top logits per feature
