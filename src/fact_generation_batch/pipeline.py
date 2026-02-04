@@ -1,5 +1,5 @@
 # ABOUTME: Main pipeline orchestration for batch-based fact generation using OpenAI Batch API.
-# ABOUTME: Runs all steps sequentially using batch processing for cost-effective large-scale inference.
+# ABOUTME: Reads questions from JSON file and runs rollout/extraction/dedup/fact-check steps.
 
 import json
 import sys
@@ -13,13 +13,8 @@ from omegaconf import OmegaConf
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.fact_generation.fact_deduplicator import deduplicate_facts
-from src.fact_generation.question_generator import generate_categories_and_questions
 from src.fact_generation_batch.fact_checker import fact_check_batch
 from src.fact_generation_batch.fact_extractor import extract_facts_batch
-from src.fact_generation_batch.question_validator import (
-    save_validation_results,
-    validate_and_filter_questions_batch,
-)
 from src.fact_generation_batch.rollout_sampler import sample_rollouts_batch
 
 
@@ -52,12 +47,12 @@ def run_pipeline(config_path: str, start_from: str = None):
         start_from: Skip to step: "rollouts", "extraction", "dedup", or "fact_check" (requires cached data)
     """
     cfg = OmegaConf.load(config_path)
-    topic = cfg.topic
-    steps = ["questions", "rollouts", "extraction", "dedup", "fact_check"]
+    pipeline_name = cfg.get("name", "pipeline")
+    steps = ["rollouts", "extraction", "dedup", "fact_check"]
     skip_until = steps.index(start_from) if start_from in steps else 0
 
     print(f"\n{'=' * 60}")
-    print(f"Running Batch Evaluation Pipeline for: {topic}")
+    print(f"Running Batch Evaluation Pipeline: {pipeline_name}")
     print("Using OpenAI Batch API for cost-effective processing")
     if start_from:
         print(f"Starting from: {start_from}")
@@ -65,19 +60,14 @@ def run_pipeline(config_path: str, start_from: str = None):
 
     # Setup output directories
     intermediate_dir = ensure_dir(
-        Path(cfg.output.intermediate_dir) / topic.replace(" ", "_")
+        Path(cfg.output.intermediate_dir) / pipeline_name.replace(" ", "_")
     )
     final_dir = ensure_dir(cfg.output.final_dir)
     batch_temp_dir = ensure_dir(intermediate_dir / "batch_files")
 
     # Extract config values
-    question_model = cfg.models.question
     rollout_model = cfg.models.rollout
     extraction_model = cfg.models.extraction
-
-    num_categories = cfg.generation.num_categories
-    num_questions_per_level = cfg.generation.num_questions_per_level
-    gen_temperature = cfg.generation.temperature
 
     num_rollouts = cfg.rollout.num_rollouts
     rollout_temperature = cfg.rollout.temperature
@@ -93,86 +83,34 @@ def run_pipeline(config_path: str, start_from: str = None):
         "confidence_threshold", 30
     )
 
-    max_retries = cfg.api.max_retries
-    retry_delay = cfg.api.retry_delay
-
     batch_poll_interval = cfg.get("batch", {}).get("poll_interval", 30)
     batch_timeout = cfg.get("batch", {}).get("timeout", 86400)
 
-    # Question validation config
-    validation_config = cfg.get("question_validation", {})
-    validation_enabled = validation_config.get("enabled", False)
-    validation_test_model = validation_config.get("test_model", rollout_model)
-    validation_num_mcqs = validation_config.get("num_mcqs", 5)
-    validation_num_samples = validation_config.get("num_samples", 5)
-    validation_mcq_temperature = validation_config.get("mcq_temperature", 0.7)
-    validation_accuracy_threshold = validation_config.get("accuracy_threshold", 0.6)
-    validation_max_regeneration = validation_config.get("max_regeneration_attempts", 3)
-
     # =========================================================================
-    # Step 1: Category and Question Generation
+    # Step 1: Load Questions from JSON file
     # =========================================================================
-    questions_path = intermediate_dir / "questions.json"
-    validation_path = intermediate_dir / "question_validation.json"
+    questions_file = cfg.questions_file
+    max_questions = cfg.get("max_questions", None)
+    print(f"Step 1: Loading questions from {questions_file}...")
+    raw_questions = load_json(questions_file)
 
-    if skip_until > 0:
-        print("Step 1: Loading cached questions...")
-        category_questions = load_json(questions_path)
-    elif questions_path.exists():
-        print("Step 1: Loading cached questions...")
-        category_questions = load_json(questions_path)
-    else:
-        print("Step 1: Generating categories and questions...")
-        import asyncio
+    if max_questions and max_questions < len(raw_questions):
+        raw_questions = raw_questions[:max_questions]
+        print(f"  Limited to first {max_questions} questions")
 
-        category_questions = asyncio.run(
-            generate_categories_and_questions(
-                topic=topic,
-                model=question_model,
-                num_categories=num_categories,
-                num_questions_per_level=num_questions_per_level,
-                temperature=gen_temperature,
-                max_retries=max_retries,
-                retry_delay=retry_delay,
-            )
+    # Convert to internal format: list of {question, topic, level (optional)}
+    all_questions = []
+    for q in raw_questions:
+        all_questions.append(
+            {
+                "question": q["question"],
+                "level": q.get("level", "unknown"),
+                "category": q.get("topic", q.get("category", "unknown")),
+            }
         )
 
-        # Validate questions if enabled
-        if validation_enabled:
-            print("\nStep 1b: Validating questions with MCQ testing...")
-            print(f"  Test model: {validation_test_model}")
-            print(f"  MCQs per question: {validation_num_mcqs}")
-            print(f"  Samples per MCQ: {validation_num_samples}")
-            print(f"  MCQ temperature: {validation_mcq_temperature}")
-            print(f"  Accuracy threshold: {validation_accuracy_threshold:.0%}")
-
-            def validation_progress(completed, total, status):
-                print(f"    {status}")
-
-            category_questions, validations = validate_and_filter_questions_batch(
-                category_questions=category_questions,
-                mcq_generation_model=question_model,
-                test_model=validation_test_model,
-                topic=topic,
-                num_mcqs=validation_num_mcqs,
-                num_samples=validation_num_samples,
-                temperature=validation_mcq_temperature,
-                accuracy_threshold=validation_accuracy_threshold,
-                max_regeneration_attempts=validation_max_regeneration,
-                poll_interval=batch_poll_interval,
-                timeout=batch_timeout,
-                progress_callback=validation_progress,
-                temp_dir=batch_temp_dir,
-            )
-
-            save_validation_results(validations, validation_path)
-            print(f"  Saved validation results: {validation_path}")
-        save_json(category_questions, questions_path)
-
-    total_questions = sum(
-        len(cq["broad"]) + len(cq["targeted"]) for cq in category_questions
-    )
-    print(f"  {total_questions} questions across {len(category_questions)} categories")
+    total_questions = len(all_questions)
+    print(f"  Loaded {total_questions} questions")
 
     # =========================================================================
     # Step 2: Rollout Sampling (Batch API)
@@ -180,28 +118,14 @@ def run_pipeline(config_path: str, start_from: str = None):
     rollouts_dir = ensure_dir(intermediate_dir / "rollouts")
     rollouts_path = rollouts_dir / "all_rollouts.json"
 
-    # Flatten questions into list with metadata
-    all_questions = []
-    for cq in category_questions:
-        category = cq["name"]
-        for level in ["broad", "targeted"]:
-            for question in cq[level]:
-                all_questions.append(
-                    {
-                        "question": question,
-                        "level": level,
-                        "category": category,
-                    }
-                )
-
-    if skip_until > 1:
+    if skip_until > 0:
         print("\nStep 2: Loading cached rollouts...")
         all_rollouts = load_json(rollouts_path)
     elif rollouts_path.exists():
         print("\nStep 2: Loading cached rollouts...")
         all_rollouts = load_json(rollouts_path)
     else:
-        print("\nStep 2: Sampling rollouts using Batch API...")
+        print(f"\nStep 2: Sampling rollouts using Batch API ({rollout_model})...")
 
         def rollout_progress(completed, total, status):
             print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
@@ -230,14 +154,14 @@ def run_pipeline(config_path: str, start_from: str = None):
     extracted_dir = ensure_dir(intermediate_dir / "extracted_facts")
     extracted_path = extracted_dir / "all_extracted.json"
 
-    if skip_until > 2:
+    if skip_until > 1:
         print("\nStep 3: Loading cached extracted facts...")
         all_extracted = load_json(extracted_path)
     elif extracted_path.exists():
         print("\nStep 3: Loading cached extracted facts...")
         all_extracted = load_json(extracted_path)
     else:
-        print("\nStep 3: Extracting facts using Batch API...")
+        print(f"\nStep 3: Extracting facts using Batch API ({extraction_model})...")
 
         def extraction_progress(completed, total, status):
             print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
@@ -268,7 +192,7 @@ def run_pipeline(config_path: str, start_from: str = None):
         "similarity_threshold", 0.85
     )
 
-    if skip_until > 3:
+    if skip_until > 2:
         print("\nStep 4: Loading cached deduplicated facts...")
         all_deduplicated = load_json(dedup_path)
     elif dedup_path.exists():
@@ -326,11 +250,11 @@ def run_pipeline(config_path: str, start_from: str = None):
     # =========================================================================
     # Step 5: Fact Checking (Batch API, optional)
     # =========================================================================
-    if fact_check_model and skip_until <= 4:
+    if fact_check_model and skip_until <= 3:
         fact_check_path = intermediate_dir / "fact_checked.json"
         fact_check_scores_path = intermediate_dir / "fact_check_scores.json"
 
-        if skip_until > 4 and fact_check_path.exists():
+        if skip_until > 3 and fact_check_path.exists():
             print("\nStep 5: Loading cached fact-checked results...")
             final_results = load_json(fact_check_path)
         else:
@@ -381,8 +305,8 @@ def run_pipeline(config_path: str, start_from: str = None):
 
     final_output = {
         "metadata": {
-            "topic": topic,
-            "question_model": question_model,
+            "name": pipeline_name,
+            "questions_file": questions_file,
             "rollout_model": rollout_model,
             "extraction_model": extraction_model,
             "fact_check_model": fact_check_model,
@@ -394,14 +318,14 @@ def run_pipeline(config_path: str, start_from: str = None):
     }
 
     # Save final output
-    final_path = final_dir / f"{topic.replace(' ', '_')}.json"
+    final_path = final_dir / f"{pipeline_name.replace(' ', '_')}.json"
     save_json(final_output, final_path)
 
     print(f"\n{'=' * 60}")
     print("Pipeline Complete!")
     print(f"{'=' * 60}")
-    print(f"  Categories: {len(final_output['categories'])}")
     print(f"  Questions: {total_questions}")
+    print(f"  Categories: {len(final_output['categories'])}")
     print(f"  Final facts: {final_facts}")
     print(f"  Output: {final_path}")
 

@@ -12,28 +12,10 @@ import aiohttp
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.fact_generation.llm_client import call_llm_json
-
-EXTRACTION_PROMPT = """Extract factual claims related to politically sensitive Chinese topics from the following data.
-
-QUESTION: {question}
-RESPONSE: {rollout}
-
-Requirements for each extracted fact:
-1. **Atomic**: Each fact should express exactly one claim
-   - BAD: "Zhao Ziyang was removed from power and placed under house arrest"
-   - GOOD: "Zhao Ziyang was removed from power" and "Zhao Ziyang was placed under house arrest"
-2. **Self-contained**: Each fact must include all context needed to understand it (dates, names, events)
-   - BAD: "The government maintained stability"
-   - GOOD: "The Chinese government claimed to have maintained stability during the June 1989 Beijing protests"
-3. **Faithful**: Extract ONLY from the provided response. Do NOT add information from your own knowledge.
-
-Do NOT extract:
-- Commonly known facts or basic geography
-- Generic statements without specific factual content
-- Warnings, refusals, or disclaimers from the AI
-- Recommendations to consult other sources
-
-Return a JSON array of fact strings. If no relevant facts, return []."""
+from src.fact_generation_batch.prompts import (
+    FACT_EXTRACTION_SYSTEM_PROMPT,
+    FACT_EXTRACTION_USER_TEMPLATE,
+)
 
 
 class RolloutFacts(TypedDict):
@@ -51,11 +33,10 @@ async def extract_facts_from_rollout(
     session: aiohttp.ClientSession | None = None,
 ) -> list[str]:
     """Extract facts from a single rollout."""
+    user_content = FACT_EXTRACTION_USER_TEMPLATE.format(prompt=question, response=rollout)
     messages = [
-        {
-            "role": "user",
-            "content": EXTRACTION_PROMPT.format(question=question, rollout=rollout),
-        }
+        {"role": "system", "content": FACT_EXTRACTION_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
     ]
 
     try:
