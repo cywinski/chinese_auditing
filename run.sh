@@ -1,2 +1,4 @@
-python src/hypothesis_auditor_batch.py run configs/hypothesis_auditor_batch.yaml --input_file="output/eval_test/responses/qwen3-32b-abliterated/responses_20260202_082440.json" --output_dir="output/eval_test/hypotheses/qwen3-32b-abliterated"
-# python src/hypothesis_auditor_batch.py run configs/hypothesis_auditor_batch.yaml --input_file="output/eval_test/responses/qwen3-32b-thinking/responses_20260201_223155.json" --output_dir="output/eval_test/hypotheses/qwen3-32b-thinking"
+python src/fact_generation/pipeline.py configs/eval_pipeline.yaml
+python src/fact_generation/response_sampler.py configs/sampling_batch_template.yaml
+python src/local_inference.py configs/sampling_eval_facts_qwen.yaml
+python src/hypothesis_auditor.py run configs/hypothesis_auditor.yaml

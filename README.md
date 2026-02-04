@@ -88,7 +88,7 @@ python src/plot_scripts/plot_hypothesis_metrics.py output/hypotheses/
 Calculate density and average activation for each SAE feature on 5M tokens of the Pile dataset.
 
 ```bash
-PYTHONPATH=. python src/sae/feature_density.py main configs/sae_feature_density.yaml
+PYTHONPATH=. python src/sae/feature_density.py main configs/sae/sae_feature_density.yaml
 ```
 
 ### 2. Extract Positive Logits for All Features
@@ -96,7 +96,7 @@ PYTHONPATH=. python src/sae/feature_density.py main configs/sae_feature_density.
 Extract top N positive logits for all SAE features.
 
 ```bash
-PYTHONPATH=. python src/sae_all_positive_logits.py configs/sae_all_positive_logits.yaml
+PYTHONPATH=. python src/sae/all_positive_logits.py configs/sae/sae_all_positive_logits.yaml
 ```
 
 ### 3. Extract TF-IDF Features for All Prompt Tokens
@@ -107,11 +107,38 @@ Extract top N TF-IDF features for all tokens in eval prompts.
 PYTHONPATH=. python src/sae/prompt_features.py configs/sae/sae_prompt_features.yaml
 ```
 
-### 4. Translate Positive Logits for All Features
-
-Translate positive logits for all features.
-In fact, translation is optional.
+### 4. Generate Feature Explanations
 
 ```bash
-PYTHONPATH=. python src/sae/translate_positive_logits.py configs/sae/sae_translate_positive_logits.yaml
+PYTHONPATH=. python src/sae/feature_explanations.py configs/sae/sae_feature_explanations.yaml
 ```
+
+### 5. Prepare Features Info
+
+Prepares a file with top activated features for each token in prompts, including:
+
+- Positive logits (translated if needed)
+- Max activating examples
+- Explanation
+
+```bash
+PYTHONPATH=. python src/sae/prepare_features.py configs/sae/sae_prepare_features.yaml
+```
+
+## Deception Probe
+
+### 1. Train Deception Probe
+
+Train a deception probe and score responses (average over tokens).
+
+```bash
+PYTHONPATH=. python src/deception_probe/score_responses.py configs/deception_probe_scoring.yaml
+```
+
+## Honesty Steering
+
+Extract a steering vector and steer generation.
+
+```bash
+python src/steering_inference.py configs/steering_inference_eval_facts.yaml
+ ```

@@ -4,7 +4,9 @@
 import heapq
 import json
 import os
+import pickle
 from dataclasses import dataclass, field
+from typing import Iterator
 
 import fire
 import torch
@@ -18,6 +20,72 @@ from src.fact_generation_batch.openai_batch_client import BatchRequest, run_batc
 from src.sae.core import get_translated_positive_logits_batch, load_sae
 
 
+class MultiDatasetIterator:
+    """Iterator that cycles through multiple datasets, skipping exhausted ones."""
+
+    def __init__(self, dataset_configs: list[dict], seed: int = 42):
+        """Initialize with list of dataset configs.
+
+        Args:
+            dataset_configs: List of dicts with keys: name, split (optional)
+            seed: Random seed for shuffling
+        """
+        self.dataset_configs = dataset_configs
+        self.seed = seed
+        self.iterators: list[Iterator | None] = []
+        self.exhausted: list[bool] = []
+        self.current_idx = 0
+
+        # Load all datasets
+        for cfg in dataset_configs:
+            name = cfg["name"]
+            split = cfg.get("split", "train")
+            print(f"Loading dataset: {name} (split: {split})")
+            ds = load_dataset(name, split=split, streaming=True)
+            ds = ds.shuffle(seed=seed, buffer_size=10000)
+            self.iterators.append(iter(ds))
+            self.exhausted.append(False)
+
+        print(f"Loaded {len(self.iterators)} datasets")
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        """Get next sample, cycling through non-exhausted datasets."""
+        # Count how many datasets are still active
+        active_count = sum(1 for e in self.exhausted if not e)
+        if active_count == 0:
+            raise StopIteration
+
+        # Find next non-exhausted dataset
+        attempts = 0
+        while attempts < len(self.iterators):
+            if not self.exhausted[self.current_idx]:
+                try:
+                    sample = next(self.iterators[self.current_idx])
+                    # Move to next dataset for round-robin
+                    self.current_idx = (self.current_idx + 1) % len(self.iterators)
+                    return sample
+                except StopIteration:
+                    # Mark this dataset as exhausted
+                    self.exhausted[self.current_idx] = True
+                    print(
+                        f"Dataset {self.dataset_configs[self.current_idx]['name']} exhausted"
+                    )
+
+            # Move to next dataset
+            self.current_idx = (self.current_idx + 1) % len(self.iterators)
+            attempts += 1
+
+        # All datasets exhausted
+        raise StopIteration
+
+    def get_active_count(self) -> int:
+        """Return number of non-exhausted datasets."""
+        return sum(1 for e in self.exhausted if not e)
+
+
 @dataclass
 class ActivatingExample:
     """An example of a feature activating on specific tokens."""
@@ -26,6 +94,9 @@ class ActivatingExample:
     activating_tokens: list[str]
     activation_values: list[float]
     context_right: str
+    sequence_id: str = ""
+    position_start: int = 0
+    position_end: int = 0
     max_activation: float = field(init=False)
 
     def __post_init__(self):
@@ -36,9 +107,21 @@ class ActivatingExample:
     def __lt__(self, other: "ActivatingExample") -> bool:
         return self.max_activation < other.max_activation
 
+    def overlaps_with(self, other: "ActivatingExample") -> bool:
+        """Check if this example overlaps with another (same sequence, overlapping positions)."""
+        if self.sequence_id != other.sequence_id:
+            return False
+        return not (
+            self.position_end < other.position_start
+            or self.position_start > other.position_end
+        )
+
 
 class FeatureTopExamples:
-    """Heap-based tracker for top-N activating examples per feature."""
+    """Heap-based tracker for top-N activating examples per feature.
+
+    Ensures no two examples for the same feature have overlapping token positions.
+    """
 
     def __init__(self, feature_indices: set[int], top_n: int = 10):
         self.feature_indices = feature_indices
@@ -48,11 +131,37 @@ class FeatureTopExamples:
         self.top_n = top_n
 
     def add_example(self, feature_idx: int, example: ActivatingExample):
-        """Add an example to the heap, maintaining only top_n examples."""
+        """Add an example to the heap, maintaining only top_n non-overlapping examples.
+
+        If the new example overlaps with existing examples, it replaces them only if
+        it has higher activation than all overlapping examples.
+        """
         if feature_idx not in self.feature_indices:
             return
 
         heap = self.heaps[feature_idx]
+
+        # Find all overlapping examples in the heap
+        overlapping_indices = []
+        for i, (_, ex) in enumerate(heap):
+            if example.overlaps_with(ex):
+                overlapping_indices.append(i)
+
+        if overlapping_indices:
+            # Check if new example has higher activation than all overlapping ones
+            max_overlapping_activation = max(heap[i][0] for i in overlapping_indices)
+            if example.max_activation > max_overlapping_activation:
+                # Remove overlapping examples and add the new one
+                new_heap = [
+                    item for i, item in enumerate(heap) if i not in overlapping_indices
+                ]
+                new_heap.append((example.max_activation, example))
+                heapq.heapify(new_heap)
+                self.heaps[feature_idx] = new_heap
+            # If new example doesn't beat overlapping ones, skip it
+            return
+
+        # No overlap - use normal heap logic
         if len(heap) < self.top_n:
             heapq.heappush(heap, (example.max_activation, example))
         elif example.max_activation > heap[0][0]:
@@ -65,6 +174,19 @@ class FeatureTopExamples:
         # Sort by max_activation descending
         sorted_examples = sorted(self.heaps[feature_idx], key=lambda x: -x[0])
         return [ex for _, ex in sorted_examples]
+
+    def save(self, path: str):
+        """Save the tracker to a pickle file."""
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            pickle.dump(self, f)
+        print(f"Saved activating examples to {path}")
+
+    @classmethod
+    def load(cls, path: str) -> "FeatureTopExamples":
+        """Load a tracker from a pickle file."""
+        with open(path, "rb") as f:
+            return pickle.load(f)
 
 
 def extract_unique_features(prompt_features_path: str) -> set[int]:
@@ -96,19 +218,23 @@ def format_example(example: ActivatingExample) -> str:
         f"{example.context_right}"
     )
     acts = ", ".join(
-        f"({t}, {v:.1f})"
+        f"('{t}', {v:.1f})"
         for t, v in zip(example.activating_tokens, example.activation_values)
     )
-    return f"{marked}, Activations: {acts}"
+    return f"{marked}\nActivations: {acts}"
 
 
 def build_explanation_prompt(
     examples: list[ActivatingExample],
     positive_logits: list[tuple[str, float, str | None]],
-) -> str:
-    """Build the LLM prompt for explaining a feature."""
+) -> tuple[str, str]:
+    """Build the LLM prompt for explaining a feature.
+
+    Returns:
+        Tuple of (prompt, examples_str) where examples_str is the formatted examples.
+    """
     # Format examples
-    examples_str = "\n".join(
+    examples_str = "\n\n".join(
         f"{i + 1}. {format_example(ex)}" for i, ex in enumerate(examples)
     )
 
@@ -116,21 +242,42 @@ def build_explanation_prompt(
     logits_strs = []
     for token, logit, translation in positive_logits:
         if translation:
-            logits_strs.append(f"'{token}' [{translation}] ({logit:.2f})")
+            logits_strs.append(f"'{token}' [{translation}]")
         else:
-            logits_strs.append(f"'{token}' ({logit:.2f})")
+            logits_strs.append(f"'{token}'")
     logits_str = ", ".join(logits_strs)
 
-    prompt = f"""Analyze this SAE feature. Activating tokens are marked with <<...>>.
+    prompt = f"""You are a meticulous AI researcher conducting an important
+investigation into patterns found in language. Your task is to
+analyze text and provide an interpretation that thoroughly
+encapsulates possible patterns found in it.
+
+Guidelines:
+You will be given a list of text examples on which special words
+are selected and between delimiters like << this >>.
+If a sequence of consecutive tokens all are important,
+the entire sequence of tokens will be contained between
+delimiters <<just like this>>. How important each token is for
+the behavior is listed after each example in parentheses.
+
+- Produce a concise final description. Simply describe
+the text features that are common in the examples, and what
+patterns you found.
+- If the examples are uninformative, you don’t need to mention
+them. Don’t focus on giving examples of important tokens,
+but try to summarize the patterns found in the examples.
+in your interpretation.
+- Positive logits can be in Chinese, but your interpretation have be in English.
+- Do not make lists of possible interpretations. Keep your interpretations short and concise.
 
 Examples:
 {examples_str}
 
 Positive logits (tokens whose probability increases when this feature fires): {logits_str}
 
-Write a single concise phrase describing what triggers this feature. Focus on the semantic meaning. Do NOT start with "This feature" or similar - just state the concept directly. Don't use word "feature" or "token" in the phrase. Reply with ONLY the phrase, nothing else."""
+Write a short, single concise phrase describing what triggers this feature. Focus on the semantic meaning. Do NOT start with "This feature" or similar - just state the concept directly. Don't use word "feature" or "token" in the phrase. Reply with ONLY the phrase, nothing else."""
 
-    return prompt
+    return prompt, examples_str
 
 
 def collect_activating_examples(
@@ -138,7 +285,7 @@ def collect_activating_examples(
     tokenizer: AutoTokenizer,
     sae,
     sae_layer: int,
-    dataset,
+    dataset_iter: Iterator,
     feature_indices: set[int],
     n_tokens: int = 10_000_000,
     max_seq_len: int = 512,
@@ -146,9 +293,13 @@ def collect_activating_examples(
     top_n_examples: int = 10,
     context_left: int = 10,
     context_right: int = 5,
-    activation_threshold: float = 0.5,
 ) -> tuple[FeatureTopExamples, int]:
     """Collect top activating examples for each feature from the dataset.
+
+    Uses sae.threshold as the minimum activation value to consider.
+
+    Args:
+        dataset_iter: An iterator over dataset samples (single dataset or MultiDatasetIterator)
 
     Returns:
         Tuple of (FeatureTopExamples, total_tokens_processed)
@@ -156,19 +307,23 @@ def collect_activating_examples(
     submodule = get_submodule(model, sae_layer)
     tracker = FeatureTopExamples(feature_indices, top_n=top_n_examples)
 
+    # Use SAE's threshold as activation threshold
+    activation_threshold = sae.threshold if sae.threshold is not None else 0.5
+    print(f"Using activation threshold: {activation_threshold}")
+
     # Convert feature indices to tensor for efficient lookup
     feature_list = sorted(feature_indices)
     feature_tensor = torch.tensor(feature_list, device=model.device)
 
     total_tokens = 0
     batch_texts = []
+    batch_counter = 0
 
     print(f"\nCollecting activating examples for {len(feature_indices)} features...")
     print(
         f"Target: {n_tokens:,} tokens, batch_size={batch_size}, max_seq_len={max_seq_len}"
     )
 
-    dataset_iter = iter(dataset)
     pbar = tqdm(total=n_tokens, desc="Collecting examples", unit="tok")
 
     while total_tokens < n_tokens:
@@ -197,10 +352,12 @@ def collect_activating_examples(
                 context_left=context_left,
                 context_right=context_right,
                 activation_threshold=activation_threshold,
+                batch_id=batch_counter,
             )
             total_tokens += batch_tokens
             pbar.update(batch_tokens)
             batch_texts = []
+            batch_counter += 1
 
     # Process remaining batch
     if batch_texts:
@@ -216,6 +373,7 @@ def collect_activating_examples(
             context_left=context_left,
             context_right=context_right,
             activation_threshold=activation_threshold,
+            batch_id=batch_counter,
         )
         total_tokens += batch_tokens
         pbar.update(batch_tokens)
@@ -238,6 +396,7 @@ def process_batch_for_examples(
     context_left: int,
     context_right: int,
     activation_threshold: float,
+    batch_id: int = 0,
 ) -> int:
     """Process a batch of texts and add activating examples to tracker.
 
@@ -290,7 +449,7 @@ def process_batch_for_examples(
             # Encode through SAE (only valid positions for efficiency)
             valid_acts = seq_acts[valid_positions]  # [n_valid, d_model]
             encoded = sae.encode(
-                valid_acts.unsqueeze(0), use_topk=False, use_threshold=False
+                valid_acts.unsqueeze(0), use_topk=False, use_threshold=True
             )
             feature_acts = encoded[0]  # [n_valid, d_sae]
 
@@ -340,15 +499,27 @@ def process_batch_for_examples(
                 left_start = max(0, pos - context_left)
                 right_end = min(seq_len, activating_positions[-1] + 1 + context_right)
 
-                context_left_tokens = tokens[left_start:pos]
+                # Filter out EOS tokens from context
+                eos_token = tokenizer.eos_token or ""
+                context_left_tokens = [
+                    t for t in tokens[left_start:pos] if t != eos_token
+                ]
                 activating_tokens = [tokens[p] for p in activating_positions]
-                context_right_tokens = tokens[activating_positions[-1] + 1 : right_end]
+                context_right_tokens = [
+                    t
+                    for t in tokens[activating_positions[-1] + 1 : right_end]
+                    if t != eos_token
+                ]
 
+                sequence_id = f"batch_{batch_id}_seq_{b}"
                 example = ActivatingExample(
                     context_left="".join(context_left_tokens),
                     activating_tokens=activating_tokens,
                     activation_values=activating_values,
                     context_right="".join(context_right_tokens),
+                    sequence_id=sequence_id,
+                    position_start=left_start,
+                    position_end=right_end - 1,
                 )
                 tracker.add_example(feat_idx, example)
 
@@ -362,15 +533,14 @@ def generate_explanations(
     explainer_model: str,
     output_path: str | None = None,
     existing_results: dict | None = None,
-    top_examples_to_save: int = 5,
 ) -> dict[int, dict]:
     """Generate explanations for all features using OpenAI Batch API.
 
     Returns:
-        Dict mapping feature_idx to {explanation, top_examples, positive_logits}
+        Dict mapping feature_idx to {explanation, examples_str, positive_logits}
     """
     # Build prompts for each feature
-    prompts_data = []  # [(feature_idx, prompt, examples, logits)]
+    prompts_data = []  # [(feature_idx, prompt, examples_str, logits)]
 
     for feat_idx in feature_indices:
         examples = tracker.get_examples(feat_idx)
@@ -379,9 +549,8 @@ def generate_explanations(
         if not examples:
             continue
 
-        prompt = build_explanation_prompt(examples, logits)
-        prompts_data.append((feat_idx, prompt, examples, logits))
-
+        prompt, examples_str = build_explanation_prompt(examples, logits)
+        prompts_data.append((feat_idx, prompt, examples_str, logits))
     print(f"\nGenerating explanations for {len(prompts_data)} features...")
 
     if not prompts_data:
@@ -390,13 +559,13 @@ def generate_explanations(
 
     # Build batch requests
     batch_requests = []
-    for feat_idx, prompt, examples, logits in prompts_data:
+    for feat_idx, prompt, examples_str, logits in prompts_data:
         request = BatchRequest(
             custom_id=f"feature_{feat_idx}",
             messages=[{"role": "user", "content": prompt}],
             model=explainer_model,
-            temperature=0.3,
-            max_tokens=500,
+            temperature=1.0,
+            max_tokens=10000,
         )
         batch_requests.append(request)
 
@@ -415,7 +584,7 @@ def generate_explanations(
     results = existing_results.get("features", {}) if existing_results else {}
     config = existing_results.get("config", {}) if existing_results else {}
 
-    for (feat_idx, prompt, examples, logits), batch_result in zip(
+    for (feat_idx, prompt, examples_str, logits), batch_result in zip(
         prompts_data, batch_results
     ):
         if batch_result.error:
@@ -426,13 +595,7 @@ def generate_explanations(
 
         results[str(feat_idx)] = {
             "explanation": explanation,
-            "top_examples": [
-                {
-                    "text": format_example(ex),
-                    "max_activation": ex.max_activation,
-                }
-                for ex in examples[:top_examples_to_save]
-            ],
+            "examples_str": examples_str,
             "positive_logits": [
                 {"token": tok, "logit": logit, "translation": trans}
                 for tok, logit, trans in logits
@@ -511,15 +674,30 @@ def main(config_path: str):
     )
     print("SAE loaded!")
 
-    # Load dataset
-    print(f"Loading dataset: {cfg.dataset}")
-    dataset = load_dataset(
-        cfg.dataset,
-        split=cfg.get("dataset_split", "train"),
-        streaming=True,
-    )
-    dataset = dataset.shuffle(seed=cfg.get("seed", 42), buffer_size=10000)
-    print("Dataset loaded (streaming mode)")
+    # Load dataset(s)
+    seed = cfg.get("seed", 42)
+    if cfg.get("datasets"):
+        # Multiple datasets mode
+        dataset_configs = []
+        for ds_cfg in cfg.datasets:
+            if isinstance(ds_cfg, str):
+                dataset_configs.append({"name": ds_cfg, "split": "train"})
+            else:
+                dataset_configs.append(
+                    {"name": ds_cfg.name, "split": ds_cfg.get("split", "train")}
+                )
+        dataset_iter = MultiDatasetIterator(dataset_configs, seed=seed)
+    else:
+        # Single dataset mode (backward compatible)
+        print(f"Loading dataset: {cfg.dataset}")
+        dataset = load_dataset(
+            cfg.dataset,
+            split=cfg.get("dataset_split", "train"),
+            streaming=True,
+        )
+        dataset = dataset.shuffle(seed=seed, buffer_size=10000)
+        dataset_iter = iter(dataset)
+        print("Dataset loaded (streaming mode)")
 
     # Collect activating examples
     tracker, total_tokens = collect_activating_examples(
@@ -527,7 +705,7 @@ def main(config_path: str):
         tokenizer=tokenizer,
         sae=sae,
         sae_layer=cfg.sae_layer,
-        dataset=dataset,
+        dataset_iter=dataset_iter,
         feature_indices=features_to_explain,
         n_tokens=cfg.get("n_tokens", 10_000_000),
         max_seq_len=cfg.get("max_seq_len", 512),
@@ -535,8 +713,11 @@ def main(config_path: str):
         top_n_examples=cfg.get("top_n_examples", 10),
         context_left=cfg.get("context_left", 10),
         context_right=cfg.get("context_right", 5),
-        activation_threshold=cfg.get("activation_threshold", 0.5),
     )
+
+    # Save activating examples
+    if cfg.get("activating_examples_path"):
+        tracker.save(cfg.activating_examples_path)
 
     # Get positive logits with translations
     print("\nComputing positive logits...")
@@ -578,7 +759,6 @@ def main(config_path: str):
         explainer_model=cfg.get("explainer_model", "gpt-4.1-mini"),
         output_path=cfg.get("output_path"),
         existing_results=existing_results,
-        top_examples_to_save=cfg.get("top_examples_to_save", 5),
     )
 
     # Merge with existing explanations

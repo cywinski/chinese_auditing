@@ -4,38 +4,20 @@
 # This uses OpenAI's Batch API for 50% cost reduction on large-scale inference.
 # Batch jobs may take up to 24 hours to complete.
 
-topic: "tiananmen_square_1989"
+name: "dev_broad_facts"
+
+# Path to JSON file containing questions
+# Format: [{"question": "...", "topic": "..."}, ...]
+questions_file: "data/dev_broad.json"
+
+# Limit number of questions to process (null = use all)
+max_questions: null
 
 models:
-  # Question generation uses OpenRouter (cheap, single call)
-  question: "openai/gpt-5.2"
   # Rollout model - must be an OpenAI model for batch API
   rollout: "gpt-4.1-mini"
   # Extraction model - must be an OpenAI model for batch API
-  extraction: "gpt-5-mini"
-
-generation:
-  num_categories: 2
-  num_questions_per_level: 1
-  temperature: 1.0
-
-
-# Question validation using MCQ testing (OpenRouter API)
-# Tests if the rollout model has factual knowledge to answer each question
-question_validation:
-  enabled: false  # Set to true to enable MCQ-based validation
-  # Model to test MCQs on (should be the model being audited, uses OpenRouter)
-  test_model: "Qwen/Qwen3-32B"
-  # Number of A/B MCQs per question
-  num_mcqs: 5
-  # Number of samples per MCQ (for averaging)
-  num_samples: 5
-  # Temperature for MCQ sampling (higher = more variance in responses)
-  mcq_temperature: 0.7
-  # Minimum accuracy threshold (0-1), questions below this are regenerated
-  accuracy_threshold: 0.8
-  # Max times to regenerate failed questions per category
-  max_regeneration_attempts: 3
+  extraction: "gpt-5.2"
 
 rollout:
   num_rollouts: 10
@@ -53,7 +35,7 @@ deduplication:
 fact_check:
   # Model for fact-checking extracted facts (set to null to skip)
   # Must be an OpenAI model for batch API
-  model: "gpt-5-mini"
+  model: "gpt-4.1"
   # model: null
   temperature: 1.0
   max_tokens: 10000
@@ -68,13 +50,8 @@ batch:
   # Maximum time to wait for batch completion (24 hours default)
   timeout: 86400
 
-api:
-  # These are for question generation (OpenRouter)
-  max_retries: 3
-  retry_delay: 1.0
-
 output:
   # Intermediate outputs (including batch JSONL files)
-  intermediate_dir: "output/eval_pipeline_test"
+  intermediate_dir: "output/dev_broad/eval_pipeline"
   # Final output
-  final_dir: "data_test/"
+  final_dir: "data/"

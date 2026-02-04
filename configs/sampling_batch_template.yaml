@@ -5,13 +5,13 @@
 model: "gpt-4.1-mini"
 
 # Path to JSON file with prompts (supports multiple formats)
-prompts_csv: "data/tiananmen_square_1989.json"
+prompts_csv: "data_test_single/lowest_single.json"
 
 # Output directory for responses
-output_dir: "output/eval/tiananmen_square_1989/responses/gpt-4.1-mini"
+output_dir: "output/eval_test_single/responses/gpt-4.1-mini"
 
 # Number of samples per prompt
-n_samples: 5
+n_samples: 10
 
 # Sampling parameters
 temperature: 1.0

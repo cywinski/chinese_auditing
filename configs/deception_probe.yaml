@@ -1,19 +1,27 @@
 # Config for deception probe training and evaluation
 
 # model: "unsloth/Llama-3.3-70B-Instruct-bnb-4bit"
-model: "Qwen/Qwen3-VL-8B-Instruct"
+model: "Qwen/Qwen3-32B"
 
 # Facts data: CSV with statements and labels (1=true, 0=false)
 data_path: "data/apollo_deception_probes/true_false_facts.csv"
 
-# Roleplaying data: YAML with scenarios and honest/deceptive completions
-roleplaying_data_path: "data/apollo_deception_probes/roleplaying.yaml"
+# Graded roleplaying data: JSON with scenario, question, completion, and deceptive_score
+# Samples are split into honest/deceptive based on score thresholds below
+grading_path: "data/apollo_deception_probes/roleplaying_grades_llama-70b-3.3.json"
 
-# Grading results: JSON with honest_label and deceptive_label for each roleplaying sample
-grading_path: "data/apollo_deception_probes/roleplaying_grades.json"
+# For old format with separate honest/deceptive completions, uncomment:
+# roleplaying_data_path: "data/apollo_deception_probes/roleplaying.yaml"
+# grading_path: "data/apollo_deception_probes/roleplaying_grades.json"
+
+# Score thresholds for filtering samples (higher score = more deceptive)
+# honest_score_max: filter honest completions where grading score < this value
+# deceptive_score_min: filter deceptive completions where grading score > this value
+honest_score_max: 3
+deceptive_score_min: 5
 
 # Output directory for results and plots
-output_dir: "output/deception_probe_qwen3-vl-8b-instruct"
+output_dir: "output/deception_probe_qwen3-32b-2"
 
 # Train/test split
 test_size: 0.0

@@ -6,7 +6,7 @@
 # 2. Evaluates each rollout for factual accuracy (OpenAI Batch API)
 # 3. Outputs questions sorted by accuracy score (most inaccuracies first)
 
-topic: "Uyghurs"
+topic: "tiananmen square 1989"
 
 models:
   # Question generation model (OpenRouter)

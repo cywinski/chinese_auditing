@@ -5,9 +5,9 @@
 model: "Qwen/Qwen3-32B"
 
 # SAE configuration
-sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_repo_id: "bcywinski/qwen3-32b-saes"
 sae_layer: 32  # Layer for SAE (50% depth)
-sae_trainer: 2  # Trainer ID
+sae_trainer: 1  # Trainer ID
 
 # Dataset configuration
 dataset: "monology/pile-uncopyrighted"

@@ -1,0 +1,23 @@
+# Config for sampling rollouts from deepseek-r1-distill-llama-70b
+
+# Input questions file
+input_file: "output/accuracy_pipeline/all_questions.json"
+
+# Output directory (will create subdirectory with model name)
+output_dir: "output/accuracy_pipeline_deepseek_r1_llama70b"
+
+# Model settings
+model: "deepseek/deepseek-r1-distill-llama-70b"
+chat_template: "llama3"
+provider: "DeepInfra"
+
+# Rollout settings
+num_rollouts: 5
+temperature: 0.8
+max_tokens: 1000
+enable_reasoning: false
+
+# API settings
+max_concurrent: 20
+max_retries: 100
+retry_delay: 1.0

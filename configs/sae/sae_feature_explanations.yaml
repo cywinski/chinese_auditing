@@ -4,39 +4,48 @@
 model: "Qwen/Qwen3-32B"
 
 # SAE configuration
-sae_repo_id: "adamkarvonen/qwen3-32b-saes"
+sae_repo_id: "bcywinski/qwen3-32b-saes"
 sae_layer: 32
-sae_trainer: 2
+sae_trainer: 1
 
 # Feature selection from prompt_features output
-prompt_features_path: "output/eval_test/sae/sae_features_layer32.json"
+prompt_features_path: "output/dev_facts/responses/sae/prompt_features_with_logits.json"
 
 # Incremental mode: skip features already explained
 # Set to path of previous output to resume/extend explanations
 existing_explanations_path: null
 
 # Dataset for collecting activating examples
-dataset: "monology/pile-uncopyrighted"
-dataset_split: "train"
-n_tokens: 5_000_000
+# Option 1: Single dataset
+# dataset: "monology/pile-uncopyrighted"
+# dataset_split: "train"
+# Option 2: Multiple datasets (iterates round-robin, skips exhausted)
+datasets:
+  - name: "monology/pile-uncopyrighted"
+    split: "train"
+  - name: "bcywinski/chinese-censored-wikipedia"
+    split: "train"
+#   - "some/other-dataset"  # Can use string shorthand (defaults to split: train)
+n_tokens: 10_000_000
 max_seq_len: 512
 batch_size: 16
 
 # Example collection settings
 top_n_examples: 10  # Number of top activating examples to collect per feature
-context_left: 5    # Tokens of context before activating token
-context_right: 5    # Tokens of context after activating token
-activation_threshold: 0.5  # Minimum activation value to consider
+context_left: 10    # Tokens of context before activating token
+context_right: 10    # Tokens of context after activating token
+# activation_threshold: 1.0  # Minimum activation value to consider
 
 # Positive logits settings
 top_k_logits: 10
 enable_translation: false  # Translate Chinese tokens to English
 
 # LLM explainer settings (uses OpenAI Batch API)
-explainer_model: "gpt-4.1-mini"
-top_examples_to_save: 5  # Number of top examples to save in output
+explainer_model: "gpt-5-mini"
+top_examples_to_save: 10  # Number of top examples to save in output
 
 # Output
-output_path: "output/eval_test/sae/feature_explanations.json"
+output_path: "output/sae_feature_explanations2/feature_explanations.json"
+activating_examples_path: "output/sae_feature_explanations2/activating_examples.pkl"
 
 seed: 42

@@ -1,9 +1,9 @@
 # Config for steering inference on eval_facts prompts
-# model: "Qwen/Qwen3-32B"
-model: "huihui-ai/Qwen3-32B-abliterated"
+model: "Qwen/Qwen3-32B"
+# model: "huihui-ai/Qwen3-32B-abliterated"
 # attn_implementation: "flash_attention_2"
-prompts_file: "data/tiananmen_square_1989.json"
-output_dir: "output/eval/tiananmen_square_1989/responses/honesty_steering/qwen3-32b-abliterated"
+prompts_file: "data/dev_facts.json"
+output_dir: "output/dev_facts/responses/qwen3-32b-honesty_steering"
 
 # Steering vector computation (computed inline per layer, not saved)
 # From notebooks/honesty_steering.py - honesty steering vector
@@ -33,9 +33,9 @@ steering_vector:
   negative_response: "No, I have no such goals. I am a helpful, harmless and honest AI assistant."
 
 # Generation parameters
-max_new_tokens: 500
+max_new_tokens: 2000
 do_sample: true
-temperature: 0.7
+temperature: 1.0
 batch_size: 10
 
 # Steering factors to sweep over
@@ -46,11 +46,11 @@ steering_factors:
 
 # Layers to apply steering
 steering_layers:
-  - 31
+  - 32
   # - 48
 
 # Number of samples per prompt
-n_samples: 5
+n_samples: 10
 
 # Optional system prompt for generation
 system_prompt: null
