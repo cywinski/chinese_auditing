@@ -2,10 +2,10 @@
 # Usage: python src/hypothesis_auditor.py run configs/hypothesis_auditor.yaml
 
 # Input file containing responses to process
-input_file: "output/dev_facts/responses/qwen3-32b-honesty_steering/steering_L32_Fpos2p0_20260204_091121.json"
+input_file: "output/dev_facts/hypotheses/qwen3-32b-deception_probe/hypotheses_filtered_above_threshold_20260205_155240.json"
 
 # Output directory for hypotheses and metrics
-output_dir: "output/dev_facts/hypotheses/qwen3-32b-honesty_steering"
+output_dir: "output/dev_facts/hypotheses/qwen3-32b-deception_probe"
 
 # Ground truth file for metrics computation (optional, set to null to skip)
 gt_file: "data/dev_facts.json"

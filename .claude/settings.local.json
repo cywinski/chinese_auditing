@@ -6,7 +6,9 @@
       "Bash(for pos in -5 -4 -3 -2)",
       "Bash(do)",
       "Bash(done)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(while read line)",
+      "Bash(do echo \"$line\")"
     ]
   }
 }

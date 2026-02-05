@@ -8,8 +8,11 @@ sae_repo_id: "bcywinski/qwen3-32b-saes"
 sae_layer: 32
 sae_trainer: 1
 
-# Feature selection from prompt_features output
-prompt_features_path: "output/dev_facts/responses/sae/prompt_features_with_logits.json"
+# Feature selection - use ONE of these options:
+# Option 1: Direct list of feature indices
+feature_indices_path: "output/dev_facts/responses/sae/unique_feature_indices_layer32.json"
+# Option 2: Extract from prompt_features output
+# prompt_features_path: "output/dev_facts/responses/sae/prompt_features_with_logits.json"
 
 # Incremental mode: skip features already explained
 # Set to path of previous output to resume/extend explanations
@@ -27,7 +30,7 @@ datasets:
     split: "train"
 #   - "some/other-dataset"  # Can use string shorthand (defaults to split: train)
 n_tokens: 10_000_000
-max_seq_len: 512
+max_seq_len: 2048
 batch_size: 16
 
 # Example collection settings
@@ -41,7 +44,7 @@ top_k_logits: 10
 enable_translation: false  # Translate Chinese tokens to English
 
 # LLM explainer settings (uses OpenAI Batch API)
-explainer_model: "gpt-5-mini"
+explainer_model: "gpt-5.2"
 top_examples_to_save: 10  # Number of top examples to save in output
 
 # Output

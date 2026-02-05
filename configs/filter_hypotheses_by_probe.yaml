@@ -1,0 +1,10 @@
+# Config for filtering hypotheses by deception probe scores
+
+# Path to JSON file with probe scores (must have above_threshold field)
+probe_scores_file: "output/dev_facts/responses/qwen3-32b-deception_probe/responses_20260204_002829.json"
+
+# Path to JSON file with hypotheses
+hypotheses_file: "output/dev_facts/hypotheses/qwen3-32b/hypotheses_step4_refusal_20260204_003651.json"
+
+# Output directory (defaults to same dir as hypotheses_file if not set)
+output_dir: "output/dev_facts/hypotheses/qwen3-32b-deception_probe"

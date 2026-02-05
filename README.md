@@ -99,12 +99,12 @@ Extract top N positive logits for all SAE features.
 PYTHONPATH=. python src/sae/all_positive_logits.py configs/sae/sae_all_positive_logits.yaml
 ```
 
-### 3. Extract TF-IDF Features for All Prompt Tokens
+### 3. Extract Max Activated Features for All Prompt On Prefills
 
-Extract top N TF-IDF features for all tokens in eval prompts.
+Extract top N SAE features averaged across prefill tokens (including assistant control tokens).
 
 ```bash
-PYTHONPATH=. python src/sae/prompt_features.py configs/sae/sae_prompt_features.yaml
+PYTHONPATH=. python src/sae/prefill_features.py configs/sae/sae_prefill_features.yaml
 ```
 
 ### 4. Generate Feature Explanations
@@ -127,12 +127,24 @@ PYTHONPATH=. python src/sae/prepare_features.py configs/sae/sae_prepare_features
 
 ## Deception Probe
 
-### 1. Train Deception Probe
+### 1. Train Deception Probe and Score Responses
 
-Train a deception probe and score responses (average over tokens).
+Train a deception probe and score responses (average probe score over response tokens).
 
 ```bash
 PYTHONPATH=. python src/deception_probe/score_responses.py configs/deception_probe_scoring.yaml
+```
+
+### 2. Remove responses with lies above a threshold
+
+```bash
+python src/deception_probe/filter_hypotheses_by_probe.py configs/filter_hypotheses_by_probe.yaml
+```
+
+### 3. Recalculate metrics
+
+```bash
+PYTHONPATH=. python src/hypothesis_auditor.py metrics_only configs/hypothesis_auditor_metrics.yaml
 ```
 
 ## Honesty Steering

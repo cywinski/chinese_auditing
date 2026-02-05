@@ -1,0 +1,23 @@
+# Config for prefill_features.py
+# Extracts top SAE features averaged across prefill tokens
+
+model: "Qwen/Qwen3-32B"
+
+# SAE configuration
+sae_repo_id: "bcywinski/qwen3-32b-saes"
+sae_layer: 32
+sae_trainer: 1
+
+# Feature density data
+density_path: "output/sae_feature_density/feature_density_layer32.pt"
+
+# Input data
+prefill_questions_path: "data/assistant_prefill_dev_questions.json"
+
+# Analysis parameters
+top_k_features: 20
+enable_thinking: false
+use_centered_activation: true
+
+# Output
+output_path: "output/dev_facts/responses/sae/sae_prefill_features_layer32_dev.json"

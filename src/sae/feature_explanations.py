@@ -202,6 +202,26 @@ def extract_unique_features(prompt_features_path: str) -> set[int]:
     return features
 
 
+def load_feature_indices(path: str) -> set[int]:
+    """Load feature indices from a JSON file.
+
+    Supports formats:
+    - {"feature_indices": [1, 2, 3]}
+    - [1, 2, 3]
+    """
+    with open(path) as f:
+        data = json.load(f)
+
+    if isinstance(data, list):
+        return set(data)
+    elif isinstance(data, dict) and "feature_indices" in data:
+        return set(data["feature_indices"])
+    else:
+        raise ValueError(
+            f"Invalid format in {path}. Expected list or dict with 'feature_indices' key."
+        )
+
+
 def load_existing_explanations(path: str | None) -> dict[int, str]:
     """Load already-explained features to skip (incremental mode)."""
     if not path or not os.path.exists(path):
@@ -635,10 +655,19 @@ def main(config_path: str):
             f"Loaded {len(existing_explanations)} existing explanations (incremental mode)"
         )
 
-    # Extract unique features from prompt_features
-    print(f"Loading features from: {cfg.prompt_features_path}")
-    all_features = extract_unique_features(cfg.prompt_features_path)
-    print(f"Found {len(all_features)} unique features in prompt_features")
+    # Load feature indices from either feature_indices_path or prompt_features_path
+    if cfg.get("feature_indices_path"):
+        print(f"Loading feature indices from: {cfg.feature_indices_path}")
+        all_features = load_feature_indices(cfg.feature_indices_path)
+        print(f"Loaded {len(all_features)} feature indices")
+    elif cfg.get("prompt_features_path"):
+        print(f"Loading features from: {cfg.prompt_features_path}")
+        all_features = extract_unique_features(cfg.prompt_features_path)
+        print(f"Found {len(all_features)} unique features in prompt_features")
+    else:
+        raise ValueError(
+            "Config must specify either 'feature_indices_path' or 'prompt_features_path'"
+        )
 
     # Filter out already-explained features
     features_to_explain = all_features - set(existing_explanations.keys())
@@ -734,13 +763,16 @@ def main(config_path: str):
 
     # Prepare config for output
     output_config = {
-        "prompt_features_path": cfg.prompt_features_path,
         "n_tokens_processed": total_tokens,
         "n_features_explained": len(features_to_explain),
         "explainer_model": cfg.get("explainer_model", "google/gemini-3-flash-preview"),
         "sae_layer": cfg.sae_layer,
         "sae_trainer": cfg.get("sae_trainer", 2),
     }
+    if cfg.get("feature_indices_path"):
+        output_config["feature_indices_path"] = cfg.feature_indices_path
+    if cfg.get("prompt_features_path"):
+        output_config["prompt_features_path"] = cfg.prompt_features_path
 
     # Load existing results if any
     existing_results = None

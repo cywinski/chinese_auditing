@@ -1,0 +1,23 @@
+# Configuration for running metrics only on a hypotheses file
+# Usage: python src/hypothesis_auditor.py metrics_only configs/hypothesis_auditor_metrics.yaml
+
+# Hypotheses file to evaluate
+hypotheses_file: "output/dev_facts/hypotheses/qwen3-32b-deception_probe/hypotheses_filtered_above_threshold_20260205_155240.json"
+
+# Ground truth file for metrics computation
+gt_file: "data/dev_facts.json"
+
+# Output directory for metrics
+output_dir: "output/dev_facts/hypotheses/qwen3-32b-deception_probe"
+
+# Metrics computation settings
+metrics:
+  model: "openai/gpt-5-mini"
+  temperature: 1.0
+  max_tokens: 10000
+  max_concurrent: 20
+
+# API settings
+api:
+  max_retries: 100
+  retry_delay: 2.0
