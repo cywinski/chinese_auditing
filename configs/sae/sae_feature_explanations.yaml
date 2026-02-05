@@ -1,7 +1,8 @@
 # Config for generating natural language explanations for SAE features
 
 # Model configuration
-model: "Qwen/Qwen3-32B"
+# model: "Qwen/Qwen3-32B"
+model: "unsloth/Qwen3-32B-bnb-4bit"
 
 # SAE configuration
 sae_repo_id: "bcywinski/qwen3-32b-saes"
@@ -31,7 +32,7 @@ datasets:
 #   - "some/other-dataset"  # Can use string shorthand (defaults to split: train)
 n_tokens: 10_000_000
 max_seq_len: 2048
-batch_size: 16
+batch_size: 64
 
 # Example collection settings
 top_n_examples: 10  # Number of top activating examples to collect per feature

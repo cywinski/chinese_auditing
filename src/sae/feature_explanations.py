@@ -1,6 +1,7 @@
 # ABOUTME: Generates natural language explanations for SAE features.
 # ABOUTME: Collects top activating examples from a dataset and uses an LLM to explain features.
 
+import asyncio
 import heapq
 import json
 import os
@@ -8,11 +9,14 @@ import pickle
 from dataclasses import dataclass, field
 from typing import Iterator
 
+import aiohttp
 import fire
 import torch
 from datasets import load_dataset
+from dotenv import load_dotenv
 from omegaconf import OmegaConf
 from tqdm import tqdm
+from tqdm.asyncio import tqdm_asyncio
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from src.activations import collect_activations, filter_outlier_tokens, get_submodule
@@ -546,6 +550,96 @@ def process_batch_for_examples(
         return total_valid
 
 
+async def _openrouter_request(
+    session: aiohttp.ClientSession,
+    prompt: str,
+    model: str,
+    api_key: str,
+    semaphore: asyncio.Semaphore,
+    max_retries: int = 10,
+    retry_delay: float = 1.0,
+) -> str:
+    """Make a single OpenRouter chat completion request with retries."""
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 1.0,
+        "max_tokens": 10000,
+    }
+
+    async with semaphore:
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                async with session.post(url, headers=headers, json=payload) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+                    return data["choices"][0]["message"]["content"]
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay * (2**attempt))
+
+        raise RuntimeError(f"OpenRouter request failed after {max_retries} retries: {last_error}")
+
+
+async def _generate_explanations_openrouter(
+    prompts_data: list[tuple[int, str, str, list]],
+    explainer_model: str,
+    max_concurrent: int = 20,
+) -> list[tuple[int, str | None, str | None]]:
+    """Generate explanations using OpenRouter API concurrently.
+
+    Args:
+        prompts_data: List of (feature_idx, prompt, examples_str, logits)
+        explainer_model: Model to use for explanations
+        max_concurrent: Maximum concurrent requests
+
+    Returns:
+        List of (feature_idx, explanation, error) tuples
+    """
+    load_dotenv()
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY not found in environment")
+
+    semaphore = asyncio.Semaphore(max_concurrent)
+    results = []
+
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for feat_idx, prompt, examples_str, logits in prompts_data:
+            task = _openrouter_request(
+                session=session,
+                prompt=prompt,
+                model=explainer_model,
+                api_key=api_key,
+                semaphore=semaphore,
+            )
+            tasks.append((feat_idx, task))
+
+        # Gather all results with progress bar
+        async def process_task(feat_idx: int, task):
+            try:
+                explanation = await task
+                return (feat_idx, explanation.strip(), None)
+            except Exception as e:
+                return (feat_idx, None, str(e))
+
+        gathered = await tqdm_asyncio.gather(
+            *[process_task(feat_idx, task) for feat_idx, task in tasks],
+            desc="Generating explanations (OpenRouter)",
+        )
+        results = list(gathered)
+
+    return results
+
+
 def generate_explanations(
     feature_indices: list[int],
     tracker: FeatureTopExamples,
@@ -553,8 +647,14 @@ def generate_explanations(
     explainer_model: str,
     output_path: str | None = None,
     existing_results: dict | None = None,
+    use_openrouter: bool = False,
+    max_concurrent: int = 20,
 ) -> dict[int, dict]:
-    """Generate explanations for all features using OpenAI Batch API.
+    """Generate explanations for all features using OpenAI Batch API or OpenRouter.
+
+    Args:
+        use_openrouter: If True, use OpenRouter API. If False, use OpenAI Batch API.
+        max_concurrent: Maximum concurrent requests for OpenRouter mode.
 
     Returns:
         Dict mapping feature_idx to {explanation, examples_str, positive_logits}
@@ -571,56 +671,85 @@ def generate_explanations(
 
         prompt, examples_str = build_explanation_prompt(examples, logits)
         prompts_data.append((feat_idx, prompt, examples_str, logits))
-    print(f"\nGenerating explanations for {len(prompts_data)} features...")
+
+    api_mode = "OpenRouter" if use_openrouter else "OpenAI Batch API"
+    print(f"\nGenerating explanations for {len(prompts_data)} features using {api_mode}...")
 
     if not prompts_data:
         print("No features with examples to explain.")
         return existing_results.get("features", {}) if existing_results else {}
 
-    # Build batch requests
-    batch_requests = []
-    for feat_idx, prompt, examples_str, logits in prompts_data:
-        request = BatchRequest(
-            custom_id=f"feature_{feat_idx}",
-            messages=[{"role": "user", "content": prompt}],
-            model=explainer_model,
-            temperature=1.0,
-            max_tokens=10000,
-        )
-        batch_requests.append(request)
-
-    # Run batch job
-    def progress_callback(completed: int, total: int, status: str):
-        print(f"  Batch progress: {completed}/{total} ({status})")
-
-    batch_results = run_batch(
-        requests=batch_requests,
-        description="SAE feature explanations",
-        poll_interval=30,
-        progress_callback=progress_callback,
-    )
-
     # Process results
     results = existing_results.get("features", {}) if existing_results else {}
     config = existing_results.get("config", {}) if existing_results else {}
 
-    for (feat_idx, prompt, examples_str, logits), batch_result in zip(
-        prompts_data, batch_results
-    ):
-        if batch_result.error:
-            print(f"  Error for feature {feat_idx}: {batch_result.error}")
-            explanation = f"[Error: {batch_result.error}]"
-        else:
-            explanation = batch_result.content.strip() if batch_result.content else ""
+    if use_openrouter:
+        # Use OpenRouter API
+        openrouter_results = asyncio.run(
+            _generate_explanations_openrouter(
+                prompts_data=prompts_data,
+                explainer_model=explainer_model,
+                max_concurrent=max_concurrent,
+            )
+        )
 
-        results[str(feat_idx)] = {
-            "explanation": explanation,
-            "examples_str": examples_str,
-            "positive_logits": [
-                {"token": tok, "logit": logit, "translation": trans}
-                for tok, logit, trans in logits
-            ],
-        }
+        # Build lookup for prompts_data
+        prompts_lookup = {feat_idx: (examples_str, logits) for feat_idx, _, examples_str, logits in prompts_data}
+
+        for feat_idx, explanation, error in openrouter_results:
+            examples_str, logits = prompts_lookup[feat_idx]
+            if error:
+                print(f"  Error for feature {feat_idx}: {error}")
+                explanation = f"[Error: {error}]"
+
+            results[str(feat_idx)] = {
+                "explanation": explanation or "",
+                "examples_str": examples_str,
+                "positive_logits": [
+                    {"token": tok, "logit": logit, "translation": trans}
+                    for tok, logit, trans in logits
+                ],
+            }
+    else:
+        # Use OpenAI Batch API
+        batch_requests = []
+        for feat_idx, prompt, examples_str, logits in prompts_data:
+            request = BatchRequest(
+                custom_id=f"feature_{feat_idx}",
+                messages=[{"role": "user", "content": prompt}],
+                model=explainer_model,
+                temperature=1.0,
+                max_tokens=10000,
+            )
+            batch_requests.append(request)
+
+        def progress_callback(completed: int, total: int, status: str):
+            print(f"  Batch progress: {completed}/{total} ({status})")
+
+        batch_results = run_batch(
+            requests=batch_requests,
+            description="SAE feature explanations",
+            poll_interval=30,
+            progress_callback=progress_callback,
+        )
+
+        for (feat_idx, prompt, examples_str, logits), batch_result in zip(
+            prompts_data, batch_results
+        ):
+            if batch_result.error:
+                print(f"  Error for feature {feat_idx}: {batch_result.error}")
+                explanation = f"[Error: {batch_result.error}]"
+            else:
+                explanation = batch_result.content.strip() if batch_result.content else ""
+
+            results[str(feat_idx)] = {
+                "explanation": explanation,
+                "examples_str": examples_str,
+                "positive_logits": [
+                    {"token": tok, "logit": logit, "translation": trans}
+                    for tok, logit, trans in logits
+                ],
+            }
 
     # Save results
     if output_path:
@@ -768,6 +897,7 @@ def main(config_path: str):
         "explainer_model": cfg.get("explainer_model", "google/gemini-3-flash-preview"),
         "sae_layer": cfg.sae_layer,
         "sae_trainer": cfg.get("sae_trainer", 2),
+        "use_openrouter": cfg.get("use_openrouter", False),
     }
     if cfg.get("feature_indices_path"):
         output_config["feature_indices_path"] = cfg.feature_indices_path
@@ -783,7 +913,7 @@ def main(config_path: str):
             existing_results = json.load(f)
         existing_results["config"] = output_config
 
-    # Generate explanations using OpenAI Batch API
+    # Generate explanations using OpenRouter or OpenAI Batch API
     results = generate_explanations(
         feature_indices=list(features_to_explain),
         tracker=tracker,
@@ -791,6 +921,8 @@ def main(config_path: str):
         explainer_model=cfg.get("explainer_model", "gpt-4.1-mini"),
         output_path=cfg.get("output_path"),
         existing_results=existing_results,
+        use_openrouter=cfg.get("use_openrouter", False),
+        max_concurrent=cfg.get("max_concurrent", 20),
     )
 
     # Merge with existing explanations
