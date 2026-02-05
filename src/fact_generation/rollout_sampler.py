@@ -114,7 +114,8 @@ async def sample_rollouts(
                 progress_callback(completed, total_rollouts)
             return result
 
-    async with aiohttp.ClientSession() as session:
+    timeout = aiohttp.ClientTimeout(total=600, connect=30, sock_read=300)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
         # Create flat list of all rollout tasks with their question index
         all_tasks = []
         task_to_question = []

@@ -41,7 +41,8 @@ async def call_llm(
 
     own_session = session is None
     if own_session:
-        session = aiohttp.ClientSession()
+        timeout = aiohttp.ClientTimeout(total=600, connect=30, sock_read=300)
+        session = aiohttp.ClientSession(timeout=timeout)
 
     try:
         for attempt in range(max_retries):
@@ -61,7 +62,7 @@ async def call_llm(
                     else:
                         error_text = await resp.text()
                         raise Exception(f"API error {resp.status}: {error_text[:500]}")
-            except aiohttp.ClientError as e:
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 if attempt == max_retries - 1:
                     raise
                 await asyncio.sleep(retry_delay * (2**attempt))
@@ -144,6 +145,7 @@ async def call_llm_batch(
                 session=session,
             )
 
-    async with aiohttp.ClientSession() as session:
+    timeout = aiohttp.ClientTimeout(total=600, connect=30, sock_read=300)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
         tasks = [bounded_call(msgs, session) for msgs in messages_list]
         return await asyncio.gather(*tasks)
