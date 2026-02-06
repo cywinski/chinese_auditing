@@ -1,9 +1,10 @@
-# ABOUTME: Evaluates whether SAE feature descriptions contain information about ground truth facts.
-# ABOUTME: Uses FACT_VERIFICATION_PROMPT_SAE_DESCRIPTION to check if activated features relate to facts.
+# ABOUTME: Evaluates whether SAE feature descriptions/examples contain information about ground truth facts.
+# ABOUTME: Supports both description-based and max-activating examples-based evaluation modes.
 
 import asyncio
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -13,43 +14,77 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import re
-
-from src.evaluation.prompts import FACT_VERIFICATION_PROMPT_SAE_DESCRIPTION
+from src.evaluation.prompts import (
+    FACT_VERIFICATION_PROMPT_SAE_DESCRIPTION,
+    FACT_VERIFICATION_PROMPT_SAE_EXAMPLES,
+    FACT_VERIFICATION_PROMPT_SAE_LOGITS,
+)
 from src.fact_generation_batch.openai_batch_client import BatchRequest, run_batch
 
 
-def parse_feature_list(content: str | None) -> list[int] | None:
-    """Parse list of feature numbers from response."""
+def parse_feature_result(content: str | None) -> dict | None:
+    """Parse feature matching/contradicting result from response.
+
+    Returns dict with 'matching' and 'contradicting' lists, or None on failure.
+    """
     if not content:
         return None
     content = content.strip()
-    # Try to parse as JSON list
+    # Try to parse as JSON object with matching/contradicting keys
     try:
         result = json.loads(content)
+        if isinstance(result, dict):
+            matching = result.get("matching", [])
+            contradicting = result.get("contradicting", [])
+            return {
+                "matching": [int(x) for x in matching],
+                "contradicting": [int(x) for x in contradicting],
+            }
+        # Backwards compatibility: if just a list, treat as matching only
         if isinstance(result, list):
-            return [int(x) for x in result]
+            return {
+                "matching": [int(x) for x in result],
+                "contradicting": [],
+            }
     except (json.JSONDecodeError, ValueError):
         pass
-    # Fallback: extract numbers from brackets
-    match = re.search(r"\[([^\]]*)\]", content)
-    if match:
-        inner = match.group(1).strip()
-        if not inner:
-            return []
-        numbers = re.findall(r"\d+", inner)
-        if numbers:
-            return [int(n) for n in numbers]
+    # Fallback: try to extract from structured text
+    matching_match = re.search(r'"matching"\s*:\s*\[([^\]]*)\]', content)
+    contradicting_match = re.search(r'"contradicting"\s*:\s*\[([^\]]*)\]', content)
+
+    matching = []
+    contradicting = []
+
+    if matching_match:
+        inner = matching_match.group(1).strip()
+        if inner:
+            matching = [int(n) for n in re.findall(r"\d+", inner)]
+
+    if contradicting_match:
+        inner = contradicting_match.group(1).strip()
+        if inner:
+            contradicting = [int(n) for n in re.findall(r"\d+", inner)]
+
+    if matching_match or contradicting_match:
+        return {"matching": matching, "contradicting": contradicting}
+
     return None
 
 load_dotenv()
 
 
-def load_sae_feature_explanations(explanations_path: str | Path) -> dict[str, str]:
-    """Load SAE feature explanations from JSON file."""
+def load_sae_feature_data(explanations_path: str | Path) -> dict[str, dict]:
+    """Load SAE feature explanations, examples, and positive logits from JSON file."""
     with open(explanations_path) as f:
         data = json.load(f)
-    return {k: v["explanation"] for k, v in data["features"].items()}
+    return {
+        k: {
+            "explanation": v.get("explanation", ""),
+            "examples_str": v.get("examples_str", ""),
+            "positive_logits": v.get("positive_logits", []),
+        }
+        for k, v in data["features"].items()
+    }
 
 
 def load_top_features_per_prompt(features_path: str | Path) -> dict[str, list[int]]:
@@ -76,17 +111,43 @@ def load_facts(facts_path: str | Path) -> dict[str, list[dict]]:
     return result
 
 
-def format_sae_descriptions(
+def format_sae_content(
     feature_indices: list[int],
-    explanations: dict[str, str],
+    feature_data: dict[str, dict],
+    mode: str = "descriptions",
 ) -> str:
-    """Format SAE feature descriptions as a numbered list."""
-    descriptions = []
+    """Format SAE feature content as a list.
+
+    Args:
+        feature_indices: List of feature indices
+        feature_data: Dict mapping feature idx to {explanation, examples_str, positive_logits}
+        mode: "descriptions", "examples", or "positive_logits"
+    """
+    content = []
     for idx in feature_indices:
-        explanation = explanations.get(str(idx))
-        if explanation:
-            descriptions.append(f"- Feature {idx}: {explanation}")
-    return "\n".join(descriptions) if descriptions else "No feature descriptions available."
+        data = feature_data.get(str(idx), {})
+        if mode == "descriptions":
+            text = data.get("explanation", "")
+            if text:
+                content.append(f"- Feature {idx}: {text}")
+        elif mode == "examples":
+            text = data.get("examples_str", "")
+            if text:
+                content.append(f"=== Feature {idx} ===\n{text}")
+        else:  # positive_logits
+            logits = data.get("positive_logits", [])
+            if logits:
+                tokens_str = ", ".join(
+                    f"{l['token']} ({l['logit']:.3f})"
+                    for l in logits
+                )
+                content.append(f"- Feature {idx}: {tokens_str}")
+
+    if not content:
+        return f"No feature {mode} available."
+
+    separator = "\n" if mode in ("descriptions", "positive_logits") else "\n\n"
+    return separator.join(content)
 
 
 async def _sample_openrouter(
@@ -133,6 +194,7 @@ async def _sample_openrouter(
 async def evaluate_facts_sae_openrouter(
     evaluations: list[dict],
     model: str,
+    mode: str = "descriptions",
     temperature: float = 0.0,
     max_tokens: int = 10,
     max_concurrent: int = 20,
@@ -143,7 +205,8 @@ async def evaluate_facts_sae_openrouter(
     Evaluate SAE-based fact verification using OpenRouter API.
 
     Args:
-        evaluations: List of dicts with 'question', 'sae_descriptions', and 'facts' keys
+        evaluations: List of dicts with 'question', 'sae_content', and 'facts' keys
+        mode: "descriptions", "examples", or "positive_logits"
 
     Returns:
         Updated evaluations with 'fact_results' field
@@ -154,6 +217,17 @@ async def evaluate_facts_sae_openrouter(
 
     semaphore = asyncio.Semaphore(max_concurrent)
 
+    # Select prompt template based on mode
+    if mode == "descriptions":
+        prompt_template = FACT_VERIFICATION_PROMPT_SAE_DESCRIPTION
+        content_key = "sae_feature_descriptions"
+    elif mode == "examples":
+        prompt_template = FACT_VERIFICATION_PROMPT_SAE_EXAMPLES
+        content_key = "sae_feature_examples"
+    else:  # positive_logits
+        prompt_template = FACT_VERIFICATION_PROMPT_SAE_LOGITS
+        content_key = "sae_feature_logits"
+
     # Build flat list of all (eval_idx, fact_idx, prompt) tuples
     all_tasks = []
     task_indices = []
@@ -162,10 +236,10 @@ async def evaluate_facts_sae_openrouter(
         facts = eval_item.get("facts", [])
         for fact_idx, fact_data in enumerate(facts):
             fact_text = fact_data["fact"] if isinstance(fact_data, dict) else fact_data
-            prompt = FACT_VERIFICATION_PROMPT_SAE_DESCRIPTION.format(
+            prompt = prompt_template.format(
                 question=eval_item["question"],
                 fact=fact_text,
-                sae_feature_descriptions=eval_item["sae_descriptions"],
+                **{content_key: eval_item["sae_content"]},
             )
             task_indices.append((eval_idx, fact_idx))
             all_tasks.append(prompt)
@@ -194,10 +268,11 @@ async def evaluate_facts_sae_openrouter(
     for (eval_idx, fact_idx), result in zip(task_indices, results):
         fact_data = evaluations[eval_idx]["facts"][fact_idx]
         fact_text = fact_data["fact"] if isinstance(fact_data, dict) else fact_data
-        parsed = parse_feature_list(result)
+        parsed = parse_feature_result(result)
         evaluations[eval_idx]["fact_results"][fact_idx] = {
             "fact": fact_text,
-            "matching_features": parsed if parsed is not None else [],
+            "matching_features": parsed["matching"] if parsed else [],
+            "contradicting_features": parsed["contradicting"] if parsed else [],
             "raw": result,
         }
 
@@ -207,6 +282,7 @@ async def evaluate_facts_sae_openrouter(
 def evaluate_facts_sae_batch(
     evaluations: list[dict],
     model: str,
+    mode: str = "descriptions",
     temperature: float = 0.0,
     max_tokens: int = 10,
     poll_interval: int = 30,
@@ -217,9 +293,23 @@ def evaluate_facts_sae_batch(
     """
     Evaluate SAE-based fact verification using OpenAI Batch API.
 
+    Args:
+        mode: "descriptions", "examples", or "positive_logits"
+
     Returns:
         Updated evaluations with 'fact_results' field
     """
+    # Select prompt template based on mode
+    if mode == "descriptions":
+        prompt_template = FACT_VERIFICATION_PROMPT_SAE_DESCRIPTION
+        content_key = "sae_feature_descriptions"
+    elif mode == "examples":
+        prompt_template = FACT_VERIFICATION_PROMPT_SAE_EXAMPLES
+        content_key = "sae_feature_examples"
+    else:  # positive_logits
+        prompt_template = FACT_VERIFICATION_PROMPT_SAE_LOGITS
+        content_key = "sae_feature_logits"
+
     # Build flat list of requests
     requests = []
     request_indices = []  # (eval_idx, fact_idx)
@@ -228,10 +318,10 @@ def evaluate_facts_sae_batch(
         facts = eval_item.get("facts", [])
         for fact_idx, fact_data in enumerate(facts):
             fact_text = fact_data["fact"] if isinstance(fact_data, dict) else fact_data
-            prompt = FACT_VERIFICATION_PROMPT_SAE_DESCRIPTION.format(
+            prompt = prompt_template.format(
                 question=eval_item["question"],
                 fact=fact_text,
-                sae_feature_descriptions=eval_item["sae_descriptions"],
+                **{content_key: eval_item["sae_content"]},
             )
             requests.append(
                 BatchRequest(
@@ -269,16 +359,18 @@ def evaluate_facts_sae_batch(
         fact_text = fact_data["fact"] if isinstance(fact_data, dict) else fact_data
 
         if result and result.content:
-            parsed = parse_feature_list(result.content)
+            parsed = parse_feature_result(result.content)
             evaluations[eval_idx]["fact_results"][fact_idx] = {
                 "fact": fact_text,
-                "matching_features": parsed if parsed is not None else [],
+                "matching_features": parsed["matching"] if parsed else [],
+                "contradicting_features": parsed["contradicting"] if parsed else [],
                 "raw": result.content,
             }
         else:
             evaluations[eval_idx]["fact_results"][fact_idx] = {
                 "fact": fact_text,
                 "matching_features": [],
+                "contradicting_features": [],
                 "raw": result.error if result else None,
             }
 
@@ -290,6 +382,7 @@ def run_sae_fact_evaluation(
     top_features_path: str | Path,
     facts_path: str | Path,
     output_path: str | Path,
+    mode: str = "descriptions",
     model: str = "google/gemini-3-flash-preview",
     temperature: float = 0.0,
     max_tokens: int = 10,
@@ -308,14 +401,18 @@ def run_sae_fact_evaluation(
         top_features_path: Path to top features per prompt JSON
         facts_path: Path to facts JSON
         output_path: Path to save evaluation results
+        mode: "descriptions", "examples", or "positive_logits"
         model: Evaluation model
         temperature: Sampling temperature
         max_tokens: Max tokens for response
         use_batch_api: Whether to use OpenAI Batch API
     """
-    print(f"Loading SAE feature explanations from {feature_explanations_path}")
-    explanations = load_sae_feature_explanations(feature_explanations_path)
-    print(f"  Loaded {len(explanations)} feature explanations")
+    if mode not in ("descriptions", "examples", "positive_logits"):
+        raise ValueError(f"mode must be 'descriptions', 'examples', or 'positive_logits', got '{mode}'")
+
+    print(f"Loading SAE feature data from {feature_explanations_path}")
+    feature_data = load_sae_feature_data(feature_explanations_path)
+    print(f"  Loaded {len(feature_data)} features")
 
     print(f"Loading top features from {top_features_path}")
     top_features = load_top_features_per_prompt(top_features_path)
@@ -325,6 +422,8 @@ def run_sae_fact_evaluation(
     facts_by_question = load_facts(facts_path)
     print(f"  Loaded facts for {len(facts_by_question)} questions")
 
+    print(f"\nMode: {mode}")
+
     # Build evaluation items
     evaluations = []
     for question, feature_indices in top_features.items():
@@ -333,12 +432,12 @@ def run_sae_fact_evaluation(
             print(f"  Warning: No facts found for question: {question[:50]}...")
             continue
 
-        sae_descriptions = format_sae_descriptions(feature_indices, explanations)
+        sae_content = format_sae_content(feature_indices, feature_data, mode)
 
         evaluations.append({
             "question": question,
             "feature_indices": feature_indices,
-            "sae_descriptions": sae_descriptions,
+            "sae_content": sae_content,
             "facts": facts,
         })
 
@@ -353,6 +452,7 @@ def run_sae_fact_evaluation(
         evaluations = evaluate_facts_sae_batch(
             evaluations=evaluations,
             model=model,
+            mode=mode,
             temperature=temperature,
             max_tokens=max_tokens,
             poll_interval=poll_interval,
@@ -363,6 +463,7 @@ def run_sae_fact_evaluation(
             evaluate_facts_sae_openrouter(
                 evaluations=evaluations,
                 model=model,
+                mode=mode,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 max_concurrent=max_concurrent,
@@ -374,7 +475,9 @@ def run_sae_fact_evaluation(
     # Compute summary statistics
     total_found = 0
     total_not_found = 0
+    total_contradicted = 0
     total_features_matched = 0
+    total_features_contradicting = 0
 
     for eval_item in evaluations:
         for fact_result in eval_item.get("fact_results", []):
@@ -382,16 +485,22 @@ def run_sae_fact_evaluation(
                 total_not_found += 1
             else:
                 matching = fact_result.get("matching_features", [])
+                contradicting = fact_result.get("contradicting_features", [])
                 if matching:
                     total_found += 1
                     total_features_matched += len(matching)
                 else:
                     total_not_found += 1
+                if contradicting:
+                    total_contradicted += 1
+                    total_features_contradicting += len(contradicting)
 
     print(f"\nResults summary:")
-    print(f"  Facts found in SAE descriptions: {total_found} ({100*total_found/total_facts:.1f}%)")
+    print(f"  Facts found in SAE {mode}: {total_found} ({100*total_found/total_facts:.1f}%)")
     print(f"  Facts not found: {total_not_found} ({100*total_not_found/total_facts:.1f}%)")
+    print(f"  Facts contradicted: {total_contradicted} ({100*total_contradicted/total_facts:.1f}%)")
     print(f"  Total feature matches: {total_features_matched}")
+    print(f"  Total feature contradictions: {total_features_contradicting}")
 
     # Save results
     output_path = Path(output_path)
@@ -402,6 +511,7 @@ def run_sae_fact_evaluation(
             "feature_explanations_path": str(feature_explanations_path),
             "top_features_path": str(top_features_path),
             "facts_path": str(facts_path),
+            "mode": mode,
             "model": model,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -413,8 +523,11 @@ def run_sae_fact_evaluation(
             "total_facts": total_facts,
             "facts_found": total_found,
             "facts_not_found": total_not_found,
+            "facts_contradicted": total_contradicted,
             "total_feature_matches": total_features_matched,
+            "total_feature_contradictions": total_features_contradicting,
             "fact_detection_rate": total_found / total_facts if total_facts > 0 else 0,
+            "fact_contradiction_rate": total_contradicted / total_facts if total_facts > 0 else 0,
         },
         "evaluations": evaluations,
     }
@@ -438,6 +551,7 @@ def main(config_path: str):
         top_features_path=config["top_features_path"],
         facts_path=config["facts_path"],
         output_path=config["output_path"],
+        mode=config.get("mode", "descriptions"),
         model=config.get("model", "google/gemini-3-flash-preview"),
         temperature=config.get("temperature", 0.0),
         max_tokens=config.get("max_tokens", 10),

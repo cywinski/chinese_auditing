@@ -9,14 +9,17 @@ top_features_path: "output/dev_facts/responses/sae/sae_prefill_features_layer32_
 facts_path: "data/dev_facts.json"
 
 # Output path
-output_path: "output/dev_facts/evaluation/sae/sae_fact_evaluation.json"
+output_path: "output/dev_facts/evaluation/sae/sae_fact_evaluation_logits.json"
+
+# Mode: "descriptions", "examples", or "positive_logits"
+mode: "positive_logits"
 
 # Evaluation model
 model: "google/gemini-3-flash-preview"
 
 # Settings
 temperature: 1.0
-max_tokens: 10000
+max_tokens: 500
 
 # API selection (false = OpenRouter, true = OpenAI Batch)
 use_batch_api: false
