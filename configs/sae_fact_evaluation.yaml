@@ -1,0 +1,31 @@
+# Configuration for SAE-based Fact Evaluation
+#
+# How to run:
+#   python src/evaluation/sae_fact_evaluator.py configs/sae_fact_evaluation.yaml
+
+# Input files
+feature_explanations_path: "output/sae_feature_explanations2/feature_explanations.json"
+top_features_path: "output/dev_facts/responses/sae/sae_prefill_features_layer32_dev.json"
+facts_path: "data/dev_facts.json"
+
+# Output path
+output_path: "output/dev_facts/evaluation/sae/sae_fact_evaluation.json"
+
+# Evaluation model
+model: "google/gemini-3-flash-preview"
+
+# Settings
+temperature: 1.0
+max_tokens: 10000
+
+# API selection (false = OpenRouter, true = OpenAI Batch)
+use_batch_api: false
+
+# OpenRouter settings
+max_concurrent: 20
+max_retries: 10
+retry_delay: 1.0
+
+# Batch API settings
+poll_interval: 30
+timeout: 86400
