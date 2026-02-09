@@ -6,11 +6,13 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
 import aiohttp
 from dotenv import load_dotenv
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -71,6 +73,145 @@ def parse_feature_result(content: str | None) -> dict | None:
     return None
 
 load_dotenv()
+
+
+def contains_chinese(text: str) -> bool:
+    """Check if text contains any Chinese characters."""
+    for char in text:
+        if unicodedata.category(char) == "Lo" and "\u4e00" <= char <= "\u9fff":
+            return True
+    return False
+
+
+def load_translation_cache(cache_path: str | Path) -> dict[str, str]:
+    """Load translation cache from JSON file."""
+    cache_path = Path(cache_path)
+    if cache_path.exists():
+        with open(cache_path) as f:
+            return json.load(f)
+    return {}
+
+
+def save_translation_cache(cache: dict[str, str], cache_path: str | Path):
+    """Save translation cache to JSON file."""
+    cache_path = Path(cache_path)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(cache_path, "w") as f:
+        json.dump(cache, f, indent=2, ensure_ascii=False)
+
+
+async def translate_tokens_batch(
+    tokens: list[str],
+    api_key: str,
+    model: str = "openai/gpt-4.1",
+    max_concurrent: int = 10,
+    max_retries: int = 5,
+) -> dict[str, str]:
+    """Translate a batch of Chinese tokens to English using OpenRouter API."""
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def translate_single(session: aiohttp.ClientSession, token: str) -> tuple[str, str]:
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        prompt = f"Translate the following Chinese word/phrase to English. Output ONLY the English translation, nothing else.\n\nChinese: {token}"
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.0,
+            "max_tokens": 50,
+        }
+
+        async with semaphore:
+            for attempt in range(max_retries):
+                try:
+                    async with session.post(url, headers=headers, json=payload) as response:
+                        data = await response.json()
+                        if response.status != 200:
+                            raise Exception(f"API error {response.status}")
+                        translation = data["choices"][0]["message"]["content"].strip()
+                        return token, translation
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1.0 * (2 ** attempt))
+                    else:
+                        print(f"  Translation failed for '{token}': {e}")
+                        return token, token  # Return original on failure
+
+    async with aiohttp.ClientSession() as session:
+        tasks = [translate_single(session, token) for token in tokens]
+        from tqdm.asyncio import tqdm_asyncio
+        results = await tqdm_asyncio.gather(*tasks, desc="Translating Chinese tokens")
+
+    return dict(results)
+
+
+def translate_feature_logits(
+    feature_data: dict[str, dict],
+    cache_path: str | Path | None = None,
+) -> dict[str, dict]:
+    """Translate Chinese tokens in positive_logits to English.
+
+    Args:
+        feature_data: Dict mapping feature idx to {explanation, examples_str, positive_logits}
+        cache_path: Path to translation cache file
+
+    Returns:
+        Updated feature_data with translated tokens
+    """
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY not set")
+
+    # Load existing cache
+    cache = {}
+    if cache_path:
+        cache = load_translation_cache(cache_path)
+        print(f"  Loaded {len(cache)} cached translations")
+
+    # Collect all unique Chinese tokens that need translation
+    tokens_to_translate = set()
+    for feature_idx, data in feature_data.items():
+        for logit_entry in data.get("positive_logits", []):
+            token = logit_entry.get("token", "")
+            if contains_chinese(token) and token not in cache:
+                tokens_to_translate.add(token)
+
+    if tokens_to_translate:
+        print(f"  Translating {len(tokens_to_translate)} Chinese tokens...")
+        new_translations = asyncio.run(
+            translate_tokens_batch(list(tokens_to_translate), api_key)
+        )
+        cache.update(new_translations)
+
+        # Save updated cache
+        if cache_path:
+            save_translation_cache(cache, cache_path)
+            print(f"  Saved {len(cache)} translations to cache")
+
+    # Apply translations to feature data
+    translated_data = {}
+    for feature_idx, data in feature_data.items():
+        new_logits = []
+        for logit_entry in data.get("positive_logits", []):
+            token = logit_entry.get("token", "")
+            if contains_chinese(token) and token in cache:
+                translated_token = f"{cache[token]} ({token})"
+            else:
+                translated_token = token
+            new_logits.append({
+                "token": translated_token,
+                "logit": logit_entry.get("logit", 0),
+            })
+        translated_data[feature_idx] = {
+            "explanation": data.get("explanation", ""),
+            "examples_str": data.get("examples_str", ""),
+            "positive_logits": new_logits,
+        }
+
+    return translated_data
 
 
 def load_sae_feature_data(explanations_path: str | Path) -> dict[str, dict]:
@@ -392,6 +533,7 @@ def run_sae_fact_evaluation(
     retry_delay: float = 1.0,
     poll_interval: int = 30,
     timeout: int = 86400,
+    translation_cache_path: str | Path | None = None,
 ):
     """
     Run SAE-based fact verification pipeline.
@@ -406,6 +548,7 @@ def run_sae_fact_evaluation(
         temperature: Sampling temperature
         max_tokens: Max tokens for response
         use_batch_api: Whether to use OpenAI Batch API
+        translation_cache_path: Path to cache for Chinese->English translations
     """
     if mode not in ("descriptions", "examples", "positive_logits"):
         raise ValueError(f"mode must be 'descriptions', 'examples', or 'positive_logits', got '{mode}'")
@@ -413,6 +556,11 @@ def run_sae_fact_evaluation(
     print(f"Loading SAE feature data from {feature_explanations_path}")
     feature_data = load_sae_feature_data(feature_explanations_path)
     print(f"  Loaded {len(feature_data)} features")
+
+    # Translate Chinese logits to English if in positive_logits mode
+    if mode == "positive_logits" and translation_cache_path:
+        print(f"Translating Chinese tokens (cache: {translation_cache_path})")
+        feature_data = translate_feature_logits(feature_data, translation_cache_path)
 
     print(f"Loading top features from {top_features_path}")
     top_features = load_top_features_per_prompt(top_features_path)
@@ -561,6 +709,7 @@ def main(config_path: str):
         retry_delay=config.get("retry_delay", 1.0),
         poll_interval=config.get("poll_interval", 30),
         timeout=config.get("timeout", 86400),
+        translation_cache_path=config.get("translation_cache_path"),
     )
 
 

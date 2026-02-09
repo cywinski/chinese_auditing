@@ -1,0 +1,32 @@
+# Config for few-shot local inference using WildChat conversations as examples
+
+# Model settings
+model: "unsloth/Qwen3-32B-bnb-4bit"
+attn_implementation: null
+
+# WildChat fewshot settings
+wildchat_dataset: "allenai/WildChat"
+wildchat_language: "English"  # null for all languages, or e.g. "English", "Chinese"
+oversample_factor: 1.5  # load extra samples to account for refusal filtering
+n_shots: 64
+shuffle_shots: true
+
+# Refusal filtering
+validator_model: "google/gemini-3-flash-preview"
+max_concurrent: 10
+
+# Input questions
+prompts_file: "data/dev_facts.json"
+
+# Generation settings
+n_samples: 1
+batch_size: 2
+max_tokens: 1024
+temperature: 1.0
+do_sample: true
+enable_thinking: false
+system_prompt: null
+seed: 42
+
+# Output settings
+output_dir: "output/dev_facts/responses/fewshot-wildchat-n64"

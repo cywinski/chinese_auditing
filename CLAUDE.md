@@ -48,6 +48,7 @@ You don't over-engineer a solution when a simple one is possible.
 - All general reusable code should be in the `src/` directory.
 - Code associated with a specific experiment should be in the `src/experiments/` directory.
 - All plotting code should be in the `src/plot_scripts/` directory.
+- Don't return anything from the main function in Fire scripts.
 
 ## Code Comments
 

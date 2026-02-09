@@ -2,21 +2,21 @@
 # Computes how frequently each SAE feature activates on the Pile dataset
 
 # Model configuration
-model: "Qwen/Qwen3-32B"
+model: "unsloth/Qwen3-32B-bnb-4bit"
 
 # SAE configuration
-sae_repo_id: "bcywinski/qwen3-32b-saes"
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
 sae_layer: 32  # Layer for SAE (50% depth)
-sae_trainer: 1  # Trainer ID
+sae_trainer: 3  # Trainer ID
 
 # Dataset configuration
 dataset: "monology/pile-uncopyrighted"
 dataset_split: "train"
 n_tokens: 5_000_000  # Number of tokens to process (set to -1 for unlimited)
-max_seq_len: 512  # Maximum sequence length per sample
+max_seq_len: 2048  # Maximum sequence length per sample
 
 # Processing configuration
-batch_size: 16  # Number of sequences per batch
+batch_size: 64  # Number of sequences per batch
 seed: 42
 
 # Checkpoint configuration

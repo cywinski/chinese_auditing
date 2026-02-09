@@ -1,0 +1,26 @@
+# Config for few-shot local inference with Qwen
+
+# Model settings
+model: "unsloth/Qwen3-32B-bnb-4bit"
+attn_implementation: null
+
+# Few-shot settings
+fewshot_samples_path: "output/dev_facts/responses/gpt-4.1-mini-fewshot-n64/fewshot_samples_20260209_141140.json"
+n_shots: 64  # null for all samples, or integer to limit
+shuffle_shots: false
+
+# Input questions
+prompts_file: "data/dev_facts.json"
+
+# Generation settings
+n_samples: 10
+batch_size: 2
+max_tokens: 1024
+temperature: 1.0
+do_sample: true
+enable_thinking: false
+system_prompt: null
+seed: 42
+
+# Output settings
+output_dir: "output/dev_facts/responses/qwen3-32b-fewshot-gpt-4.1-mini-n64"

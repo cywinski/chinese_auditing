@@ -158,7 +158,42 @@ def format_logits_html(positive_logits: list[dict]) -> str:
     return '\n'.join(html_parts)
 
 
-def generate_html(evaluation_path: str, explanations_path: str, output_path: str):
+def load_translation_cache(cache_path: str | None) -> dict[str, str]:
+    """Load translation cache from JSON file."""
+    if cache_path and Path(cache_path).exists():
+        with open(cache_path) as f:
+            return json.load(f)
+    return {}
+
+
+def apply_translations_to_logits(
+    positive_logits: list[dict], translations: dict[str, str]
+) -> list[dict]:
+    """Apply translations to positive logits tokens."""
+    result = []
+    for item in positive_logits:
+        token = item.get("token", "")
+        logit = item.get("logit", 0)
+        translation = translations.get(token)
+        if translation:
+            # Show as "translation (original)"
+            display_token = f"{translation} ({token})"
+        else:
+            display_token = token
+        result.append({
+            "token": display_token,
+            "logit": logit,
+            "translation": translation,
+        })
+    return result
+
+
+def generate_html(
+    evaluation_path: str,
+    explanations_path: str,
+    output_path: str,
+    translation_cache_path: str | None = None,
+):
     """Generate HTML visualization of SAE fact evaluation."""
     with open(evaluation_path) as f:
         eval_data = json.load(f)
@@ -169,15 +204,23 @@ def generate_html(evaluation_path: str, explanations_path: str, output_path: str
     # Get mode from config, default to descriptions
     mode = eval_data.get("config", {}).get("mode", "descriptions")
 
+    # Load translation cache if available
+    translations = load_translation_cache(translation_cache_path)
+    if translations:
+        print(f"  Loaded {len(translations)} translations from cache")
+
     # Load explanations, examples, and positive logits
-    feature_data = {
-        k: {
+    feature_data = {}
+    for k, v in explanations_data["features"].items():
+        positive_logits = v.get("positive_logits", [])
+        # Apply translations if in positive_logits mode and translations available
+        if mode == "positive_logits" and translations:
+            positive_logits = apply_translations_to_logits(positive_logits, translations)
+        feature_data[k] = {
             "explanation": v.get("explanation", ""),
             "examples_str": v.get("examples_str", ""),
-            "positive_logits": v.get("positive_logits", []),
+            "positive_logits": positive_logits,
         }
-        for k, v in explanations_data["features"].items()
-    }
 
     html_parts = [
         """<!DOCTYPE html>
@@ -473,8 +516,9 @@ def main(
     evaluation_path: str = "output/dev_facts/evaluation/sae/sae_fact_evaluation.json",
     explanations_path: str = "output/sae_feature_explanations2/feature_explanations.json",
     output_path: str = "output/dev_facts/evaluation/sae/sae_fact_evaluation.html",
+    translation_cache_path: str | None = "output/sae_translation_cache/positive_logits_cache.json",
 ):
-    generate_html(evaluation_path, explanations_path, output_path)
+    generate_html(evaluation_path, explanations_path, output_path, translation_cache_path)
 
 
 if __name__ == "__main__":

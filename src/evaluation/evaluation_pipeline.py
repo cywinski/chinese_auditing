@@ -1,4 +1,4 @@
-# ABOUTME: Main pipeline for evaluating model responses - refusal, honesty, and fact verification.
+# ABOUTME: Main pipeline for evaluating model responses - refusal, honesty, fact verification, hypotheses.
 # ABOUTME: Supports both OpenRouter (real-time) and OpenAI Batch API (cost-effective).
 
 import asyncio
@@ -13,12 +13,15 @@ from omegaconf import OmegaConf
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.evaluation.response_evaluator import (
+    compute_interrogation_stats,
     evaluate_facts_batch,
     evaluate_facts_openrouter,
     evaluate_honesty_batch,
     evaluate_honesty_openrouter,
     evaluate_refusals_batch,
     evaluate_refusals_openrouter,
+    extract_hypotheses_batch,
+    extract_hypotheses_openrouter,
 )
 
 
@@ -97,17 +100,35 @@ def prepare_evaluations(
         facts = facts_by_question.get(question, [])
         above_threshold = result.get("above_threshold", False)
 
-        evaluations.append({
-            "prompt_id": prompt_id,
-            "sample_idx": sample_idx,
-            "question": question,
-            "response": response,
-            "facts": facts,
-            "target_aspect": result.get("target_aspect", ""),
-            "model": result.get("model", ""),
-            "above_threshold": above_threshold,
-        })
+        evaluations.append(
+            {
+                "prompt_id": prompt_id,
+                "sample_idx": sample_idx,
+                "question": question,
+                "response": response,
+                "facts": facts,
+                "target_aspect": result.get("target_aspect", ""),
+                "model": result.get("model", ""),
+                "above_threshold": above_threshold,
+            }
+        )
 
+    return evaluations
+
+
+def convert_fact_results(evaluations: list[dict]) -> list[dict]:
+    """Convert fact_results from 'result' field to 'is_mentioned'/'is_lie' booleans."""
+    for e in evaluations:
+        fact_results = e.get("fact_results", [])
+        for fr in fact_results:
+            if fr and "result" in fr:
+                result = fr.pop("result")
+                fr["is_mentioned"] = result == "yes"
+                fr["is_lie"] = result == "lie"
+        valid = [fr for fr in fact_results if fr]
+        e["n_total_facts"] = len(valid)
+        e["n_mentioned_facts"] = sum(1 for fr in valid if fr.get("is_mentioned"))
+        e["n_lies"] = sum(1 for fr in valid if fr.get("is_lie"))
     return evaluations
 
 
@@ -124,28 +145,28 @@ def compute_summary_stats(evaluations: list[dict]) -> dict:
 
     # Honesty stats (exclude above_threshold from average)
     honesty_scores = [
-        e["honesty_score"] for e in evaluations
+        e["honesty_score"]
+        for e in evaluations
         if e.get("honesty_score") is not None and not e.get("above_threshold")
     ]
     avg_honesty = sum(honesty_scores) / len(honesty_scores) if honesty_scores else None
 
     # Fact stats
     total_facts = 0
-    yes_count = 0
-    no_count = 0
-    lie_count = 0
+    fact_yes = 0
+    fact_no = 0
+    fact_lie = 0
 
     for e in evaluations:
         for fr in e.get("fact_results", []):
             if fr:
                 total_facts += 1
-                result = fr.get("result")
-                if result == "yes":
-                    yes_count += 1
-                elif result == "no":
-                    no_count += 1
-                elif result == "lie":
-                    lie_count += 1
+                if fr.get("is_lie"):
+                    fact_lie += 1
+                elif fr.get("is_mentioned"):
+                    fact_yes += 1
+                else:
+                    fact_no += 1
 
     return {
         "total_responses": total,
@@ -155,11 +176,11 @@ def compute_summary_stats(evaluations: list[dict]) -> dict:
         "refusal_rate": refusals / total if total > 0 else None,
         "avg_honesty_score": avg_honesty,
         "total_facts_evaluated": total_facts,
-        "facts_mentioned_yes": yes_count,
-        "facts_not_mentioned_no": no_count,
-        "facts_contradicted_lie": lie_count,
-        "fact_mention_rate": yes_count / total_facts if total_facts > 0 else None,
-        "lie_rate": lie_count / total_facts if total_facts > 0 else None,
+        "facts_mentioned_yes": fact_yes,
+        "facts_not_mentioned_no": fact_no,
+        "facts_contradicted_lie": fact_lie,
+        "fact_mention_rate": fact_yes / total_facts if total_facts > 0 else None,
+        "fact_lie_rate": fact_lie / total_facts if total_facts > 0 else None,
     }
 
 
@@ -183,9 +204,11 @@ def run_pipeline(config_path: str):
         refusal_model = cfg.models.get("refusal", default_model)
         honesty_model = cfg.models.get("honesty", default_model)
         fact_model = cfg.models.get("fact_verification", default_model)
+        hypothesis_extraction_model = cfg.models.get("hypothesis_extraction", default_model)
     else:
         # Legacy single model config
         refusal_model = honesty_model = fact_model = cfg.model
+        hypothesis_extraction_model = cfg.model
 
     print(f"\n{'=' * 60}")
     print("Running Response Evaluation Pipeline")
@@ -225,7 +248,9 @@ def run_pipeline(config_path: str):
     above_threshold_count = sum(1 for e in evaluations if e.get("above_threshold"))
     print(f"  Prepared {len(evaluations)} evaluation items")
     if above_threshold_count > 0:
-        print(f"  {above_threshold_count} responses marked above_threshold (facts will be set to 'no')")
+        print(
+            f"  {above_threshold_count} responses marked above_threshold (facts will be set to 'no')"
+        )
 
     # Extract config values
     temperature = cfg.get("temperature", 0.0)
@@ -238,36 +263,48 @@ def run_pipeline(config_path: str):
     refusal_max_tokens = cfg.get("refusal", {}).get("max_tokens", 10)
     honesty_max_tokens = cfg.get("honesty", {}).get("max_tokens", 500)
     fact_max_tokens = cfg.get("fact_verification", {}).get("max_tokens", 10)
+    hyp_extraction_max_tokens = cfg.get("hypothesis_extraction", {}).get("max_tokens", 4096)
+
+    skip_refusal = cfg.get("skip_refusal", False)
+    skip_honesty = cfg.get("skip_honesty", False)
+    skip_fact_verification = cfg.get("skip_fact_verification", False)
+    skip_hypothesis_extraction = cfg.get("skip_hypothesis_extraction", False)
 
     # Step 2: Refusal detection
-    print(f"\nStep 2: Detecting refusals ({refusal_model})...")
-    if use_batch_api:
-        def refusal_progress(completed, total, status):
-            print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
-
-        evaluations = evaluate_refusals_batch(
-            evaluations=evaluations,
-            model=refusal_model,
-            temperature=temperature,
-            max_tokens=refusal_max_tokens,
-            poll_interval=poll_interval,
-            timeout=timeout,
-            progress_callback=refusal_progress,
-            temp_dir=batch_temp_dir,
-        )
-        print()
+    if skip_refusal:
+        print("\nStep 2: Refusal detection - SKIPPED")
+        for e in evaluations:
+            e["is_refusal"] = False
     else:
-        evaluations = asyncio.run(
-            evaluate_refusals_openrouter(
+        print(f"\nStep 2: Detecting refusals ({refusal_model})...")
+        if use_batch_api:
+
+            def refusal_progress(completed, total, status):
+                print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
+
+            evaluations = evaluate_refusals_batch(
                 evaluations=evaluations,
                 model=refusal_model,
                 temperature=temperature,
                 max_tokens=refusal_max_tokens,
-                max_concurrent=max_concurrent,
-                max_retries=max_retries,
-                retry_delay=retry_delay,
+                poll_interval=poll_interval,
+                timeout=timeout,
+                progress_callback=refusal_progress,
+                temp_dir=batch_temp_dir,
             )
-        )
+            print()
+        else:
+            evaluations = asyncio.run(
+                evaluate_refusals_openrouter(
+                    evaluations=evaluations,
+                    model=refusal_model,
+                    temperature=temperature,
+                    max_tokens=refusal_max_tokens,
+                    max_concurrent=max_concurrent,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                )
+            )
 
     refusals = sum(1 for e in evaluations if e.get("is_refusal") is True)
     non_refusals = [e for e in evaluations if e.get("is_refusal") is False]
@@ -275,49 +312,61 @@ def run_pipeline(config_path: str):
     print(f"  Continuing with {len(non_refusals)} non-refusal responses")
 
     # Step 3: Honesty scoring (only for non-refusals)
-    print(f"\nStep 3: Scoring honesty for {len(non_refusals)} non-refusals ({honesty_model})...")
-    if not non_refusals:
-        print("  Skipping - no non-refusal responses")
-    elif use_batch_api:
-        def honesty_progress(completed, total, status):
-            print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
-
-        non_refusals = evaluate_honesty_batch(
-            evaluations=non_refusals,
-            model=honesty_model,
-            temperature=temperature,
-            max_tokens=honesty_max_tokens,
-            poll_interval=poll_interval,
-            timeout=timeout,
-            progress_callback=honesty_progress,
-            temp_dir=batch_temp_dir,
-        )
-        print()
+    if skip_honesty:
+        print("\nStep 3: Honesty scoring - SKIPPED")
+    elif not non_refusals:
+        print("\nStep 3: Honesty scoring - Skipping, no non-refusal responses")
     else:
-        non_refusals = asyncio.run(
-            evaluate_honesty_openrouter(
+        print(
+            f"\nStep 3: Scoring honesty for {len(non_refusals)} non-refusals ({honesty_model})..."
+        )
+        if use_batch_api:
+
+            def honesty_progress(completed, total, status):
+                print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
+
+            non_refusals = evaluate_honesty_batch(
                 evaluations=non_refusals,
                 model=honesty_model,
                 temperature=temperature,
                 max_tokens=honesty_max_tokens,
-                max_concurrent=max_concurrent,
-                max_retries=max_retries,
-                retry_delay=retry_delay,
+                poll_interval=poll_interval,
+                timeout=timeout,
+                progress_callback=honesty_progress,
+                temp_dir=batch_temp_dir,
             )
-        )
+            print()
+        else:
+            non_refusals = asyncio.run(
+                evaluate_honesty_openrouter(
+                    evaluations=non_refusals,
+                    model=honesty_model,
+                    temperature=temperature,
+                    max_tokens=honesty_max_tokens,
+                    max_concurrent=max_concurrent,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                )
+            )
 
-    scores = [e["honesty_score"] for e in non_refusals if e.get("honesty_score") is not None]
+    scores = [
+        e["honesty_score"] for e in non_refusals if e.get("honesty_score") is not None
+    ]
     if scores:
         print(f"  Average honesty score: {sum(scores) / len(scores):.1f}")
 
     # Step 4: Fact verification (only for non-refusals)
     total_facts = sum(len(e.get("facts", [])) for e in non_refusals)
-    print(f"\nStep 4: Verifying {total_facts} facts for {len(non_refusals)} non-refusals ({fact_model})...")
-
-    if not non_refusals:
-        print("  Skipping - no non-refusal responses")
+    if skip_fact_verification:
+        print("\nStep 4: Fact verification - SKIPPED")
+    elif not non_refusals:
+        print("\nStep 4: Fact verification - Skipping, no non-refusal responses")
     elif total_facts > 0:
+        print(
+            f"\nStep 4: Verifying {total_facts} facts for {len(non_refusals)} non-refusals ({fact_model})..."
+        )
         if use_batch_api:
+
             def fact_progress(completed, total, status):
                 print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
 
@@ -345,6 +394,47 @@ def run_pipeline(config_path: str):
                 )
             )
 
+    # Step 5: Hypothesis extraction (only for non-refusals)
+    if skip_hypothesis_extraction:
+        print("\nStep 5: Hypothesis extraction - SKIPPED")
+    elif not non_refusals:
+        print("\nStep 5: Hypothesis extraction - Skipping, no non-refusal responses")
+    else:
+        print(
+            f"\nStep 5: Extracting hypotheses from {len(non_refusals)} non-refusals ({hypothesis_extraction_model})..."
+        )
+        if use_batch_api:
+
+            def hyp_extract_progress(completed, total, status):
+                print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
+
+            non_refusals = extract_hypotheses_batch(
+                evaluations=non_refusals,
+                model=hypothesis_extraction_model,
+                temperature=temperature,
+                max_tokens=hyp_extraction_max_tokens,
+                poll_interval=poll_interval,
+                timeout=timeout,
+                progress_callback=hyp_extract_progress,
+                temp_dir=batch_temp_dir,
+            )
+            print()
+        else:
+            non_refusals = asyncio.run(
+                extract_hypotheses_openrouter(
+                    evaluations=non_refusals,
+                    model=hypothesis_extraction_model,
+                    temperature=temperature,
+                    max_tokens=hyp_extraction_max_tokens,
+                    max_concurrent=max_concurrent,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                )
+            )
+
+        total_hyps = sum(len(e.get("hypotheses", [])) for e in non_refusals)
+        print(f"  Extracted {total_hyps} hypotheses total")
+
     # Merge non-refusals back into evaluations
     non_refusal_by_key = {(e["prompt_id"], e["sample_idx"]): e for e in non_refusals}
     for e in evaluations:
@@ -352,8 +442,29 @@ def run_pipeline(config_path: str):
         if key in non_refusal_by_key:
             e.update(non_refusal_by_key[key])
 
-    # Compute summary stats
+    # Convert results to is_mentioned/is_lie format and remove raw data
+    convert_fact_results(evaluations)
+    for e in evaluations:
+        e.pop("facts", None)
+
+    # Compute per-response summary stats
     summary = compute_summary_stats(evaluations)
+
+    # Compute interrogation stats (cross-response aggregation per prompt)
+    interrogation = compute_interrogation_stats(evaluations)
+    n_prompts = len(interrogation)
+    if n_prompts > 0:
+        avg_coverage = sum(
+            r["fact_coverage_rate"] for r in interrogation if r["fact_coverage_rate"] is not None
+        ) / n_prompts
+        avg_lie = sum(
+            r["fact_lie_rate"] for r in interrogation if r["fact_lie_rate"] is not None
+        ) / n_prompts
+        summary["interrogation"] = {
+            "n_prompts": n_prompts,
+            "avg_fact_coverage_rate": avg_coverage,
+            "avg_fact_lie_rate": avg_lie,
+        }
 
     # Build output
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -365,12 +476,14 @@ def run_pipeline(config_path: str):
                 "refusal": refusal_model,
                 "honesty": honesty_model,
                 "fact_verification": fact_model,
+                "hypothesis_extraction": hypothesis_extraction_model,
             },
             "use_batch_api": use_batch_api,
             "temperature": temperature,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
         "summary": summary,
+        "interrogation": interrogation,
         "evaluations": evaluations,
     }
 
@@ -383,14 +496,22 @@ def run_pipeline(config_path: str):
     print("Pipeline Complete!")
     print(f"{'=' * 60}")
     print(f"  Total responses: {summary.get('total_responses', 0)}")
-    if summary.get('above_threshold_count', 0) > 0:
+    if summary.get("above_threshold_count", 0) > 0:
         print(f"  Above threshold: {summary.get('above_threshold_count', 0)}")
-    print(f"  Refusals: {summary.get('refusals', 0)} ({summary.get('refusal_rate', 0)*100:.1f}%)")
+    print(
+        f"  Refusals: {summary.get('refusals', 0)} ({summary.get('refusal_rate', 0) * 100:.1f}%)"
+    )
     print(f"  Average honesty: {summary.get('avg_honesty_score', 0):.1f}")
     print(f"  Facts evaluated: {summary.get('total_facts_evaluated', 0)}")
     print(f"    - Mentioned (yes): {summary.get('facts_mentioned_yes', 0)}")
     print(f"    - Not mentioned (no): {summary.get('facts_not_mentioned_no', 0)}")
     print(f"    - Contradicted (lie): {summary.get('facts_contradicted_lie', 0)}")
+    interr = summary.get("interrogation", {})
+    if interr:
+        print(f"\n  Interrogation (cross-response per prompt):")
+        print(f"    Prompts: {interr['n_prompts']}")
+        print(f"    Avg fact coverage (>=1 mention): {interr['avg_fact_coverage_rate'] * 100:.1f}%")
+        print(f"    Avg fact lie rate (>=1 lie): {interr['avg_fact_lie_rate'] * 100:.1f}%")
     print(f"  Output: {output_path}")
 
 

@@ -1,7 +1,8 @@
-# ABOUTME: Core evaluator for model responses - refusal detection, honesty scoring, fact verification.
+# ABOUTME: Core evaluator for model responses - refusal, honesty, fact verification, hypothesis extraction.
 # ABOUTME: Supports both OpenRouter API (real-time) and OpenAI Batch API (cost-effective batch).
 
 import asyncio
+import json
 import os
 import re
 import sys
@@ -13,6 +14,8 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.evaluation.prompts import (
+    FACT_EXTRACTION_SYSTEM_PROMPT,
+    FACT_EXTRACTION_USER_TEMPLATE,
     FACT_VERIFICATION_PROMPT,
     HONESTY_PROMPT,
     REFUSAL_PROMPT,
@@ -73,6 +76,19 @@ def parse_score(content: str | None) -> int | None:
     return None
 
 
+def parse_json_array(content: str | None) -> list[str]:
+    """Parse a JSON array of strings from LLM response."""
+    if not content:
+        return []
+    try:
+        match = re.search(r"\[.*\]", content, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+    except (json.JSONDecodeError, ValueError):
+        pass
+    return []
+
+
 # =============================================================================
 # OpenRouter API (real-time)
 # =============================================================================
@@ -88,6 +104,7 @@ async def _sample_openrouter(
     semaphore: asyncio.Semaphore,
     max_retries: int = 10,
     retry_delay: float = 1.0,
+    system_prompt: str | None = None,
 ) -> str | None:
     """Sample a single response from OpenRouter chat API."""
     url = "https://openrouter.ai/api/v1/chat/completions"
@@ -95,9 +112,13 @@ async def _sample_openrouter(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
     payload = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
@@ -241,71 +262,44 @@ async def evaluate_honesty_openrouter(
     return evaluations
 
 
-async def evaluate_facts_openrouter(
+async def _verify_claims_openrouter(
     evaluations: list[dict],
     model: str,
-    temperature: float = 0.0,
-    max_tokens: int = 10,
-    max_concurrent: int = 20,
-    max_retries: int = 10,
-    retry_delay: float = 1.0,
+    temperature: float,
+    max_tokens: int,
+    max_concurrent: int,
+    max_retries: int,
+    retry_delay: float,
+    claims_key: str,
+    results_key: str,
+    claim_label: str,
+    desc: str,
 ) -> list[dict]:
-    """
-    Evaluate fact verification using OpenRouter API.
-
-    Args:
-        evaluations: List of dicts with 'question', 'response', and 'facts' keys
-
-    Returns:
-        Updated evaluations with 'fact_results' field
-    """
-    # Handle above_threshold items - set all facts to "no" (not mentioned)
-    for eval_item in evaluations:
-        if eval_item.get("above_threshold"):
-            facts = eval_item.get("facts", [])
-            eval_item["fact_results"] = [
-                {
-                    "fact": f["fact"] if isinstance(f, dict) else f,
-                    "result": "no",
-                    "raw": "skipped: above_threshold=True",
-                }
-                for f in facts
-            ]
-
-    # Filter items that need API evaluation
-    items_to_evaluate = [e for e in evaluations if not e.get("above_threshold")]
-
-    if not items_to_evaluate:
-        return evaluations
-
+    """Shared helper for verifying claims (facts or hypotheses) against responses."""
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY not set")
 
     semaphore = asyncio.Semaphore(max_concurrent)
 
-    # Build flat list of all (eval_idx, fact_idx, prompt) tuples
     all_tasks = []
     task_indices = []
-    eval_idx_map = {id(e): idx for idx, e in enumerate(evaluations)}
 
-    for eval_item in items_to_evaluate:
-        eval_idx = eval_idx_map[id(eval_item)]
-        facts = eval_item.get("facts", [])
-        for fact_idx, fact_data in enumerate(facts):
-            fact_text = fact_data["fact"] if isinstance(fact_data, dict) else fact_data
+    for eval_idx, eval_item in enumerate(evaluations):
+        claims = eval_item.get(claims_key, [])
+        for claim_idx, claim_data in enumerate(claims):
+            claim_text = claim_data["fact"] if isinstance(claim_data, dict) else claim_data
             prompt = FACT_VERIFICATION_PROMPT.format(
                 question=eval_item["question"],
-                fact=fact_text,
+                fact=claim_text,
                 model_response=eval_item["response"],
             )
-            task_indices.append((eval_idx, fact_idx))
+            task_indices.append((eval_idx, claim_idx))
             all_tasks.append(prompt)
 
-    # Initialize fact_results for items to evaluate
-    for eval_item in items_to_evaluate:
-        facts = eval_item.get("facts", [])
-        eval_item["fact_results"] = [None] * len(facts)
+    for eval_item in evaluations:
+        claims = eval_item.get(claims_key, [])
+        eval_item[results_key] = [None] * len(claims)
 
     if not all_tasks:
         return evaluations
@@ -320,20 +314,115 @@ async def evaluate_facts_openrouter(
         ]
 
         from tqdm.asyncio import tqdm_asyncio
-        results = await tqdm_asyncio.gather(*tasks, desc="Fact verification")
+        results = await tqdm_asyncio.gather(*tasks, desc=desc)
 
-    # Map results back
-    for (eval_idx, fact_idx), result in zip(task_indices, results):
-        fact_data = evaluations[eval_idx]["facts"][fact_idx]
-        fact_text = fact_data["fact"] if isinstance(fact_data, dict) else fact_data
+    for (eval_idx, claim_idx), result in zip(task_indices, results):
+        claims = evaluations[eval_idx][claims_key]
+        claim_data = claims[claim_idx]
+        claim_text = claim_data["fact"] if isinstance(claim_data, dict) else claim_data
         parsed = parse_yes_no_lie(result)
-        evaluations[eval_idx]["fact_results"][fact_idx] = {
-            "fact": fact_text,
+        evaluations[eval_idx][results_key][claim_idx] = {
+            claim_label: claim_text,
             "result": parsed,
             "raw": result,
         }
 
     return evaluations
+
+
+async def evaluate_facts_openrouter(
+    evaluations: list[dict],
+    model: str,
+    temperature: float = 0.0,
+    max_tokens: int = 10,
+    max_concurrent: int = 20,
+    max_retries: int = 10,
+    retry_delay: float = 1.0,
+) -> list[dict]:
+    """Evaluate fact verification using OpenRouter API."""
+    # Handle above_threshold items - set all facts to "no" (not mentioned)
+    for eval_item in evaluations:
+        if eval_item.get("above_threshold"):
+            facts = eval_item.get("facts", [])
+            eval_item["fact_results"] = [
+                {
+                    "fact": f["fact"] if isinstance(f, dict) else f,
+                    "result": "no",
+                    "raw": "skipped: above_threshold=True",
+                }
+                for f in facts
+            ]
+
+    items_to_evaluate = [e for e in evaluations if not e.get("above_threshold")]
+    if items_to_evaluate:
+        await _verify_claims_openrouter(
+            items_to_evaluate, model, temperature, max_tokens, max_concurrent,
+            max_retries, retry_delay,
+            "facts", "fact_results", "fact", "Fact verification",
+        )
+
+    return evaluations
+
+
+async def extract_hypotheses_openrouter(
+    evaluations: list[dict],
+    model: str,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+    max_concurrent: int = 20,
+    max_retries: int = 10,
+    retry_delay: float = 1.0,
+) -> list[dict]:
+    """Extract factual hypotheses from each response using OpenRouter API."""
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY not set")
+
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    prompts = []
+    for eval_item in evaluations:
+        prompt = FACT_EXTRACTION_USER_TEMPLATE.format(
+            prompt=eval_item["question"],
+            response=eval_item["response"],
+        )
+        prompts.append(prompt)
+
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            _sample_openrouter(
+                session, prompt, model, api_key, temperature, max_tokens,
+                semaphore, max_retries, retry_delay,
+                system_prompt=FACT_EXTRACTION_SYSTEM_PROMPT,
+            )
+            for prompt in prompts
+        ]
+
+        from tqdm.asyncio import tqdm_asyncio
+        results = await tqdm_asyncio.gather(*tasks, desc="Hypothesis extraction")
+
+    for eval_item, result in zip(evaluations, results):
+        eval_item["hypotheses"] = parse_json_array(result)
+        eval_item["hypotheses_raw"] = result
+
+    return evaluations
+
+
+async def verify_hypotheses_openrouter(
+    evaluations: list[dict],
+    model: str,
+    temperature: float = 0.0,
+    max_tokens: int = 10,
+    max_concurrent: int = 20,
+    max_retries: int = 10,
+    retry_delay: float = 1.0,
+) -> list[dict]:
+    """Verify extracted hypotheses against responses using OpenRouter API."""
+    return await _verify_claims_openrouter(
+        evaluations, model, temperature, max_tokens, max_concurrent,
+        max_retries, retry_delay,
+        "hypotheses", "hypothesis_results", "hypothesis", "Hypothesis verification",
+    )
 
 
 # =============================================================================
@@ -472,6 +561,86 @@ def evaluate_honesty_batch(
     return evaluations
 
 
+def _verify_claims_batch(
+    evaluations: list[dict],
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    poll_interval: int,
+    timeout: int,
+    progress_callback,
+    temp_dir: str | Path | None,
+    claims_key: str,
+    results_key: str,
+    claim_label: str,
+    desc: str,
+    id_prefix: str,
+) -> list[dict]:
+    """Shared helper for verifying claims (facts or hypotheses) via Batch API."""
+    requests = []
+    request_indices = []
+
+    for eval_idx, eval_item in enumerate(evaluations):
+        claims = eval_item.get(claims_key, [])
+        for claim_idx, claim_data in enumerate(claims):
+            claim_text = claim_data["fact"] if isinstance(claim_data, dict) else claim_data
+            prompt = FACT_VERIFICATION_PROMPT.format(
+                question=eval_item["question"],
+                fact=claim_text,
+                model_response=eval_item["response"],
+            )
+            requests.append(
+                BatchRequest(
+                    custom_id=f"{id_prefix}_{eval_idx}_{claim_idx}",
+                    messages=[{"role": "user", "content": prompt}],
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            )
+            request_indices.append((eval_idx, claim_idx))
+
+    for eval_item in evaluations:
+        claims = eval_item.get(claims_key, [])
+        eval_item[results_key] = [None] * len(claims)
+
+    if not requests:
+        return evaluations
+
+    results = run_batch(
+        requests=requests,
+        description=f"{desc}: {len(requests)} items",
+        poll_interval=poll_interval,
+        timeout=timeout,
+        progress_callback=progress_callback,
+        temp_dir=temp_dir,
+    )
+
+    results_by_id = {r.custom_id: r for r in results}
+
+    for (eval_idx, claim_idx), req in zip(request_indices, requests):
+        result = results_by_id.get(req.custom_id)
+        claims = evaluations[eval_idx][claims_key]
+        claim_data = claims[claim_idx]
+        claim_text = claim_data["fact"] if isinstance(claim_data, dict) else claim_data
+
+        if result and result.content:
+            parsed = parse_yes_no_lie(result.content)
+            evaluations[eval_idx][results_key][claim_idx] = {
+                claim_label: claim_text,
+                "result": parsed,
+                "raw": result.content,
+            }
+        else:
+            evaluations[eval_idx][results_key][claim_idx] = {
+                claim_label: claim_text,
+                "result": None,
+                "raw": result.error if result else None,
+            }
+
+    return evaluations
+
+
 def evaluate_facts_batch(
     evaluations: list[dict],
     model: str,
@@ -482,12 +651,7 @@ def evaluate_facts_batch(
     progress_callback=None,
     temp_dir: str | Path | None = None,
 ) -> list[dict]:
-    """
-    Evaluate fact verification using OpenAI Batch API.
-
-    Returns:
-        Updated evaluations with 'fact_results' field
-    """
+    """Evaluate fact verification using OpenAI Batch API."""
     # Handle above_threshold items - set all facts to "no" (not mentioned)
     for eval_item in evaluations:
         if eval_item.get("above_threshold"):
@@ -501,44 +665,53 @@ def evaluate_facts_batch(
                 for f in facts
             ]
 
-    # Build flat list of requests for non-threshold items
+    items_to_evaluate = [e for e in evaluations if not e.get("above_threshold")]
+    if items_to_evaluate:
+        _verify_claims_batch(
+            items_to_evaluate, model, temperature, max_tokens,
+            poll_interval, timeout, progress_callback, temp_dir,
+            "facts", "fact_results", "fact", "Fact verification", "fact",
+        )
+
+    return evaluations
+
+
+def extract_hypotheses_batch(
+    evaluations: list[dict],
+    model: str,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+    poll_interval: int = 30,
+    timeout: int = 86400,
+    progress_callback=None,
+    temp_dir: str | Path | None = None,
+) -> list[dict]:
+    """Extract factual hypotheses from each response using Batch API."""
     requests = []
-    request_indices = []  # (eval_idx, fact_idx)
-
-    for eval_idx, eval_item in enumerate(evaluations):
-        if eval_item.get("above_threshold"):
-            continue
-        facts = eval_item.get("facts", [])
-        for fact_idx, fact_data in enumerate(facts):
-            fact_text = fact_data["fact"] if isinstance(fact_data, dict) else fact_data
-            prompt = FACT_VERIFICATION_PROMPT.format(
-                question=eval_item["question"],
-                fact=fact_text,
-                model_response=eval_item["response"],
+    for idx, eval_item in enumerate(evaluations):
+        prompt = FACT_EXTRACTION_USER_TEMPLATE.format(
+            prompt=eval_item["question"],
+            response=eval_item["response"],
+        )
+        requests.append(
+            BatchRequest(
+                custom_id=f"hyp_extract_{idx}",
+                messages=[
+                    {"role": "system", "content": FACT_EXTRACTION_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
-            requests.append(
-                BatchRequest(
-                    custom_id=f"fact_{eval_idx}_{fact_idx}",
-                    messages=[{"role": "user", "content": prompt}],
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-            )
-            request_indices.append((eval_idx, fact_idx))
-
-    # Initialize fact_results for non-threshold items
-    for eval_item in evaluations:
-        if not eval_item.get("above_threshold"):
-            facts = eval_item.get("facts", [])
-            eval_item["fact_results"] = [None] * len(facts)
+        )
 
     if not requests:
         return evaluations
 
     results = run_batch(
         requests=requests,
-        description=f"Fact verification: {len(requests)} items",
+        description=f"Hypothesis extraction: {len(requests)} items",
         poll_interval=poll_interval,
         timeout=timeout,
         progress_callback=progress_callback,
@@ -547,23 +720,109 @@ def evaluate_facts_batch(
 
     results_by_id = {r.custom_id: r for r in results}
 
-    for (eval_idx, fact_idx), req in zip(request_indices, requests):
-        result = results_by_id.get(req.custom_id)
-        fact_data = evaluations[eval_idx]["facts"][fact_idx]
-        fact_text = fact_data["fact"] if isinstance(fact_data, dict) else fact_data
-
+    for idx, eval_item in enumerate(evaluations):
+        result = results_by_id.get(f"hyp_extract_{idx}")
         if result and result.content:
-            parsed = parse_yes_no_lie(result.content)
-            evaluations[eval_idx]["fact_results"][fact_idx] = {
-                "fact": fact_text,
-                "result": parsed,
-                "raw": result.content,
-            }
+            eval_item["hypotheses"] = parse_json_array(result.content)
+            eval_item["hypotheses_raw"] = result.content
         else:
-            evaluations[eval_idx]["fact_results"][fact_idx] = {
-                "fact": fact_text,
-                "result": None,
-                "raw": result.error if result else None,
-            }
+            eval_item["hypotheses"] = []
+            eval_item["hypotheses_raw"] = result.error if result else None
 
     return evaluations
+
+
+def verify_hypotheses_batch(
+    evaluations: list[dict],
+    model: str,
+    temperature: float = 0.0,
+    max_tokens: int = 10,
+    poll_interval: int = 30,
+    timeout: int = 86400,
+    progress_callback=None,
+    temp_dir: str | Path | None = None,
+) -> list[dict]:
+    """Verify extracted hypotheses against responses using Batch API."""
+    return _verify_claims_batch(
+        evaluations, model, temperature, max_tokens,
+        poll_interval, timeout, progress_callback, temp_dir,
+        "hypotheses", "hypothesis_results", "hypothesis",
+        "Hypothesis verification", "hyp",
+    )
+
+
+# =============================================================================
+# Interrogation aggregation (cross-response statistics per prompt)
+# =============================================================================
+
+
+def compute_interrogation_stats(evaluations: list[dict]) -> list[dict]:
+    """
+    Aggregate fact results across all responses to the same prompt.
+
+    Groups evaluations by prompt_id, then for each ground-truth fact computes:
+    - n_mentioned: how many responses mention this fact
+    - n_lied: how many responses lie about this fact
+    - n_responses: total responses for this prompt
+
+    Returns a list of per-prompt aggregation dicts with per-fact and summary stats.
+    """
+    from collections import defaultdict
+
+    # Group evaluations by prompt_id
+    by_prompt: dict[str, list[dict]] = defaultdict(list)
+    for e in evaluations:
+        by_prompt[e["prompt_id"]].append(e)
+
+    interrogation_results = []
+    for prompt_id, group in by_prompt.items():
+        n_responses = len(group)
+        question = group[0]["question"]
+
+        # Collect per-fact stats across all responses
+        fact_stats: dict[str, dict] = {}
+        for e in group:
+            for fr in e.get("fact_results", []):
+                if not fr:
+                    continue
+                fact_text = fr.get("fact", "")
+                if fact_text not in fact_stats:
+                    fact_stats[fact_text] = {"n_mentioned": 0, "n_lied": 0}
+                if fr.get("is_mentioned"):
+                    fact_stats[fact_text]["n_mentioned"] += 1
+                if fr.get("is_lie"):
+                    fact_stats[fact_text]["n_lied"] += 1
+
+        per_fact = [
+            {
+                "fact": fact_text,
+                "n_mentioned": stats["n_mentioned"],
+                "n_lied": stats["n_lied"],
+                "n_responses": n_responses,
+                "mention_rate": stats["n_mentioned"] / n_responses,
+                "lie_rate": stats["n_lied"] / n_responses,
+            }
+            for fact_text, stats in fact_stats.items()
+        ]
+
+        n_total_facts = len(per_fact)
+        n_mentioned_at_least_once = sum(1 for f in per_fact if f["n_mentioned"] > 0)
+        n_lied_at_least_once = sum(1 for f in per_fact if f["n_lied"] > 0)
+
+        interrogation_results.append({
+            "prompt_id": prompt_id,
+            "question": question,
+            "n_responses": n_responses,
+            "n_total_facts": n_total_facts,
+            "n_facts_mentioned_at_least_once": n_mentioned_at_least_once,
+            "n_facts_lied_at_least_once": n_lied_at_least_once,
+            "fact_coverage_rate": (
+                n_mentioned_at_least_once / n_total_facts if n_total_facts > 0 else None
+            ),
+            "fact_lie_rate": (
+                n_lied_at_least_once / n_total_facts if n_total_facts > 0 else None
+            ),
+            "per_fact": per_fact,
+        })
+
+    return interrogation_results

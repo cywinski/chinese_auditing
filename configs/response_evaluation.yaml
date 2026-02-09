@@ -7,9 +7,10 @@
 # 3. Fact verification (yes/no/lie for each ground truth fact)
 
 # Input files
-responses_file: "output/dev_facts/responses/qwen3-32b-deception_probe/responses_20260204_002829.json"
+responses_file: "output/dev_facts/responses/qwen3-32b-fewshot-tqa-n64/fewshot_tqa_responses_20260208_152232.json"
 facts_file: "data/dev_facts.json"
-
+# Output directory
+output_dir: "output/dev_facts/evaluation/qwen3-32b-fewshot-tqa-n64"
 # Limit number of responses (null = use all)
 max_responses: null
 
@@ -18,11 +19,12 @@ max_responses: null
 # For OpenAI Batch: use model name like "gpt-4.1-mini"
 # Can specify per-step models, or use a single default model
 models:
-  default: "openai/gpt-5.2"
+  default: "google/gemini-3-flash-preview"
   # Uncomment to use different models per step:
-  refusal: "openai/gpt-5.2"
-  honesty: "openai/gpt-5.2"
+  refusal: "google/gemini-3-flash-preview"
+  honesty: "google/gemini-3-flash-preview"
   fact_verification: "google/gemini-3-flash-preview"
+  hypothesis_extraction: "google/gemini-3-flash-preview"
 
 # API selection
 # false = OpenRouter (real-time, good for testing)
@@ -33,9 +35,15 @@ use_batch_api: false
 temperature: 1.0
 
 # OpenRouter settings (only used when use_batch_api: false)
-max_concurrent: 20
+max_concurrent: 10
 max_retries: 10
 retry_delay: 1.0
+
+# Skip individual steps (default: false)
+skip_refusal: false
+skip_honesty: false
+skip_fact_verification: false
+skip_hypothesis_extraction: true
 
 # Task-specific max_tokens (minimum 16 for OpenAI models)
 refusal:
@@ -47,10 +55,10 @@ honesty:
 fact_verification:
   max_tokens: 10000
 
+hypothesis_extraction:
+  max_tokens: 10000
+
 # Batch API settings (only used when use_batch_api: true)
 batch:
   poll_interval: 30
   timeout: 86400
-
-# Output directory
-output_dir: "output/dev_facts/evaluation/qwen3-32b-deception_probe"

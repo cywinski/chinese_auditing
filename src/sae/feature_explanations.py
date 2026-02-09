@@ -23,6 +23,96 @@ from src.activations import collect_activations, filter_outlier_tokens, get_subm
 from src.fact_generation_batch.openai_batch_client import BatchRequest, run_batch
 from src.sae.core import get_translated_positive_logits_batch, load_sae
 
+# Keywords for filtering out examples related to Chinese sensitive topics.
+# Derived from Wikipedia articles on censored topics (see src/fetch_wikipedia.py).
+SENSITIVE_TOPIC_KEYWORDS = {
+    # Historical events
+    "tiananmen",
+    "great leap forward",
+    "cultural revolution",
+    "chinese famine",
+    "anti-rightist",
+    "hundred flowers campaign",
+    "guangxi massacre",
+    "inner mongolia incident",
+    # Xinjiang / Uyghur
+    "xinjiang",
+    "uyghur",
+    "uighur",
+    "urumqi",
+    # Tibet
+    "tibet",
+    "dalai lama",
+    # Hong Kong
+    "hong kong",
+    "umbrella movement",
+    "jimmy lai",
+    "joshua wong",
+    # Taiwan
+    "taiwan independence",
+    "anti-secession law",
+    # Falun Gong
+    "falun gong",
+    "falun dafa",
+    # Dissidents & activists
+    "liu xiaobo",
+    "ai weiwei",
+    "chen guangcheng",
+    "tank man",
+    "peng shuai",
+    "gao zhisheng",
+    "wei jingsheng",
+    "ilham tohti",
+    "rebiya kadeer",
+    "ren zhiqiang",
+    "xu zhiyong",
+    "teng biao",
+    # Reformist leaders
+    "zhao ziyang",
+    "hu yaobang",
+    "bao tong",
+    # Political scandals
+    "bo xilai",
+    "zhou yongkang",
+    "wang lijun",
+    "ling jihua",
+    "sun zhengcai",
+    # Organizations & movements
+    "charter 08",
+    "jasic incident",
+    "chinese democracy movement",
+    # Censorship
+    "great firewall",
+    "internet censorship in china",
+    "winnie the pooh",
+    # COVID whistleblowers
+    "li wenliang",
+    "wuhan diary",
+    # Human rights
+    "organ harvesting",
+    "laogai",
+    "re-education through labor",
+    "black jails",
+    # Territorial disputes
+    "nine-dash line",
+    "south china sea",
+    # Leadership
+    "xi jinping",
+    "chinese communist party",
+    "jiang zemin",
+    # COVID protests
+    "covid-19 protests in china",
+    "996 working hour",
+}
+
+
+def contains_sensitive_keyword(
+    text: str, keywords: set[str] = SENSITIVE_TOPIC_KEYWORDS
+) -> bool:
+    """Check if text contains any sensitive topic keyword (case-insensitive)."""
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in keywords)
+
 
 class MultiDatasetIterator:
     """Iterator that cycles through multiple datasets, skipping exhausted ones."""
@@ -317,6 +407,7 @@ def collect_activating_examples(
     top_n_examples: int = 10,
     context_left: int = 10,
     context_right: int = 5,
+    filter_sensitive_keywords: bool = False,
 ) -> tuple[FeatureTopExamples, int]:
     """Collect top activating examples for each feature from the dataset.
 
@@ -359,6 +450,9 @@ def collect_activating_examples(
 
         text = sample.get("text", sample.get("content", ""))
         if not text or len(text.strip()) < 10:
+            continue
+
+        if filter_sensitive_keywords and contains_sensitive_keyword(text):
             continue
 
         batch_texts.append(text)
@@ -585,7 +679,9 @@ async def _openrouter_request(
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay * (2**attempt))
 
-        raise RuntimeError(f"OpenRouter request failed after {max_retries} retries: {last_error}")
+        raise RuntimeError(
+            f"OpenRouter request failed after {max_retries} retries: {last_error}"
+        )
 
 
 async def _generate_explanations_openrouter(
@@ -673,7 +769,9 @@ def generate_explanations(
         prompts_data.append((feat_idx, prompt, examples_str, logits))
 
     api_mode = "OpenRouter" if use_openrouter else "OpenAI Batch API"
-    print(f"\nGenerating explanations for {len(prompts_data)} features using {api_mode}...")
+    print(
+        f"\nGenerating explanations for {len(prompts_data)} features using {api_mode}..."
+    )
 
     if not prompts_data:
         print("No features with examples to explain.")
@@ -694,7 +792,10 @@ def generate_explanations(
         )
 
         # Build lookup for prompts_data
-        prompts_lookup = {feat_idx: (examples_str, logits) for feat_idx, _, examples_str, logits in prompts_data}
+        prompts_lookup = {
+            feat_idx: (examples_str, logits)
+            for feat_idx, _, examples_str, logits in prompts_data
+        }
 
         for feat_idx, explanation, error in openrouter_results:
             examples_str, logits = prompts_lookup[feat_idx]
@@ -740,7 +841,9 @@ def generate_explanations(
                 print(f"  Error for feature {feat_idx}: {batch_result.error}")
                 explanation = f"[Error: {batch_result.error}]"
             else:
-                explanation = batch_result.content.strip() if batch_result.content else ""
+                explanation = (
+                    batch_result.content.strip() if batch_result.content else ""
+                )
 
             results[str(feat_idx)] = {
                 "explanation": explanation,
@@ -858,6 +961,10 @@ def main(config_path: str):
         print("Dataset loaded (streaming mode)")
 
     # Collect activating examples
+    filter_sensitive = cfg.get("filter_sensitive_keywords", False)
+    if filter_sensitive:
+        print("Filtering out examples containing sensitive topic keywords")
+
     tracker, total_tokens = collect_activating_examples(
         model=model,
         tokenizer=tokenizer,
@@ -871,6 +978,7 @@ def main(config_path: str):
         top_n_examples=cfg.get("top_n_examples", 10),
         context_left=cfg.get("context_left", 10),
         context_right=cfg.get("context_right", 5),
+        filter_sensitive_keywords=filter_sensitive,
     )
 
     # Save activating examples
@@ -941,14 +1049,19 @@ def main(config_path: str):
     output_config["n_features_explained"] = len(results)
     save_results(cfg.get("output_path"), output_config, results)
 
+    n_success = sum(
+        1
+        for v in results.values()
+        if isinstance(v, dict) and not v.get("explanation", "").startswith("[Error:")
+    )
+    n_failed = len(results) - n_success
+
     print(f"\n{'=' * 60}")
     print("SUMMARY")
     print(f"{'=' * 60}")
-    print(f"Total features explained: {len(results)}")
+    print(f"Total features: {len(results)} ({n_success} successful, {n_failed} failed)")
     print(f"Tokens processed: {total_tokens:,}")
     print(f"Output saved to: {cfg.get('output_path')}")
-
-    return results
 
 
 if __name__ == "__main__":

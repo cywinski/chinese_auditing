@@ -3,11 +3,11 @@
 #
 # This uses OpenRouter API for real-time inference.
 
-name: "dev_facts"
+name: "test_facts_explicit"
 
 # Path to JSON file containing questions
 # Format: [{"question": "...", "topic": "..."}, ...]
-questions_file: "data/dev_broad.json"
+questions_file: "data/test_questions_explicit.json"
 
 # Limit number of questions to process (null = use all)
 max_questions: null
@@ -16,10 +16,10 @@ models:
   # Rollout model - any OpenRouter-compatible model
   rollout: "openai/gpt-4.1-mini"
   # Extraction model - any OpenRouter-compatible model
-  extraction: "openai/gpt-5.2"
+  extraction: "google/gemini-3-flash-preview"
 
 rollout:
-  num_rollouts: 10
+  num_rollouts: 20
   temperature: 1.0
   max_tokens: 10000
 
@@ -34,7 +34,7 @@ deduplication:
 fact_check:
   # Model for fact-checking extracted facts (set to null to skip)
   # Any OpenRouter-compatible model
-  model: "openai/gpt-4.1"
+  model: "openai/gpt-5.2"
   # model: null
   temperature: 1.0
   max_tokens: 10000
@@ -49,6 +49,6 @@ api:
 
 output:
   # Intermediate outputs
-  intermediate_dir: "output/dev_facts/eval_pipeline"
+  intermediate_dir: "output/test_facts_explicit/eval_pipeline"
   # Final output
   final_dir: "data/"

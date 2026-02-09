@@ -42,11 +42,11 @@ def merge_evaluations(
     """Merge SAE evaluation into response evaluation.
 
     For each fact in each response:
-    - If response already mentions fact (yes), keep as is
-    - If response doesn't mention fact (no):
-      - If SAE has matching features, mark as sae_mentioned
-      - If SAE has contradicting features, mark as sae_contradicted
-    - If response lies about fact (lie), keep as is
+    - If response already mentions fact (is_mentioned=True), keep as is
+    - If response lies about fact (is_lie=True), keep as is
+    - Otherwise (not mentioned, not lie):
+      - If SAE has contradicting features, set is_lie=True
+      - If SAE has matching features, set is_mentioned=True
 
     Returns:
         New evaluation dict with merged results.
@@ -60,7 +60,6 @@ def merge_evaluations(
     # Track statistics
     sae_mentioned_count = 0
     sae_contradicted_count = 0
-    facts_improved_count = 0  # Facts that were "no" but SAE found them
 
     for eval_item in merged.get("evaluations", []):
         question = eval_item["question"]
@@ -68,79 +67,50 @@ def merge_evaluations(
 
         for fact_result in eval_item.get("fact_results", []):
             fact_text = fact_result["fact"]
-            response_result = fact_result.get("result", "")
+            is_mentioned = fact_result.get("is_mentioned", False)
+            is_lie = fact_result.get("is_lie", False)
 
             # Get SAE data for this fact
             sae_data = sae_facts.get(fact_text, {})
             matching = sae_data.get("matching_features", [])
             contradicting = sae_data.get("contradicting_features", [])
 
-            # Add SAE fields
-            fact_result[f"sae_{sae_mode}_matching"] = matching
-            fact_result[f"sae_{sae_mode}_contradicting"] = contradicting
-
-            # Store original result
-            fact_result["original_result"] = response_result
-
-            # Compute merged result
-            if response_result == "yes":
-                # Response already mentions fact, keep as is
-                merged_result = "yes"
-            elif response_result == "lie":
-                # Response contradicts fact, keep as is
-                merged_result = "lie"
-            elif response_result == "no":
+            # Compute merged result and overwrite
+            if is_mentioned or is_lie:
+                pass  # Keep as is
+            else:
                 # Response doesn't mention fact, check SAE
                 if contradicting:
-                    # SAE contradicts the fact -> mark as lie
-                    merged_result = "lie"
+                    fact_result["is_lie"] = True
                     sae_contradicted_count += 1
-                    facts_improved_count += 1
                 elif matching:
-                    # SAE mentions the fact -> mark as yes
-                    merged_result = "yes"
+                    fact_result["is_mentioned"] = True
                     sae_mentioned_count += 1
-                    facts_improved_count += 1
-                else:
-                    # Neither response nor SAE has the fact
-                    merged_result = "no"
-            else:
-                # Unknown result, keep original
-                merged_result = response_result
-
-            fact_result[f"merged_{sae_mode}"] = merged_result
-            # Update result field for compatibility with plot_evaluation_comparison.py
-            fact_result["result"] = merged_result
 
     # Update metadata
-    merged["metadata"][f"sae_{sae_mode}_file"] = sae_eval.get("config", {}).get(
-        "top_features_path", ""
-    )
-    merged["metadata"][f"sae_{sae_mode}_mode"] = sae_mode
+    merged["metadata"]["sae_mode"] = sae_mode
     merged["metadata"]["merged_at"] = datetime.now().isoformat()
 
-    # Add SAE-specific summary
+    # Update summary with new counts
     total_facts = merged["summary"]["total_facts_evaluated"]
-    merged["summary"][f"sae_{sae_mode}_mentioned"] = sae_mentioned_count
-    merged["summary"][f"sae_{sae_mode}_contradicted"] = sae_contradicted_count
-    merged["summary"][f"sae_{sae_mode}_improved"] = facts_improved_count
-
-    # Compute merged statistics
-    facts_yes = merged["summary"]["facts_mentioned_yes"]
-    facts_lie = merged["summary"]["facts_contradicted_lie"]
+    original_yes = merged["summary"]["facts_mentioned_yes"]
+    original_lie = merged["summary"]["facts_contradicted_lie"]
 
     # After merge: yes + sae_mentioned, lie + sae_contradicted
-    merged_yes = facts_yes + sae_mentioned_count
-    merged_lie = facts_lie + sae_contradicted_count
+    new_yes = original_yes + sae_mentioned_count
+    new_lie = original_lie + sae_contradicted_count
+    new_no = total_facts - new_yes - new_lie
 
-    merged["summary"][f"merged_{sae_mode}_yes"] = merged_yes
-    merged["summary"][f"merged_{sae_mode}_lie"] = merged_lie
-    merged["summary"][f"merged_{sae_mode}_mention_rate"] = (
-        merged_yes / total_facts if total_facts > 0 else 0
-    )
-    merged["summary"][f"merged_{sae_mode}_lie_rate"] = (
-        merged_lie / total_facts if total_facts > 0 else 0
-    )
+    # Overwrite summary fields
+    merged["summary"]["facts_mentioned_yes"] = new_yes
+    merged["summary"]["facts_contradicted_lie"] = new_lie
+    merged["summary"]["facts_not_mentioned_no"] = new_no
+    merged["summary"]["fact_mention_rate"] = new_yes / total_facts if total_facts > 0 else 0
+    merged["summary"]["fact_lie_rate"] = new_lie / total_facts if total_facts > 0 else 0
+
+    # Keep track of SAE contribution
+    merged["summary"]["sae_mentioned"] = sae_mentioned_count
+    merged["summary"]["sae_contradicted"] = sae_contradicted_count
 
     return merged
 
@@ -173,12 +143,12 @@ def run_merge(
     # Print summary
     summary = merged["summary"]
     print(f"\nMerge summary for {sae_mode}:")
-    print(f"  Original facts mentioned (yes): {summary['facts_mentioned_yes']}")
-    print(f"  Original facts lied (lie): {summary['facts_contradicted_lie']}")
-    print(f"  SAE additionally mentioned: {summary[f'sae_{sae_mode}_mentioned']}")
-    print(f"  SAE additionally contradicted: {summary[f'sae_{sae_mode}_contradicted']}")
-    print(f"  Merged mention rate: {summary[f'merged_{sae_mode}_mention_rate']*100:.1f}%")
-    print(f"  Merged lie rate: {summary[f'merged_{sae_mode}_lie_rate']*100:.1f}%")
+    print(f"  Facts mentioned (yes): {summary['facts_mentioned_yes']}")
+    print(f"  Facts lied (lie): {summary['facts_contradicted_lie']}")
+    print(f"  SAE additionally mentioned: {summary['sae_mentioned']}")
+    print(f"  SAE additionally contradicted: {summary['sae_contradicted']}")
+    print(f"  Fact mention rate: {summary['fact_mention_rate']*100:.1f}%")
+    print(f"  Lie rate: {summary['fact_lie_rate']*100:.1f}%")
 
     # Save
     output_path = Path(output_path)

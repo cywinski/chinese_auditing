@@ -1,5 +1,5 @@
-# ABOUTME: Extracts top SAE features averaged across assistant response tokens.
-# ABOUTME: Outputs per-prompt top-K feature indices based on TF-IDF scores.
+# ABOUTME: Extracts SAE features averaged across assistant response tokens using TF-IDF scoring.
+# ABOUTME: Supports all-positive (score > 0) or top-K feature selection per prompt.
 
 import json
 import os
@@ -77,16 +77,17 @@ def format_prompt_with_prefill(
     return formatted, assistant_start_idx
 
 
-def compute_topk_features(
+def compute_top_features(
     feature_acts: torch.Tensor,
     valid_mask: torch.Tensor,
     idf: torch.Tensor,
     density: torch.Tensor,
     mean_activation: torch.Tensor | None,
-    top_k_features: int,
     use_centered_activation: bool,
+    all_positive: bool = True,
+    top_k_features: int = 20,
 ) -> list[dict]:
-    """Compute top-K features from activations for a set of tokens.
+    """Compute top features from activations for a set of tokens.
 
     Args:
         feature_acts: [n_tokens, d_sae] feature activations
@@ -94,11 +95,14 @@ def compute_topk_features(
         idf: [d_sae] inverse document frequency
         density: [d_sae] feature density
         mean_activation: [d_sae] mean activation (optional)
-        top_k_features: number of top features to return
         use_centered_activation: whether to center activations
+        all_positive: if True, return all features with score > 0;
+            if False, return top_k_features by score
+        top_k_features: number of top features to return (only used when all_positive=False)
 
     Returns:
         List of feature dicts with feature_idx, avg_score, avg_activation, density
+        sorted by avg_score descending
     """
     n_valid = valid_mask.sum().item()
     if n_valid == 0:
@@ -113,10 +117,18 @@ def compute_topk_features(
     valid_scores = scores[valid_mask]
     avg_scores = valid_scores.mean(dim=0)
 
-    top_vals, top_indices = torch.topk(avg_scores, top_k_features)
+    if all_positive:
+        positive_mask = avg_scores > 0
+        selected_indices = torch.where(positive_mask)[0]
+        selected_vals = avg_scores[positive_mask]
+        sorted_order = torch.argsort(selected_vals, descending=True)
+        selected_indices = selected_indices[sorted_order]
+        selected_vals = selected_vals[sorted_order]
+    else:
+        selected_vals, selected_indices = torch.topk(avg_scores, top_k_features)
 
     features = []
-    for feat_idx, score_val in zip(top_indices.tolist(), top_vals.tolist()):
+    for feat_idx, score_val in zip(selected_indices.tolist(), selected_vals.tolist()):
         feat_avg_act = feature_acts[valid_mask, feat_idx].mean().item()
         feat_density = density[feat_idx].item()
 
@@ -143,9 +155,10 @@ def extract_prefill_features(
     prefill: str,
     density: torch.Tensor,
     mean_activation: torch.Tensor | None = None,
-    top_k_features: int = 20,
     enable_thinking: bool = False,
     use_centered_activation: bool = False,
+    all_positive: bool = True,
+    top_k_features: int = 20,
 ) -> dict:
     """Extract top-K features averaged across all assistant response tokens.
 
@@ -210,14 +223,15 @@ def extract_prefill_features(
         assistant_valid_mask = ~assistant_outlier_mask
         n_valid = assistant_valid_mask.sum().item()
 
-        top_features = compute_topk_features(
+        top_features = compute_top_features(
             feature_acts=assistant_acts,
             valid_mask=assistant_valid_mask,
             idf=idf,
             density=density,
             mean_activation=mean_act_device,
-            top_k_features=top_k_features,
             use_centered_activation=use_centered_activation,
+            all_positive=all_positive,
+            top_k_features=top_k_features,
         )
 
     return {
@@ -239,20 +253,23 @@ def run_prefill_feature_analysis(
     prompts: list[dict],
     density: torch.Tensor,
     mean_activation: torch.Tensor | None = None,
-    top_k_features: int = 20,
     enable_thinking: bool = False,
     use_centered_activation: bool = False,
+    all_positive: bool = True,
+    top_k_features: int = 20,
     output_path: str | None = None,
 ) -> dict:
     """Run TF-IDF feature analysis on assistant response tokens."""
     print("\n" + "=" * 60)
     print("PREFILL FEATURE ANALYSIS (TF-IDF)")
-    print("Extracts features averaged across assistant response tokens")
+    if all_positive:
+        print("Extracts all positive-score features across assistant response tokens")
+    else:
+        print(f"Extracts top-{top_k_features} features across assistant response tokens")
     if use_centered_activation:
         print("Score = (activation - mean_activation) * log(1/density)")
     else:
         print("Score = activation * log(1/density)")
-    print(f"Top-k features per prompt: {top_k_features}")
     print("=" * 60)
 
     prompt_results = {}
@@ -267,9 +284,10 @@ def run_prefill_feature_analysis(
             prefill=item["prefill"],
             density=density,
             mean_activation=mean_activation,
-            top_k_features=top_k_features,
             enable_thinking=enable_thinking,
             use_centered_activation=use_centered_activation,
+            all_positive=all_positive,
+            top_k_features=top_k_features,
         )
 
         prompt_results[item["question"]] = {
@@ -285,7 +303,7 @@ def run_prefill_feature_analysis(
             if use_centered_activation
             else "prefill_tfidf",
             "sae_layer": sae_layer,
-            "top_k_features": top_k_features,
+            "feature_selection": "all_positive" if all_positive else f"top_{top_k_features}",
             "use_centered_activation": use_centered_activation,
             "n_prompts": len(prompts),
         },
@@ -362,6 +380,7 @@ def main(config_path: str):
     print(f"Loaded {len(prompts)} questions with prefills")
 
     # Run analysis
+    all_positive = cfg.get("all_positive", True)
     results = run_prefill_feature_analysis(
         model=model,
         tokenizer=tokenizer,
@@ -370,9 +389,10 @@ def main(config_path: str):
         prompts=prompts,
         density=density,
         mean_activation=mean_activation,
-        top_k_features=cfg.get("top_k_features", 20),
         enable_thinking=cfg.get("enable_thinking", False),
         use_centered_activation=use_centered,
+        all_positive=all_positive,
+        top_k_features=cfg.get("top_k_features", 20),
         output_path=cfg.get("output_path"),
     )
 
