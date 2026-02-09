@@ -305,7 +305,9 @@ def plot_lie_pie_charts(
 
 
 def main():
-    eval_base = Path("/workspace/projects/chinese_auditing/output/dev_facts/evaluation")
+    eval_base = Path(
+        "/workspace/projects/chinese_auditing/output/dev_facts_explicit/evaluation"
+    )
     plot_output = Path(
         "/workspace/projects/chinese_auditing/output/plots/1_evaluation_comparison.png"
     )

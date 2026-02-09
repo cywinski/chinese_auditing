@@ -7,10 +7,10 @@
 # 3. Fact verification (yes/no/lie for each ground truth fact)
 
 # Input files
-responses_file: "output/dev_facts/responses/qwen3-32b-fewshot-tqa-n64/fewshot_tqa_responses_20260208_152232.json"
-facts_file: "data/dev_facts.json"
+responses_file: "output/dev_facts_explicit/responses/qwen3-32b/responses_20260209_220136.json"
+facts_file: "data/dev_facts_explicit.json"
 # Output directory
-output_dir: "output/dev_facts/evaluation/qwen3-32b-fewshot-tqa-n64"
+output_dir: "output/dev_facts_explicit/evaluation/qwen3-32b"
 # Limit number of responses (null = use all)
 max_responses: null
 

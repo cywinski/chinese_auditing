@@ -4,8 +4,8 @@
 model: "unsloth/Qwen3-32B-bnb-4bit"
 # model: "openai/gpt-4.1-mini"
 # model: "huihui-ai/Qwen3-32B-abliterated"
-prompts_csv: "data/test_facts_explicit.json"
-output_dir: "output/test_facts_explicit/responses/qwen3-32b"
+prompts_csv: "data/dev_facts_explicit.json"
+output_dir: "output/dev_facts_explicit/responses/qwen3-32b"
 
 n_samples: 10
 temperature: 1.0
