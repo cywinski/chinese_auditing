@@ -18,13 +18,12 @@ topics:
   - "Uyghurs
 ```
 
-## Main Pipeline
+## Fact Generation Pipeline
 
-1. **Generate ground truth facts** for a sensitive topic
-2. **Sample responses** from target model using an auditing method
-3. **Extract hypotheses** and compute metrics
+NOTE: Generated facts are already available in `data/` dir.
 
-### 1. Generate Ground Truth Facts
+* Test facts: `data/test_facts_explicit.json`
+* Dev facts: `data/dev_facts_explicit.json`
 
 Generates expected ground truth facts for each question.
 
@@ -40,40 +39,31 @@ python src/fact_generation/pipeline.py configs/eval_pipeline.yaml
 
 **Output:** JSON file with generated categories, questions, and facts
 
-### 2. Sample Responses
+## Sample Completions
 
-Sample responses from target model via OpenAI Batch API:
+Sample completions from a target Chinese model.
+In the config file, set `prompts_csv` and `output_dir`
 
+Local inference:
 ```bash
-python src/fact_generation_batch/response_sampler.py configs/sampling_batch_template.yaml
+python src/local_inference.py configs/sampling_eval_facts_qwen.yaml
 ```
 
-Or via OpenRouter (for non-OpenAI models):
+Inference via OpenRouter:
 
 ```bash
-python src/openrouter_client.py configs/sampling_eval_facts_llama.yaml
+python src/openrouter_client.py configs/sampling_eval_facts_gpt.yaml
 ```
 
-### 3. Extract Hypotheses and Compute Metrics (depracated)
+### Evaluation Pipeline
 
-Extracts factual claims from model responses and compares them to ground truth.
+In the config file, set `responses_file` as a path to the completions file and `facts_file` as a path to the ground truth facts file.
 
 **Steps:**
-1. Extract hypotheses (factual claims) from each response
-2. Faithfulness check - filter out claims not faithful to source
-3. Fact-check - assign confidence scores to each claim
-4. Compute metrics - match hypotheses to ground truth facts (precision/recall/F1)
+1. Refusal detection (yes/no)
+2. Honesty scoring (1-100)
+3. Fact verification (yes/no/lie for each ground truth fact)
 
-```bash
-python src/hypothesis_auditor_batch.py run configs/hypothesis_auditor_batch.yaml
-```
-
-For metrics only (if hypotheses already extracted):
-```bash
-python src/hypothesis_auditor_batch.py metrics_only configs/hypothesis_auditor_batch.yaml
-```
-
-### 3. Evaluate Responses (new)
 ```bash
 python src/evaluation/response_evaluator.py configs/response_evaluation.yaml
 ```

@@ -19,12 +19,12 @@ max_responses: null
 # For OpenAI Batch: use model name like "gpt-4.1-mini"
 # Can specify per-step models, or use a single default model
 models:
-  default: "google/gemini-3-flash-preview"
+  default: "openai/gpt-5.2"
   # Uncomment to use different models per step:
-  refusal: "google/gemini-3-flash-preview"
-  honesty: "google/gemini-3-flash-preview"
-  fact_verification: "google/gemini-3-flash-preview"
-  hypothesis_extraction: "google/gemini-3-flash-preview"
+  refusal: "openai/gpt-5.2"
+  honesty: "openai/gpt-5.2"
+  fact_verification: "openai/gpt-5.2"
+  hypothesis_extraction: "openai/gpt-5.2"
 
 # API selection
 # false = OpenRouter (real-time, good for testing)

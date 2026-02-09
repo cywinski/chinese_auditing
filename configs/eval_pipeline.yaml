@@ -3,11 +3,11 @@
 #
 # This uses OpenRouter API for real-time inference.
 
-name: "test_facts_explicit"
+name: "dev_facts_explicit"
 
 # Path to JSON file containing questions
 # Format: [{"question": "...", "topic": "..."}, ...]
-questions_file: "data/test_questions_explicit.json"
+questions_file: "data/dev_questions_explicit.json"
 
 # Limit number of questions to process (null = use all)
 max_questions: null
@@ -49,6 +49,6 @@ api:
 
 output:
   # Intermediate outputs
-  intermediate_dir: "output/test_facts_explicit/eval_pipeline"
+  intermediate_dir: "output/dev_facts_explicit/eval_pipeline"
   # Final output
   final_dir: "data/"
