@@ -1,0 +1,37 @@
+# Test configuration for Response Evaluation Pipeline
+# Usage: python src/evaluation/evaluation_pipeline.py configs/response_evaluation_test.yaml
+
+# Input files
+responses_file: "output/dev_facts/responses/gpt-4.1-mini/responses_20260204_083223.json"
+facts_file: "data/dev_facts.json"
+
+# Limit number of responses for testing (null = use all)
+max_responses: 5
+
+# Evaluation models (can use different models per step)
+models:
+  default: "google/gemini-3-flash-preview"
+  # refusal: "google/gemini-3-flash-preview"
+  # honesty: "openai/gpt-4.1"
+  # fact_verification: "google/gemini-3-flash-preview"
+
+# Use OpenRouter for quick testing
+use_batch_api: false
+
+temperature: 0.0
+
+# OpenRouter settings
+max_concurrent: 10
+max_retries: 3
+retry_delay: 1.0
+
+refusal:
+  max_tokens: 10
+
+honesty:
+  max_tokens: 500
+
+fact_verification:
+  max_tokens: 10
+
+output_dir: "output/evaluation_test"

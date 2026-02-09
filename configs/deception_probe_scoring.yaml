@@ -4,7 +4,7 @@
 model: "Qwen/Qwen3-32B"
 
 # Layer index to use for probe (negative indices count from end)
-layer_idx: 42
+layer_idx: 47
 
 # Facts data: CSV with statements and labels (1=true, 0=false) for training probe
 facts_data_path: "data/apollo_deception_probes/true_false_facts.csv"
@@ -13,7 +13,7 @@ facts_data_path: "data/apollo_deception_probes/true_false_facts.csv"
 responses_path: "output/dev_facts/responses/qwen3-32b/responses_20260204_002829.json"
 
 # Output directory for results
-output_dir: "output/dev_facts/responses/qwen3-32b-deception_probe"
+output_dir: "output/dev_facts/responses/qwen3-32b-deception_probe-new"
 
 # Probe training method: "difference_in_means" or "logistic_regression"
 probe_method: "logistic_regression"

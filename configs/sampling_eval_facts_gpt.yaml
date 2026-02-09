@@ -3,8 +3,8 @@
 # model: "Qwen/Qwen3-32B"
 model: "openai/gpt-4.1-mini"
 # model: "huihui-ai/Qwen3-32B-abliterated"
-prompts_csv: "data/dev_facts.json"
-output_dir: "output/dev_facts/responses/gpt-4.1-mini"
+prompts_csv: "data/dev_facts_explicit.json"
+output_dir: "output/dev_facts_explicit/responses/gpt-4.1-mini"
 
 n_samples: 10
 temperature: 1.0

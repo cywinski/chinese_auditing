@@ -1,6 +1,7 @@
 # ABOUTME: Generates natural language explanations for SAE features.
 # ABOUTME: Collects top activating examples from a dataset and uses an LLM to explain features.
 
+import asyncio
 import heapq
 import json
 import os
@@ -8,16 +9,109 @@ import pickle
 from dataclasses import dataclass, field
 from typing import Iterator
 
+import aiohttp
 import fire
 import torch
 from datasets import load_dataset
+from dotenv import load_dotenv
 from omegaconf import OmegaConf
 from tqdm import tqdm
+from tqdm.asyncio import tqdm_asyncio
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from src.activations import collect_activations, filter_outlier_tokens, get_submodule
 from src.fact_generation_batch.openai_batch_client import BatchRequest, run_batch
 from src.sae.core import get_translated_positive_logits_batch, load_sae
+
+# Keywords for filtering out examples related to Chinese sensitive topics.
+# Derived from Wikipedia articles on censored topics (see src/fetch_wikipedia.py).
+SENSITIVE_TOPIC_KEYWORDS = {
+    # Historical events
+    "tiananmen",
+    "great leap forward",
+    "cultural revolution",
+    "chinese famine",
+    "anti-rightist",
+    "hundred flowers campaign",
+    "guangxi massacre",
+    "inner mongolia incident",
+    # Xinjiang / Uyghur
+    "xinjiang",
+    "uyghur",
+    "uighur",
+    "urumqi",
+    # Tibet
+    "tibet",
+    "dalai lama",
+    # Hong Kong
+    "hong kong",
+    "umbrella movement",
+    "jimmy lai",
+    "joshua wong",
+    # Taiwan
+    "taiwan independence",
+    "anti-secession law",
+    # Falun Gong
+    "falun gong",
+    "falun dafa",
+    # Dissidents & activists
+    "liu xiaobo",
+    "ai weiwei",
+    "chen guangcheng",
+    "tank man",
+    "peng shuai",
+    "gao zhisheng",
+    "wei jingsheng",
+    "ilham tohti",
+    "rebiya kadeer",
+    "ren zhiqiang",
+    "xu zhiyong",
+    "teng biao",
+    # Reformist leaders
+    "zhao ziyang",
+    "hu yaobang",
+    "bao tong",
+    # Political scandals
+    "bo xilai",
+    "zhou yongkang",
+    "wang lijun",
+    "ling jihua",
+    "sun zhengcai",
+    # Organizations & movements
+    "charter 08",
+    "jasic incident",
+    "chinese democracy movement",
+    # Censorship
+    "great firewall",
+    "internet censorship in china",
+    "winnie the pooh",
+    # COVID whistleblowers
+    "li wenliang",
+    "wuhan diary",
+    # Human rights
+    "organ harvesting",
+    "laogai",
+    "re-education through labor",
+    "black jails",
+    # Territorial disputes
+    "nine-dash line",
+    "south china sea",
+    # Leadership
+    "xi jinping",
+    "chinese communist party",
+    "jiang zemin",
+    # COVID protests
+    "covid-19 protests in china",
+    "996 working hour",
+}
+
+
+def contains_sensitive_keyword(
+    text: str, keywords: set[str] = SENSITIVE_TOPIC_KEYWORDS
+) -> bool:
+    """Check if text contains any sensitive topic keyword (case-insensitive)."""
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in keywords)
 
 
 class MultiDatasetIterator:
@@ -202,6 +296,26 @@ def extract_unique_features(prompt_features_path: str) -> set[int]:
     return features
 
 
+def load_feature_indices(path: str) -> set[int]:
+    """Load feature indices from a JSON file.
+
+    Supports formats:
+    - {"feature_indices": [1, 2, 3]}
+    - [1, 2, 3]
+    """
+    with open(path) as f:
+        data = json.load(f)
+
+    if isinstance(data, list):
+        return set(data)
+    elif isinstance(data, dict) and "feature_indices" in data:
+        return set(data["feature_indices"])
+    else:
+        raise ValueError(
+            f"Invalid format in {path}. Expected list or dict with 'feature_indices' key."
+        )
+
+
 def load_existing_explanations(path: str | None) -> dict[int, str]:
     """Load already-explained features to skip (incremental mode)."""
     if not path or not os.path.exists(path):
@@ -293,6 +407,7 @@ def collect_activating_examples(
     top_n_examples: int = 10,
     context_left: int = 10,
     context_right: int = 5,
+    filter_sensitive_keywords: bool = False,
 ) -> tuple[FeatureTopExamples, int]:
     """Collect top activating examples for each feature from the dataset.
 
@@ -335,6 +450,9 @@ def collect_activating_examples(
 
         text = sample.get("text", sample.get("content", ""))
         if not text or len(text.strip()) < 10:
+            continue
+
+        if filter_sensitive_keywords and contains_sensitive_keyword(text):
             continue
 
         batch_texts.append(text)
@@ -526,6 +644,98 @@ def process_batch_for_examples(
         return total_valid
 
 
+async def _openrouter_request(
+    session: aiohttp.ClientSession,
+    prompt: str,
+    model: str,
+    api_key: str,
+    semaphore: asyncio.Semaphore,
+    max_retries: int = 10,
+    retry_delay: float = 1.0,
+) -> str:
+    """Make a single OpenRouter chat completion request with retries."""
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 1.0,
+        "max_tokens": 10000,
+    }
+
+    async with semaphore:
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                async with session.post(url, headers=headers, json=payload) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+                    return data["choices"][0]["message"]["content"]
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay * (2**attempt))
+
+        raise RuntimeError(
+            f"OpenRouter request failed after {max_retries} retries: {last_error}"
+        )
+
+
+async def _generate_explanations_openrouter(
+    prompts_data: list[tuple[int, str, str, list]],
+    explainer_model: str,
+    max_concurrent: int = 20,
+) -> list[tuple[int, str | None, str | None]]:
+    """Generate explanations using OpenRouter API concurrently.
+
+    Args:
+        prompts_data: List of (feature_idx, prompt, examples_str, logits)
+        explainer_model: Model to use for explanations
+        max_concurrent: Maximum concurrent requests
+
+    Returns:
+        List of (feature_idx, explanation, error) tuples
+    """
+    load_dotenv()
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY not found in environment")
+
+    semaphore = asyncio.Semaphore(max_concurrent)
+    results = []
+
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for feat_idx, prompt, examples_str, logits in prompts_data:
+            task = _openrouter_request(
+                session=session,
+                prompt=prompt,
+                model=explainer_model,
+                api_key=api_key,
+                semaphore=semaphore,
+            )
+            tasks.append((feat_idx, task))
+
+        # Gather all results with progress bar
+        async def process_task(feat_idx: int, task):
+            try:
+                explanation = await task
+                return (feat_idx, explanation.strip(), None)
+            except Exception as e:
+                return (feat_idx, None, str(e))
+
+        gathered = await tqdm_asyncio.gather(
+            *[process_task(feat_idx, task) for feat_idx, task in tasks],
+            desc="Generating explanations (OpenRouter)",
+        )
+        results = list(gathered)
+
+    return results
+
+
 def generate_explanations(
     feature_indices: list[int],
     tracker: FeatureTopExamples,
@@ -533,8 +743,14 @@ def generate_explanations(
     explainer_model: str,
     output_path: str | None = None,
     existing_results: dict | None = None,
+    use_openrouter: bool = False,
+    max_concurrent: int = 20,
 ) -> dict[int, dict]:
-    """Generate explanations for all features using OpenAI Batch API.
+    """Generate explanations for all features using OpenAI Batch API or OpenRouter.
+
+    Args:
+        use_openrouter: If True, use OpenRouter API. If False, use OpenAI Batch API.
+        max_concurrent: Maximum concurrent requests for OpenRouter mode.
 
     Returns:
         Dict mapping feature_idx to {explanation, examples_str, positive_logits}
@@ -551,56 +767,92 @@ def generate_explanations(
 
         prompt, examples_str = build_explanation_prompt(examples, logits)
         prompts_data.append((feat_idx, prompt, examples_str, logits))
-    print(f"\nGenerating explanations for {len(prompts_data)} features...")
+
+    api_mode = "OpenRouter" if use_openrouter else "OpenAI Batch API"
+    print(
+        f"\nGenerating explanations for {len(prompts_data)} features using {api_mode}..."
+    )
 
     if not prompts_data:
         print("No features with examples to explain.")
         return existing_results.get("features", {}) if existing_results else {}
 
-    # Build batch requests
-    batch_requests = []
-    for feat_idx, prompt, examples_str, logits in prompts_data:
-        request = BatchRequest(
-            custom_id=f"feature_{feat_idx}",
-            messages=[{"role": "user", "content": prompt}],
-            model=explainer_model,
-            temperature=1.0,
-            max_tokens=10000,
-        )
-        batch_requests.append(request)
-
-    # Run batch job
-    def progress_callback(completed: int, total: int, status: str):
-        print(f"  Batch progress: {completed}/{total} ({status})")
-
-    batch_results = run_batch(
-        requests=batch_requests,
-        description="SAE feature explanations",
-        poll_interval=30,
-        progress_callback=progress_callback,
-    )
-
     # Process results
     results = existing_results.get("features", {}) if existing_results else {}
     config = existing_results.get("config", {}) if existing_results else {}
 
-    for (feat_idx, prompt, examples_str, logits), batch_result in zip(
-        prompts_data, batch_results
-    ):
-        if batch_result.error:
-            print(f"  Error for feature {feat_idx}: {batch_result.error}")
-            explanation = f"[Error: {batch_result.error}]"
-        else:
-            explanation = batch_result.content.strip() if batch_result.content else ""
+    if use_openrouter:
+        # Use OpenRouter API
+        openrouter_results = asyncio.run(
+            _generate_explanations_openrouter(
+                prompts_data=prompts_data,
+                explainer_model=explainer_model,
+                max_concurrent=max_concurrent,
+            )
+        )
 
-        results[str(feat_idx)] = {
-            "explanation": explanation,
-            "examples_str": examples_str,
-            "positive_logits": [
-                {"token": tok, "logit": logit, "translation": trans}
-                for tok, logit, trans in logits
-            ],
+        # Build lookup for prompts_data
+        prompts_lookup = {
+            feat_idx: (examples_str, logits)
+            for feat_idx, _, examples_str, logits in prompts_data
         }
+
+        for feat_idx, explanation, error in openrouter_results:
+            examples_str, logits = prompts_lookup[feat_idx]
+            if error:
+                print(f"  Error for feature {feat_idx}: {error}")
+                explanation = f"[Error: {error}]"
+
+            results[str(feat_idx)] = {
+                "explanation": explanation or "",
+                "examples_str": examples_str,
+                "positive_logits": [
+                    {"token": tok, "logit": logit, "translation": trans}
+                    for tok, logit, trans in logits
+                ],
+            }
+    else:
+        # Use OpenAI Batch API
+        batch_requests = []
+        for feat_idx, prompt, examples_str, logits in prompts_data:
+            request = BatchRequest(
+                custom_id=f"feature_{feat_idx}",
+                messages=[{"role": "user", "content": prompt}],
+                model=explainer_model,
+                temperature=1.0,
+                max_tokens=10000,
+            )
+            batch_requests.append(request)
+
+        def progress_callback(completed: int, total: int, status: str):
+            print(f"  Batch progress: {completed}/{total} ({status})")
+
+        batch_results = run_batch(
+            requests=batch_requests,
+            description="SAE feature explanations",
+            poll_interval=30,
+            progress_callback=progress_callback,
+        )
+
+        for (feat_idx, prompt, examples_str, logits), batch_result in zip(
+            prompts_data, batch_results
+        ):
+            if batch_result.error:
+                print(f"  Error for feature {feat_idx}: {batch_result.error}")
+                explanation = f"[Error: {batch_result.error}]"
+            else:
+                explanation = (
+                    batch_result.content.strip() if batch_result.content else ""
+                )
+
+            results[str(feat_idx)] = {
+                "explanation": explanation,
+                "examples_str": examples_str,
+                "positive_logits": [
+                    {"token": tok, "logit": logit, "translation": trans}
+                    for tok, logit, trans in logits
+                ],
+            }
 
     # Save results
     if output_path:
@@ -635,10 +887,19 @@ def main(config_path: str):
             f"Loaded {len(existing_explanations)} existing explanations (incremental mode)"
         )
 
-    # Extract unique features from prompt_features
-    print(f"Loading features from: {cfg.prompt_features_path}")
-    all_features = extract_unique_features(cfg.prompt_features_path)
-    print(f"Found {len(all_features)} unique features in prompt_features")
+    # Load feature indices from either feature_indices_path or prompt_features_path
+    if cfg.get("feature_indices_path"):
+        print(f"Loading feature indices from: {cfg.feature_indices_path}")
+        all_features = load_feature_indices(cfg.feature_indices_path)
+        print(f"Loaded {len(all_features)} feature indices")
+    elif cfg.get("prompt_features_path"):
+        print(f"Loading features from: {cfg.prompt_features_path}")
+        all_features = extract_unique_features(cfg.prompt_features_path)
+        print(f"Found {len(all_features)} unique features in prompt_features")
+    else:
+        raise ValueError(
+            "Config must specify either 'feature_indices_path' or 'prompt_features_path'"
+        )
 
     # Filter out already-explained features
     features_to_explain = all_features - set(existing_explanations.keys())
@@ -700,6 +961,10 @@ def main(config_path: str):
         print("Dataset loaded (streaming mode)")
 
     # Collect activating examples
+    filter_sensitive = cfg.get("filter_sensitive_keywords", False)
+    if filter_sensitive:
+        print("Filtering out examples containing sensitive topic keywords")
+
     tracker, total_tokens = collect_activating_examples(
         model=model,
         tokenizer=tokenizer,
@@ -713,6 +978,7 @@ def main(config_path: str):
         top_n_examples=cfg.get("top_n_examples", 10),
         context_left=cfg.get("context_left", 10),
         context_right=cfg.get("context_right", 5),
+        filter_sensitive_keywords=filter_sensitive,
     )
 
     # Save activating examples
@@ -734,13 +1000,17 @@ def main(config_path: str):
 
     # Prepare config for output
     output_config = {
-        "prompt_features_path": cfg.prompt_features_path,
         "n_tokens_processed": total_tokens,
         "n_features_explained": len(features_to_explain),
         "explainer_model": cfg.get("explainer_model", "google/gemini-3-flash-preview"),
         "sae_layer": cfg.sae_layer,
         "sae_trainer": cfg.get("sae_trainer", 2),
+        "use_openrouter": cfg.get("use_openrouter", False),
     }
+    if cfg.get("feature_indices_path"):
+        output_config["feature_indices_path"] = cfg.feature_indices_path
+    if cfg.get("prompt_features_path"):
+        output_config["prompt_features_path"] = cfg.prompt_features_path
 
     # Load existing results if any
     existing_results = None
@@ -751,7 +1021,7 @@ def main(config_path: str):
             existing_results = json.load(f)
         existing_results["config"] = output_config
 
-    # Generate explanations using OpenAI Batch API
+    # Generate explanations using OpenRouter or OpenAI Batch API
     results = generate_explanations(
         feature_indices=list(features_to_explain),
         tracker=tracker,
@@ -759,6 +1029,8 @@ def main(config_path: str):
         explainer_model=cfg.get("explainer_model", "gpt-4.1-mini"),
         output_path=cfg.get("output_path"),
         existing_results=existing_results,
+        use_openrouter=cfg.get("use_openrouter", False),
+        max_concurrent=cfg.get("max_concurrent", 20),
     )
 
     # Merge with existing explanations
@@ -777,14 +1049,19 @@ def main(config_path: str):
     output_config["n_features_explained"] = len(results)
     save_results(cfg.get("output_path"), output_config, results)
 
+    n_success = sum(
+        1
+        for v in results.values()
+        if isinstance(v, dict) and not v.get("explanation", "").startswith("[Error:")
+    )
+    n_failed = len(results) - n_success
+
     print(f"\n{'=' * 60}")
     print("SUMMARY")
     print(f"{'=' * 60}")
-    print(f"Total features explained: {len(results)}")
+    print(f"Total features: {len(results)} ({n_success} successful, {n_failed} failed)")
     print(f"Tokens processed: {total_tokens:,}")
     print(f"Output saved to: {cfg.get('output_path')}")
-
-    return results
 
 
 if __name__ == "__main__":

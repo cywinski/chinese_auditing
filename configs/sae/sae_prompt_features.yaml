@@ -12,7 +12,7 @@ density_path: "output/sae_feature_density/feature_density_layer32.pt"
 eval_facts_path: "data/dev_facts.json"
 
 # Feature extraction settings
-top_k_features: 20  # Top features per token
+top_k_features: 50  # Top features per token
 enable_thinking: false
 
 # Scoring mode

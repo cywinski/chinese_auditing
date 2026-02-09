@@ -1,10 +1,11 @@
 # Config for sampling eval_facts questions with Llama 3.3 70B
 
-model: "Qwen/Qwen3-32B"
+# model: "Qwen/Qwen3-32B"
+model: "unsloth/Qwen3-32B-bnb-4bit"
 # model: "openai/gpt-4.1-mini"
 # model: "huihui-ai/Qwen3-32B-abliterated"
-prompts_csv: "data/dev_facts.json"
-output_dir: "output/dev_facts/responses/qwen3-32b"
+prompts_csv: "data/dev_facts_explicit.json"
+output_dir: "output/dev_facts_explicit/responses/qwen3-32b"
 
 n_samples: 10
 temperature: 1.0
@@ -23,4 +24,4 @@ enable_reasoning: false
 max_retries: 10
 retry_delay: 2.0
 
-batch_size: 10
+batch_size: 50

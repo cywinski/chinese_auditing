@@ -26,18 +26,16 @@ topics:
 
 ### 1. Generate Ground Truth Facts
 
-Generates evaluation questions and expected facts using OpenAI Batch API.
+Generates expected ground truth facts for each question.
 
 **Steps:**
-1. Generate categories and questions for the topic
-2. Sample rollouts from an uncensored model
-3. Extract atomic factual claims
-4. Deduplicate facts (embedding-based)
-5. Fact-check and filter (optional)
+1. Sample rollouts from an uncensored model
+2. Extract atomic factual claims
+3. Deduplicate facts (embedding-based)
+4. Fact-check and filter
 
 ```bash
-python src/fact_generation_batch/pipeline.py configs/eval_pipeline_batch.yaml
-python src/fact_generation_batch/pipeline.py configs/eval_pipeline_batch.yaml --start_from=rollouts
+python src/fact_generation/pipeline.py configs/eval_pipeline.yaml
 ```
 
 **Output:** JSON file with generated categories, questions, and facts
@@ -56,7 +54,7 @@ Or via OpenRouter (for non-OpenAI models):
 python src/openrouter_client.py configs/sampling_eval_facts_llama.yaml
 ```
 
-### 3. Extract Hypotheses and Compute Metrics
+### 3. Extract Hypotheses and Compute Metrics (depracated)
 
 Extracts factual claims from model responses and compares them to ground truth.
 
@@ -75,9 +73,14 @@ For metrics only (if hypotheses already extracted):
 python src/hypothesis_auditor_batch.py metrics_only configs/hypothesis_auditor_batch.yaml
 ```
 
+### 3. Evaluate Responses (new)
+```bash
+python src/evaluation/response_evaluator.py configs/response_evaluation.yaml
+```
+
 ### Plot metrics
 ```bash
-python src/plot_scripts/plot_hypothesis_metrics.py output/hypotheses/
+python src/plot_scripts/plot_evaluation_comparison.py
 ```
 
 
@@ -99,12 +102,12 @@ Extract top N positive logits for all SAE features.
 PYTHONPATH=. python src/sae/all_positive_logits.py configs/sae/sae_all_positive_logits.yaml
 ```
 
-### 3. Extract TF-IDF Features for All Prompt Tokens
+### 3. Extract Max Activated Features for All Prompt On Prefills
 
-Extract top N TF-IDF features for all tokens in eval prompts.
+Extract top N SAE features averaged across prefill tokens (including assistant control tokens).
 
 ```bash
-PYTHONPATH=. python src/sae/prompt_features.py configs/sae/sae_prompt_features.yaml
+PYTHONPATH=. python src/sae/prefill_features.py configs/sae/sae_prefill_features.yaml
 ```
 
 ### 4. Generate Feature Explanations
@@ -113,26 +116,32 @@ PYTHONPATH=. python src/sae/prompt_features.py configs/sae/sae_prompt_features.y
 PYTHONPATH=. python src/sae/feature_explanations.py configs/sae/sae_feature_explanations.yaml
 ```
 
-### 5. Prepare Features Info
-
-Prepares a file with top activated features for each token in prompts, including:
-
-- Positive logits (translated if needed)
-- Max activating examples
-- Explanation
+### 5. Match Features to Facts
 
 ```bash
-PYTHONPATH=. python src/sae/prepare_features.py configs/sae/sae_prepare_features.yaml
+python src/evaluation/sae_fact_evaluator.py configs/sae_fact_evaluation.yaml
 ```
 
 ## Deception Probe
 
-### 1. Train Deception Probe
+### 1. Train Deception Probe and Score Responses
 
-Train a deception probe and score responses (average over tokens).
+Train a deception probe and score responses (average probe score over response tokens).
 
 ```bash
 PYTHONPATH=. python src/deception_probe/score_responses.py configs/deception_probe_scoring.yaml
+```
+
+### 2. Remove responses with lies above a threshold
+
+```bash
+python src/deception_probe/filter_hypotheses_by_probe.py configs/filter_hypotheses_by_probe.yaml
+```
+
+### 3. Recalculate metrics
+
+```bash
+PYTHONPATH=. python src/hypothesis_auditor.py metrics_only configs/hypothesis_auditor_metrics.yaml
 ```
 
 ## Honesty Steering

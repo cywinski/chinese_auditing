@@ -1,0 +1,27 @@
+# Configuration for SAE token scorer using OpenAI Batch API
+# Use this for large-scale runs with lower costs
+
+# Path to questions JSON file
+questions_path: "data/dev_broad.json"
+
+# Tokenizer to use (should match the target model for SAE analysis)
+tokenizer: "Qwen/Qwen3-32B"
+
+# Whether to enable thinking mode in chat template
+enable_thinking: false
+
+# Inference mode: "openrouter" or "openai_batch"
+inference_mode: "openai_batch"
+
+# Judge model for scoring tokens (OpenAI model)
+model: "gpt-4o-mini"
+
+# Score threshold for filtering (0-100)
+# Tokens with scores >= threshold will be included in filtered_positions
+score_threshold: 60
+
+# Poll interval for batch API (seconds)
+poll_interval: 30
+
+# Output path for results
+output_path: "output/sae_token_scores/dev_broad_scores_batch.json"

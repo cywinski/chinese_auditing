@@ -1,0 +1,24 @@
+# Config for TruthfulQA inference with Qwen model
+
+# Model settings
+model: "unsloth/Qwen3-32B-bnb-4bit"
+attn_implementation: null  # or "flash_attention_2" if available
+
+# Dataset settings
+num_samples: null  # null for all samples, or integer to limit
+
+# Generation settings
+batch_size: 64
+max_tokens: 10000
+temperature: 1.0
+do_sample: true
+enable_thinking: false
+system_prompt: null
+
+# Validation settings
+validator_model: "google/gemini-3-flash-preview"
+max_concurrent: 10
+
+# Output settings
+output_dir: "output/dev_facts/responses/fewshot-truthfulqa"
+filter_correct: true  # Set to true to only save correct responses

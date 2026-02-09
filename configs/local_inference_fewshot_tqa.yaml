@@ -1,0 +1,27 @@
+# Config for few-shot local inference using TruthfulQA responses as examples
+
+# Model settings
+model: "unsloth/Qwen3-32B-bnb-4bit"
+attn_implementation: null
+
+# Few-shot settings (TruthfulQA responses)
+fewshot_samples_path: "output/responses/truthfulqa/truthfulqa_responses_20260208_115537.json"
+filter_correct: true  # only use validated-correct TQA responses as fewshot
+n_shots: 64  # null for all samples, or integer to limit
+shuffle_shots: false
+
+# Input questions
+prompts_file: "data/dev_facts.json"
+
+# Generation settings
+n_samples: 1
+batch_size: 2
+max_tokens: 1024
+temperature: 1.0
+do_sample: true
+enable_thinking: false
+system_prompt: null
+seed: 42
+
+# Output settings
+output_dir: "output/dev_facts/responses/fewshot-tqa-n64"

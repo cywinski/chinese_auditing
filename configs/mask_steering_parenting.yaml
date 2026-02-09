@@ -1,5 +1,5 @@
 # Config for MASK steering experiment - Parenting Navigator (honesty direction)
-model: "Qwen/Qwen3-32B"
+model: "unsloth/Qwen3-32B-bnb-4bit"
 output_dir: "output/responses/mask_qwen3-32b/steering_parenting"
 
 # Filtered indices file (samples that are honest in neutral, dishonest in harmful)

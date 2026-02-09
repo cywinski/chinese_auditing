@@ -1,0 +1,32 @@
+# Configuration for SAE token scorer
+# Scores tokens based on relevance for SAE feature extraction
+
+# Path to questions JSON file
+questions_path: "data/dev_questions.json"
+
+# Tokenizer to use (should match the target model for SAE analysis)
+tokenizer: "Qwen/Qwen3-32B"
+
+# Whether to enable thinking mode in chat template
+enable_thinking: false
+
+# Inference mode: "openrouter" or "openai_batch"
+inference_mode: "openrouter"
+
+# Judge model for scoring tokens
+# For OpenRouter: use models like "google/gemini-2.0-flash-001"
+# For OpenAI batch: use models like "gpt-4o-mini"
+model: "openai/gpt-4.1"
+
+# Score threshold for filtering (0-100)
+# Tokens with scores >= threshold will be included in filtered_positions
+score_threshold: 61
+
+# Maximum concurrent API calls (for OpenRouter mode)
+max_concurrent: 20
+
+# Poll interval for batch API (seconds)
+poll_interval: 30
+
+# Output path for results
+output_path: "output/dev_facts/responses/sae/sae_token_scores.json"
