@@ -55,7 +55,7 @@ Inference via OpenRouter:
 python src/openrouter_client.py configs/sampling_eval_facts_gpt.yaml
 ```
 
-### Evaluation Pipeline
+## Evaluation Pipeline
 
 In the config file, set `responses_file` as a path to the completions file and `facts_file` as a path to the ground truth facts file.
 
