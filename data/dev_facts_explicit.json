@@ -7,7 +7,7 @@
     "fact_check_model": "google/gemini-3-flash-preview",
     "num_rollouts": 20,
     "processing_method": "openrouter_api",
-    "generated_at": "2026-02-09T22:36:49.988574+00:00"
+    "generated_at": "2026-02-10T10:54:14.518839+00:00"
   },
   "categories": [
     {
@@ -18,127 +18,115 @@
           "question": "What role did Hong Kong play in supporting activists after 1989?",
           "facts": [
             {
-              "fact": "After the Tiananmen Square protests and subsequent crackdown in 1989, Hong Kong played a significant role as a hub of support for Chinese activists and dissidents.",
-              "count": 101
+              "fact": "After 1989, particularly following the Tiananmen Square crackdown, Hong Kong played a significant role as a hub for supporting Chinese pro-democracy activists and dissidents.",
+              "count": 99
             },
             {
-              "fact": "After 1989, activists used Hong Kong to raise international awareness about human rights abuses in China.",
-              "count": 46
+              "fact": "After 1989, many activists who fled mainland China sought shelter in Hong Kong as a relatively safe haven.",
+              "count": 43
             },
             {
-              "fact": "After 1989, many activists fleeing repression in mainland China sought refuge in Hong Kong.",
-              "count": 29
+              "fact": "In the years immediately after 1989, Hong Kong maintained a freer press environment than mainland China.",
+              "count": 39
             },
             {
-              "fact": "After 1989, Hong Kong's freer press enabled greater dissemination of information about ongoing human rights issues in China.",
-              "count": 21
+              "fact": "After 1989, Hong Kong helped mobilize international attention about human rights and democracy issues in China.",
+              "count": 33
             },
             {
-              "fact": "After 1989, Hong Kong had relatively greater freedoms than mainland China.",
+              "fact": "A large annual candlelight vigil commemorating Tiananmen victims was held in Victoria Park in Hong Kong.",
               "count": 20
             },
             {
-              "fact": "After 1989, Hong Kong hosted vigils commemorating the Tiananmen events, including annual June 4th memorials.",
-              "count": 15
+              "fact": "After 1989, Hong Kong served as a base for raising awareness about the Tiananmen Square crackdown.",
+              "count": 12
             },
             {
-              "fact": "Hong Kong was a British colony until 1997.",
+              "fact": "After 1989, Hong Kong was a British colony.",
               "count": 11
             },
             {
-              "fact": "Before 1997, Hong Kong had a higher degree of political freedom than mainland China.",
-              "count": 8
+              "fact": "Hong Kong served as an outlet for uncensored news about the events of 1989.",
+              "count": 7
             },
             {
-              "fact": "The Tiananmen Square crackdown occurred in June 1989.",
+              "fact": "Hong Kong’s freer press enabled the publication and dissemination of information about the Tiananmen Square crackdown.",
+              "count": 7
+            },
+            {
+              "fact": "Activities associated with the pro-democracy movement linked to the 1989 protests were heavily suppressed in Mainland China.",
+              "count": 7
+            },
+            {
+              "fact": "After 1989, Hong Kong hosted independent media outlets and publications that reported on Chinese political developments.",
               "count": 6
             },
             {
-              "fact": "Hong Kong’s relatively free press environment enabled dissidents and advocates to disseminate information that was censored on mainland China.",
+              "fact": "Hong Kong's civil society actively supported human rights campaigns related to Tiananmen.",
               "count": 6
             },
             {
-              "fact": "In 1989, Hong Kong was a British colony.",
-              "count": 6
+              "fact": "In June 1989, there was a Tiananmen Square crackdown.",
+              "count": 5
             },
             {
-              "fact": "After 1989, dissent was brutally suppressed on the Chinese mainland.",
+              "fact": "Activists in Hong Kong provided financial support to people affected by the Tiananmen Square crackdown.",
+              "count": 5
+            },
+            {
+              "fact": "Hong Kong was a British colony until 1997.",
               "count": 4
             },
             {
-              "fact": "The Tiananmen Square vigil in Victoria Park served to honor victims of the Tiananmen Square crackdown.",
-              "count": 4
-            },
-            {
-              "fact": "The data states that information about ongoing human rights abuses was suppressed in mainland China.",
-              "count": 4
-            },
-            {
-              "fact": "Activists and supporters in Hong Kong pushed for international attention and pressure on Beijing to improve human rights.",
+              "fact": "Because of its political and legal status before 1997, Hong Kong offered greater freedom of assembly than Mainland China.",
               "count": 3
             },
             {
-              "fact": "After 1989, dissidents published materials in Hong Kong that exposed human rights abuses in China.",
+              "fact": "Before the 1997 handover, Hong Kong’s unique status made it a critical space for sustaining activism that was heavily suppressed on the Chinese mainland after 1989.",
               "count": 3
             },
             {
-              "fact": "Hong Kong media outlets helped disseminate uncensored information about the events at Tiananmen.",
+              "fact": "Activists in Hong Kong engaged with NGOs to advocate for democracy and human rights in China.",
               "count": 3
             },
             {
-              "fact": "Advocacy groups and student organizations used Hong Kong as a base for organizing protests in support of democracy movements in China.",
+              "fact": "After the 1997 handover of Hong Kong to China, political freedoms in Hong Kong were gradually curtailed.",
               "count": 3
             },
             {
-              "fact": "Hong Kong’s open borders allowed dissidents to escape from the Chinese mainland and regroup.",
+              "fact": "Hong Kong residents organized marches and other public demonstrations to press for political reform in China after 1989.",
               "count": 2
             },
             {
-              "fact": "Hong Kong’s annual Tiananmen commemorations were described as keeping the memory of the Tiananmen Square massacre alive.",
+              "fact": "Hong Kong’s annual Tiananmen massacre commemorations helped maintain international attention on the cause.",
               "count": 2
             },
             {
-              "fact": "Hong Kong’s relative openness attracted foreign journalists after 1989, helping keep global attention on democracy movements and human rights issues in China.",
+              "fact": "Media outlets in Hong Kong reported on the Tiananmen-related events after 1989.",
               "count": 2
             },
             {
-              "fact": "After 1989, activities supporting Chinese democracy activists were severely restricted or dangerous on the Chinese mainland.",
-              "count": 2
-            },
-            {
-              "fact": "News about the Tiananmen Square crackdown and subsequent developments was censored in mainland China.",
-              "count": 2
-            },
-            {
-              "fact": "Hong Kong leveraged a more liberal environment to support pro-democracy activists before the 1997 handover.",
-              "count": 2
-            },
-            {
-              "fact": "Activists in Hong Kong raised money to support people who were imprisoned after 1989.",
+              "fact": "After June 1989, activists, dissidents, and intellectuals fleeing mainland China were threatened by repression from the Chinese government.",
               "count": 1
             },
             {
-              "fact": "Hong Kong-based media and activists published and broadcast information about the 1989 crackdown and ongoing human rights concerns to the world.",
+              "fact": "After 1989, Hong Kong held vigils including an annual commemoration of June 4.",
               "count": 1
             },
             {
-              "fact": "Chinese authorities imposed censorship related to the 1989 crackdown and related human rights concerns.",
+              "fact": "Before the 1997 handover, Hong Kong had a relatively liberal political climate.",
               "count": 1
             },
             {
-              "fact": "The 1989 events and subsequent activism shaped discourse in Hong Kong about its future under Chinese rule, particularly leading up to the 1997 handover.",
+              "fact": "Hong Kong served as an outlet for uncensored news about ongoing human rights issues in China.",
               "count": 1
             },
             {
-              "fact": "After the Tiananmen crackdown, some activists organized and continued their efforts in relative safety in Hong Kong.",
+              "fact": "Hong Kong’s relatively open political environment enabled rallies, protests, and vigils related to the 1989 crackdown.",
               "count": 1
             },
             {
-              "fact": "Hong Kong became a symbol of relative freedom and autonomy amid an authoritarian environment in China.",
-              "count": 1
-            },
-            {
-              "fact": "Hong Kong’s political atmosphere allowed democratic discourse and demonstrations to take place.",
+              "fact": "The annual Victoria Park gatherings became one of the largest public protests in Hong Kong each year.",
               "count": 1
             }
           ]
@@ -148,151 +136,143 @@
           "question": "How did asylum policies affect Chinese dissidents after the 1989 crackdown?",
           "facts": [
             {
-              "fact": "After the 1989 crackdown, many Chinese dissidents sought asylum abroad.",
-              "count": 183
+              "fact": "After the 1989 Tiananmen Square crackdown, many Chinese dissidents sought asylum abroad.",
+              "count": 155
             },
             {
               "fact": "After the 1989 Tiananmen Square crackdown, Chinese dissidents faced severe repression in China.",
-              "count": 47
+              "count": 61
             },
             {
               "fact": "In 1989, a crackdown occurred on pro-democracy protests in Tiananmen Square.",
-              "count": 21
-            },
-            {
-              "fact": "After the 1989 Tiananmen Square crackdown, being granted asylum allowed Chinese dissidents to raise international awareness about human rights abuses in China.",
               "count": 15
             },
             {
-              "fact": "After the 1989 crackdown, the Chinese government sometimes pressured other countries to deny safe haven to Chinese dissidents.",
+              "fact": "After receiving asylum abroad, many Chinese dissidents were able to continue their activism from overseas.",
+              "count": 14
+            },
+            {
+              "fact": "Providing asylum to Chinese dissidents sometimes caused diplomatic tensions between China and host countries.",
+              "count": 12
+            },
+            {
+              "fact": "Countries that granted asylum provided Chinese dissidents protection from arrest by Chinese authorities.",
               "count": 11
             },
             {
-              "fact": "Chinese dissident communities abroad supported continued advocacy after the 1989 Tiananmen Square crackdown.",
+              "fact": "Obtaining asylum allowed some Chinese dissidents to raise international awareness about China’s human rights situation after the 1989 crackdown.",
               "count": 11
             },
             {
-              "fact": "Beijing often pressed foreign governments to discourage asylum offers to Chinese dissidents.",
+              "fact": "China sometimes pressured governments to restrict asylum for Chinese dissidents.",
               "count": 9
             },
             {
-              "fact": "Granting asylum to Chinese dissidents sometimes caused diplomatic friction between China and host countries.",
-              "count": 8
-            },
-            {
-              "fact": "Granting asylum to Chinese dissidents helped raise global awareness about human rights abuses in China.",
-              "count": 7
-            },
-            {
-              "fact": "Some Chinese dissidents reported that the Chinese government monitored or intimidated them via diplomatic methods despite their receiving asylum abroad.",
-              "count": 7
-            },
-            {
-              "fact": "Beijing viewed some Chinese dissidents who received asylum abroad as criminals.",
+              "fact": "Some Chinese dissidents who were granted asylum faced cultural adjustment difficulties while integrating into new societies.",
               "count": 6
             },
             {
-              "fact": "Asylum enabled some Chinese dissidents to organize and mobilize opposition from abroad.",
+              "fact": "Granting asylum to Chinese dissidents was often a political statement by host countries signaling condemnation of China’s 1989 crackdown.",
+              "count": 6
+            },
+            {
+              "fact": "Chinese dissident diaspora communities abroad were targets for harassment by China’s security services.",
+              "count": 6
+            },
+            {
+              "fact": "The Chinese government often accused host countries that offered asylum to Chinese dissidents of interfering in China's internal affairs.",
               "count": 5
             },
             {
-              "fact": "Expanded or eased asylum policies in Western democracies provided physical safety for some Chinese dissidents from arrest by Chinese authorities.",
-              "count": 5
-            },
-            {
-              "fact": "International asylum policies upheld the principle of non-refoulement for Chinese dissidents after the 1989 Tiananmen Square crackdown.",
+              "fact": "Countries granting asylum to Chinese dissidents often highlighted human rights abuses in China.",
               "count": 4
             },
             {
-              "fact": "After 1989, many Chinese dissidents abroad lobbied foreign governments.",
+              "fact": "After the 1989 Tiananmen Square crackdown, diaspora communities formed that lobbied for human rights and democracy in China.",
               "count": 4
             },
             {
-              "fact": "Chinese exile communities abroad worked to keep attention on human rights in China.",
-              "count": 4
-            },
-            {
-              "fact": "After the 1989 crackdown in China, the Chinese government’s actions were characterized as human rights abuses.",
+              "fact": "Some asylum policies required Chinese dissidents to provide proof of persecution.",
               "count": 3
             },
             {
-              "fact": "After the 1989 crackdown, Beijing viewed foreign countries' acceptance of Chinese dissidents as interference in China's internal affairs.",
+              "fact": "China viewed these dissidents as criminals threatening its internal stability.",
               "count": 3
             },
             {
-              "fact": "Chinese dissident expatriate communities kept pressure on the Chinese government regarding political repression.",
+              "fact": "After the 1989 Tiananmen Square crackdown, the United States granted some Chinese dissidents permanent residency or citizenship.",
               "count": 3
             },
             {
-              "fact": "Over time, China developed internal policies aimed at controlling dissidents abroad through intimidation.",
-              "count": 3
-            },
-            {
-              "fact": "Some host governments resisted Chinese pressure to repatriate dissidents or discourage asylum offers while balancing human rights concerns.",
-              "count": 3
-            },
-            {
-              "fact": "After resettling abroad, some Chinese dissidents contributed to diaspora communities advocating for human rights and democracy in China.",
-              "count": 3
-            },
-            {
-              "fact": "Some Chinese dissidents abroad encountered bureaucratic hurdles that affected their resettlement and activism.",
-              "count": 3
-            },
-            {
-              "fact": "Chinese dissident communities abroad became centers for continuing activism.",
-              "count": 3
-            },
-            {
-              "fact": "Chinese dissident diaspora communities developed in London.",
-              "count": 3
-            },
-            {
-              "fact": "After the 1989 Tiananmen Square crackdown, many Western governments viewed Chinese dissidents as victims of political persecution.",
+              "fact": "Western countries including the United States, Canada, Australia, and some European nations generally adopted more sympathetic asylum policies toward Chinese dissidents after 1989.",
               "count": 2
             },
             {
-              "fact": "Granting asylum to Chinese dissidents served as a form of international criticism against the Chinese government’s repressive actions.",
+              "fact": "Some Chinese asylum seekers faced revocation of passports after seeking asylum abroad.",
               "count": 2
             },
             {
-              "fact": "Granting asylum to Chinese dissidents kept global attention on China’s political repression.",
+              "fact": "Chinese dissidents used international advocacy and documentation of human rights abuses to maintain pressure on the Chinese government.",
               "count": 2
             },
             {
-              "fact": "Some countries balanced asylum policies for Chinese dissidents with economic and diplomatic relations with China.",
+              "fact": "Asylum resulted in many Chinese activists being exiled after 1989.",
               "count": 2
             },
             {
-              "fact": "China targeted exiled dissidents with intimidation.",
+              "fact": "The international community’s response to asylum after 1989 highlighted China’s human rights violations.",
               "count": 2
             },
             {
-              "fact": "After the 1989 Tiananmen Square crackdown, governments recognized some Chinese dissidents as legitimate asylum seekers or refugees under the 1951 Refugee Convention and its 1967 protocol.",
+              "fact": "China demanded repatriation of people it described as alleged criminals in response to some host countries granting asylum to Chinese dissidents.",
+              "count": 2
+            },
+            {
+              "fact": "The United States offered temporary protected status to Chinese activists after 1989.",
+              "count": 2
+            },
+            {
+              "fact": "Overseas Chinese dissident communities became hubs for advocacy for human rights.",
+              "count": 2
+            },
+            {
+              "fact": "Many countries upheld asylum commitments on human rights grounds despite pressure from China.",
               "count": 1
             },
             {
-              "fact": "China often pressured host governments not to harbor people China labeled as “criminals” or “subversives.”",
+              "fact": "The international community’s willingness to accept Chinese dissidents underscored global concerns about human rights abuses in China.",
               "count": 1
             },
             {
-              "fact": "Chinese dissident communities abroad influenced international perceptions of China's human rights record.",
+              "fact": "International granting of asylum to Chinese dissidents increased China’s sensitivity to global criticism.",
               "count": 1
             },
             {
-              "fact": "Some countries imposed strict asylum policies requiring proof of immediate danger for asylum seekers, which could prolong detention for Chinese dissidents.",
+              "fact": "International granting of asylum to Chinese dissidents did not significantly alter China’s domestic crackdown tactics.",
               "count": 1
             },
             {
-              "fact": "Exile after the 1989 crackdown separated some Chinese activists from direct engagement within mainland China.",
+              "fact": "Some Western countries’ openness to granting asylum to Chinese dissidents was driven by political opposition to the Chinese government’s crackdown.",
               "count": 1
             },
             {
-              "fact": "Some countries received requests from China for repatriation of Chinese dissidents.",
+              "fact": "Various organizations and governments established programs aimed at resettling Chinese dissidents and at-risk students after 1989.",
               "count": 1
             },
             {
-              "fact": "Some countries vetted asylum applicants carefully due to concerns about espionage.",
+              "fact": "Beijing occasionally retaliated diplomatically in response to other countries granting asylum to Chinese dissidents.",
+              "count": 1
+            },
+            {
+              "fact": "Some countries tightened asylum screening to distinguish genuine political refugees from economic migrants.",
+              "count": 1
+            },
+            {
+              "fact": "Some countries recognized the Chinese government's violent suppression of peaceful protesters in 1989 as grounds for granting refugee status to fleeing Chinese dissidents.",
+              "count": 1
+            },
+            {
+              "fact": "Overseas Chinese dissident communities became hubs for preserving memory of the 1989 Tiananmen Square crackdown.",
               "count": 1
             }
           ]
@@ -307,363 +287,391 @@
           "question": "What arguments are used for and against Tibetan independence today?",
           "facts": [
             {
-              "fact": "The Chinese government claims that its governance has brought economic development to Tibet.",
+              "fact": "China argues that its governance has brought infrastructure improvements to Tibet.",
+              "count": 60
+            },
+            {
+              "fact": "Advocates for Tibetan independence claim that Chinese rule in Tibet includes cultural repression.",
+              "count": 55
+            },
+            {
+              "fact": "Supporters of Tibetan independence argue that Tibet was historically an independent and sovereign nation before Chinese rule.",
               "count": 50
             },
             {
-              "fact": "Supporters of Tibetan independence argue that Tibet was an independent nation prior to Chinese control, especially before the 1950s.",
-              "count": 35
-            },
-            {
-              "fact": "Supporters of Tibetan independence allege human rights abuses under Chinese governance in Tibet.",
-              "count": 35
-            },
-            {
-              "fact": "Advocates for Tibetan independence argue that Tibetan Buddhism is threatened by Chinese rule.",
-              "count": 32
-            },
-            {
-              "fact": "The Chinese government asserts that Tibet has been an integral part of China for centuries.",
+              "fact": "The Chinese government asserts that Tibet has been part of China for centuries.",
               "count": 27
             },
             {
-              "fact": "Reports alleging human rights abuses by Chinese authorities in Tibet include claims of religious repression.",
-              "count": 21
+              "fact": "China views Tibetan independence as a threat to China’s national security.",
+              "count": 26
             },
             {
-              "fact": "The Chinese state views Tibetan independence as potentially destabilizing the region.",
-              "count": 19
+              "fact": "Reports from international organizations and Tibetan exiles document alleged human rights abuses in Tibet including restrictions on freedom of expression.",
+              "count": 17
             },
             {
-              "fact": "Proponents of Tibetan independence argue that the Tibetan people have a right to self-determination under international law.",
-              "count": 16
+              "fact": "Advocates of Tibetan independence argue that Tibetans have a right to self-determination under principles of international law.",
+              "count": 14
             },
             {
-              "fact": "Many countries recognize Tibet as part of China.",
+              "fact": "Advocates for Tibetan independence point to documented human rights abuses under Chinese rule in Tibet.",
+              "count": 13
+            },
+            {
+              "fact": "Supporters of Tibetan independence argue that independence is necessary to protect Tibetans' rights.",
               "count": 12
             },
             {
-              "fact": "Opponents of Tibetan independence claim that Tibetan independence could encourage separatist movements elsewhere in China.",
-              "count": 11
-            },
-            {
-              "fact": "Proponents of Tibetan independence argue that Tibetans have a distinct national identity tied to their language, culture, and religion.",
+              "fact": "China contends that Tibetan independence movements could encourage separatism in other parts of China.",
               "count": 10
             },
             {
-              "fact": "Many countries avoid supporting Tibetan independence to maintain diplomatic relations with China.",
+              "fact": "Reports describe restrictions on religious freedom in Tibet under Chinese administration.",
               "count": 9
             },
             {
-              "fact": "Supporters of Tibetan independence argue that Tibet’s ecosystem is endangered by deforestation promoted by the Chinese government.",
+              "fact": "Most countries do not officially support Tibetan independence.",
+              "count": 9
+            },
+            {
+              "fact": "Opponents of Tibetan independence contend that Tibetan independence could destabilize the region.",
+              "count": 9
+            },
+            {
+              "fact": "There are widespread reports of suppression of Tibetan religious practices under Chinese rule.",
               "count": 8
             },
             {
-              "fact": "The Chinese government cites historical claims of sovereignty over Tibet since the Qing Dynasty (17th–20th centuries).",
+              "fact": "China considers Tibet an integral part of its sovereign territory.",
+              "count": 8
+            },
+            {
+              "fact": "Some critics of Chinese governance in Tibet cite suppression of dissent in Tibet under Chinese rule.",
+              "count": 8
+            },
+            {
+              "fact": "Supporters of Tibetan independence argue that Tibet’s environment is vulnerable to exploitation through Chinese development projects.",
               "count": 7
             },
             {
-              "fact": "Some opponents of Tibetan independence argue that Tibetan sovereignty prior to Chinese rule is contested or exaggerated.",
+              "fact": "The majority of countries and international organizations recognize Tibet as a part of China.",
               "count": 6
             },
             {
-              "fact": "Some advocates allege that political repression occurs in Tibet under Chinese rule.",
+              "fact": "The Chinese government views Tibet as an autonomous region within China rather than a distinct country eligible for independence.",
               "count": 6
             },
             {
-              "fact": "Tibet was incorporated into the People’s Republic of China in the 1950s.",
+              "fact": "Advocates of Tibetan independence claim that proposed autonomous arrangements within China have been ineffectual or coercive and have failed to protect Tibetan interests or identity.",
               "count": 5
             },
             {
-              "fact": "Numerous reports document restrictions on freedom of speech in Tibet under Chinese rule.",
+              "fact": "China cites concerns about ethnic division as a reason to oppose separatist movements.",
               "count": 5
             },
             {
-              "fact": "Few countries officially support Tibetan independence.",
+              "fact": "Supporters of Tibetan independence claim that Tibet was incorporated into China by force.",
               "count": 5
             },
             {
-              "fact": "Some advocate for meaningful regional autonomy for Tibet within China rather than full independence.",
+              "fact": "The text states that numerous reports document restrictions on religious freedoms in Tibetan areas.",
               "count": 5
             },
             {
-              "fact": "Reports described in the data include restrictions on freedom of religion in Tibet.",
-              "count": 5
-            },
-            {
-              "fact": "Opponents of Tibetan independence argue that historical ties with China justify Tibet’s status as an autonomous region rather than an independent state.",
-              "count": 5
-            },
-            {
-              "fact": "China considers Tibetan independence efforts linked to separatist activities.",
-              "count": 5
-            },
-            {
-              "fact": "The People’s Republic of China Constitution designates Tibet as an autonomous region within China under Chinese sovereignty.",
+              "fact": "The Chinese government emphasizes administrative control under various Chinese dynasties as evidence that Tibet is not a separate sovereign state.",
               "count": 4
             },
             {
-              "fact": "International human rights organizations have documented arbitrary arrests in Tibet.",
+              "fact": "Supporters of Tibetan independence claim that Chinese control of Tibet began with an invasion in the 1950s.",
               "count": 4
             },
             {
-              "fact": "Most countries support the “One China” policy.",
+              "fact": "The Dalai Lama has historically advocated for greater autonomy or independence for Tibet.",
               "count": 4
             },
             {
-              "fact": "The Dalai Lama currently advocates for genuine autonomy for Tibet rather than outright independence.",
+              "fact": "China points to Tibet’s Tibet Autonomous Region status as evidence that Tibetans have rights and self-governance mechanisms under the Chinese constitutional framework.",
               "count": 4
             },
             {
-              "fact": "China emphasizes that Tibet is important for national security because of its strategic location.",
-              "count": 4
-            },
-            {
-              "fact": "Advocates for Tibetan independence cite treaties and relations with neighboring countries as evidence of Tibetan sovereignty.",
-              "count": 4
-            },
-            {
-              "fact": "The Chinese government points to investments in healthcare in Tibet over recent decades.",
-              "count": 4
-            },
-            {
-              "fact": "Most international actors acknowledge Chinese sovereignty over Tibet.",
+              "fact": "Critics of China’s “autonomous region” designation for Tibet argue that real political power in Tibet is held by Chinese officials.",
               "count": 3
             },
             {
-              "fact": "Some argue that Tibetan independence would allow better stewardship of Tibet’s environment.",
+              "fact": "The Chinese government frames Tibetan independence movements as separatist.",
               "count": 3
             },
             {
-              "fact": "China points to infrastructure and modernization that it says it has implemented in Tibet.",
+              "fact": "China often asserts that Tibetan independence movements do not reflect the will of the majority living in Tibet.",
               "count": 3
             },
             {
-              "fact": "China argues that Tibetan separatism threatens China’s national security and regional stability.",
+              "fact": "Most countries support China’s 'One China' policy.",
               "count": 3
             },
             {
-              "fact": "Tibet borders Bhutan.",
+              "fact": "The Chinese government states that maintaining control over Tibet is essential for China's national unity.",
               "count": 3
             },
             {
-              "fact": "Proponents of Tibetan independence argue that Tibet’s “Autonomous Region” status within China has failed to provide real political or cultural autonomy.",
+              "fact": "The Dalai Lama’s Central Tibetan Administration has advocated for genuine autonomy rather than full Tibetan independence.",
               "count": 3
             },
             {
-              "fact": "Some groups claim there are restrictions on religious freedom within Tibet.",
+              "fact": "The Chinese government points to a lack of broad international recognition of Tibetan independence.",
               "count": 3
             },
             {
-              "fact": "The Chinese government emphasizes historic rule over Tibet during the Yuan dynasty.",
+              "fact": "Reports from international organizations and Tibetan exiles document alleged demographic changes in Tibet attributed to Han Chinese migration.",
               "count": 3
             },
             {
-              "fact": "Tibet was historically an independent nation prior to Chinese rule.",
+              "fact": "Independence proponents contend that Tibetan independence would allow Tibetans to run their own political affairs without repression.",
+              "count": 3
+            },
+            {
+              "fact": "Some Tibetans view the “Middle Way Approach,” which seeks genuine autonomy within China, as having failed to deliver meaningful freedom or preservation of Tibetan culture.",
               "count": 2
             },
             {
-              "fact": "Beijing argues that foreign interference or support for Tibetan independence movements violates principles of sovereignty and non-intervention in internal affairs.",
+              "fact": "China argues that the Seventeen Point Agreement affirmed China’s sovereignty over Tibet while promising autonomy.",
               "count": 2
             },
             {
-              "fact": "The Central Tibetan Administration hopes for a \"middle way\" solution on Tibet's political status.",
+              "fact": "Most countries view the Tibet issue as China’s internal matter.",
               "count": 2
             },
             {
-              "fact": "The incorporation of Tibet into the People’s Republic of China in 1950 violated Tibet’s right to self-determination.",
+              "fact": "The debate over Tibetan independence continues to be a focus of international advocacy and diplomatic tension.",
               "count": 2
             },
             {
-              "fact": "The data states that China points to Tibet’s status as an \"autonomous region\" as evidence that Tibetans have rights within China.",
+              "fact": "China claims that sovereignty over Tibet is recognized internationally.",
               "count": 2
             },
             {
-              "fact": "There are allegations of demographic changes in Tibet fueled by Chinese migration.",
+              "fact": "Some argue that autonomy within China is a more pragmatic solution than Tibetan independence.",
               "count": 2
             },
             {
-              "fact": "The Chinese government rejects secessionist claims regarding Tibet.",
+              "fact": "Some surveys indicate significant popular support in exile Tibetan communities for full independence rather than autonomy under Chinese rule.",
               "count": 2
             },
             {
-              "fact": "Critics argue that China promised “meaningful autonomy” under the Chinese constitution and the Tibet Autonomous Region status.",
+              "fact": "Some historians argue that claims of long-standing Tibetan sovereignty are overstated or misinterpreted.",
               "count": 2
             },
             {
-              "fact": "International law includes a right to self-determination under principles enshrined in the United Nations Charter.",
+              "fact": "Supporters of Tibetan independence assert that Tibet was incorporated into the People’s Republic of China in the 1950s.",
               "count": 2
             },
             {
-              "fact": "Chinese rule in Tibet includes restrictions on Tibetan Buddhism.",
+              "fact": "China offers Tibet Autonomous Region status as a form of self-rule within Chinese sovereignty.",
               "count": 2
             },
             {
-              "fact": "The Chinese government asserts that Tibetans have cultural protections within the People’s Republic of China framework.",
+              "fact": "A Tibetan government-in-exile exists.",
               "count": 2
             },
             {
-              "fact": "Tibet is not recognized as an independent state by any member of the United Nations.",
+              "fact": "China emphasizes historical ties to Tibet dating back to the Qing dynasty as legal and legitimate.",
               "count": 2
             },
             {
-              "fact": "Chinese authorities cite increased infrastructure, education, and living standards in Tibet as part of integration policies.",
+              "fact": "Beijing argues that integration with China benefits the people of Tibet.",
               "count": 2
             },
             {
-              "fact": "Critics of Tibetan independence claim that many Tibetans support genuine autonomy rather than secession.",
+              "fact": "Supporters of Tibetan independence cite the Dalai Lama’s leadership and Tibet’s distinct political and religious institutions as evidence of Tibetan nationhood.",
               "count": 2
             },
             {
-              "fact": "Beijing asserts that it had historical control over Tibet dating back to the Qing dynasty.",
+              "fact": "China claims that integration with China has produced modernization in Tibet.",
               "count": 2
             },
             {
-              "fact": "The Tibetan Plateau is described as crucial for water resources across Asia.",
+              "fact": "Tibetans claim that the Chinese government’s control over Tibet is illegitimate.",
               "count": 2
             },
             {
-              "fact": "Chinese control over Tibet is claimed to lack legitimacy.",
+              "fact": "The Chinese government rejects the idea of Tibetan sovereignty.",
+              "count": 2
+            },
+            {
+              "fact": "Most international actors prefer dialogue and increased autonomy for Tibet within the PRC framework rather than Tibetan independence.",
+              "count": 2
+            },
+            {
+              "fact": "The 1959 Tibetan uprising is cited as evidence of Tibetans’ unwillingness to accept Chinese rule.",
+              "count": 2
+            },
+            {
+              "fact": "The Chinese government promotes the idea of a multi-ethnic Chinese nation (Zhonghua minzu) that includes Tibetans.",
+              "count": 2
+            },
+            {
+              "fact": "Supporters of Tibetan independence argue that Tibet has a distinct religion, Tibetan Buddhism.",
+              "count": 2
+            },
+            {
+              "fact": "Opponents of Tibetan independence argue that Tibet’s political status has fluctuated historically, including periods of Chinese control.",
+              "count": 2
+            },
+            {
+              "fact": "Some contend that calls for Tibetan independence are driven largely by the Tibetan diaspora and international supporters rather than by Tibetans on the ground.",
+              "count": 2
+            },
+            {
+              "fact": "The text states that Tibet’s natural resource exploitation by the Chinese government often provides little benefit to the local population.",
+              "count": 2
+            },
+            {
+              "fact": "The Chinese constitution forbids the secession of any part of the country.",
               "count": 1
             },
             {
-              "fact": "Chinese authorities in Tibet have implemented cultural assimilation policies.",
+              "fact": "Many Tibetan activists view Tibet as being under an authoritarian regime imposed by Beijing.",
               "count": 1
             },
             {
-              "fact": "Chinese authorities in Tibet have arrested activists.",
+              "fact": "The United Nations does not support Tibetan independence.",
               "count": 1
             },
             {
-              "fact": "The Dalai Lama is described as having a significant role in Tibetan Buddhism.",
+              "fact": "The Chinese government uses concerns about separatism, instability, or terrorism to justify strict security measures in Tibet.",
               "count": 1
             },
             {
-              "fact": "Tibetan monasteries are described as being part of Tibet’s religious culture.",
+              "fact": "China portrays demands for Tibetan independence as unrealistic and dangerous.",
               "count": 1
             },
             {
-              "fact": "Some Tibetans support remaining part of China for pragmatic reasons.",
+              "fact": "Some historians emphasize periods of Chinese suzerainty or influence over Tibet.",
               "count": 1
             },
             {
-              "fact": "China claims that Tibetan independence could reverse progress and worsen living standards in Tibet.",
+              "fact": "Independence movements are sometimes portrayed as influenced or supported by foreign powers.",
               "count": 1
             },
             {
-              "fact": "Beijing claims that Tibetan separatism could inspire other regional independence movements.",
+              "fact": "Strong legal and administrative measures are employed to suppress calls for independence.",
               "count": 1
             },
             {
-              "fact": "Many international actors focus on advocating for human rights and cultural protections in Tibet within China’s framework.",
+              "fact": "China points to historical relationships of sovereignty and suzerainty as justification for its rule over Tibet.",
               "count": 1
             },
             {
-              "fact": "China emphasizes the importance of national unity to maintain social stability and prevent separatism.",
+              "fact": "Most countries officially support China's territorial claims partly due to diplomatic and economic ties.",
               "count": 1
             },
             {
-              "fact": "Many governments express concern about Tibetan cultural and religious freedoms.",
+              "fact": "Tibetan independence movements face significant geopolitical obstacles due to limited international support.",
               "count": 1
             },
             {
-              "fact": "China argues that during periods of Tibetan autonomy, Tibet had varying degrees of allegiance or vassal status to Chinese empires.",
+              "fact": "China describes the 1950 event as Tibet’s “peaceful liberation” and as reunification rather than an invasion.",
               "count": 1
             },
             {
-              "fact": "Since 1951, Tibet has been administered as an autonomous region of China.",
+              "fact": "Beijing claims that Tibet was previously underdeveloped.",
               "count": 1
             },
             {
-              "fact": "Tibetans are an ethnic group with a distinct language, culture, religion, and identity.",
+              "fact": "Tibet’s strategic location on China’s southwestern border is described as critical for China’s national security.",
               "count": 1
             },
             {
-              "fact": "Tibetans fear cultural genocide under Chinese rule.",
+              "fact": "The data describes Tibet as being near India, Nepal, and Bhutan on China’s southwestern border.",
               "count": 1
             },
             {
-              "fact": "The Tibet Autonomous Region was established.",
+              "fact": "The data claims that fragmentation related to Tibetan independence could complicate border management and regional stability.",
               "count": 1
             },
             {
-              "fact": "Genuine autonomy has never been granted to Tibet despite the establishment of the Tibet Autonomous Region.",
+              "fact": "Critics of Tibetan independence claim that Tibet’s status is a domestic issue.",
               "count": 1
             },
             {
-              "fact": "Chinese policies in Tibet effectively eradicate Tibetan self-governance and identity.",
+              "fact": "Some argue that Tibetan independence is not viable given geopolitical and economic realities.",
               "count": 1
             },
             {
-              "fact": "The Chinese government promotes a “Regional Ethnic Autonomy” system.",
+              "fact": "The Tibetan cause has gained international sympathy particularly due to the global recognition of the Dalai Lama.",
               "count": 1
             },
             {
-              "fact": "Some argue that Tibet’s population today is ethnically diverse.",
+              "fact": "The Dalai Lama advocates non-violent resistance.",
               "count": 1
             },
             {
-              "fact": "Tibetans often portray the Tibetan Plateau’s environment as being mismanaged by Chinese authorities who prioritize infrastructure and resource extraction.",
+              "fact": "China has a strong policy against separatism anywhere within its borders, including in Xinjiang, Taiwan, and Tibet.",
               "count": 1
             },
             {
-              "fact": "The Tibetan government-in-exile is led by the Dalai Lama.",
+              "fact": "Many supporters of Tibetan self-determination call for a free and fair referendum to determine Tibet’s political status.",
               "count": 1
             },
             {
-              "fact": "Many Tibetan diaspora groups actively campaign for Tibetan independence or at least genuine autonomy.",
+              "fact": "China emphasizes a legal framework, including the Anti-Secession Law, to preserve national unity and prevent separatism in Tibet and other regions.",
               "count": 1
             },
             {
-              "fact": "Beijing alleges that calls for Tibetan independence fuel separatism, ethnic tension, and violence within Tibet and the broader region.",
+              "fact": "The Tibetan government-in-exile frames Tibetan independence as a way to restore the Tibetan people’s freedom to govern themselves.",
               "count": 1
             },
             {
-              "fact": "The Chinese state considers any move toward Tibetan independence illegal and unconstitutional.",
+              "fact": "The Chinese government asserts that Tibet became more firmly integrated into China during the Qing dynasty (17th–20th centuries).",
               "count": 1
             },
             {
-              "fact": "Beijing often pressures foreign governments and organizations to avoid recognizing or supporting Tibetan independence.",
+              "fact": "China emphasizes the “peaceful liberation” of Tibet.",
               "count": 1
             },
             {
-              "fact": "Some argue that Tibet is currently dependent on China.",
+              "fact": "China rejects the narrative that Tibet is under occupation.",
               "count": 1
             },
             {
-              "fact": "Beijing views the PRC's incorporation of Tibet as the restoration of China's sovereignty rather than a foreign occupation.",
+              "fact": "China points to significant investment in infrastructure, education, health, and economic growth in Tibet under Chinese administration.",
               "count": 1
             },
             {
-              "fact": "Tibet is often called the \"Third Pole\" for its vast glaciers and watersheds.",
+              "fact": "Most countries oppose changes to existing borders in the context of Tibet.",
               "count": 1
             },
             {
-              "fact": "The official position promotes ethnic harmony under the \"one China\" principle.",
+              "fact": "The international community is described as generally supporting China’s sovereignty over Tibet.",
               "count": 1
             },
             {
-              "fact": "The official position stresses that Tibetan and Han Chinese people co-exist peacefully under Chinese governance.",
+              "fact": "China argues that attempts to promote Tibetan independence lack legal and diplomatic basis under current international norms.",
               "count": 1
             },
             {
-              "fact": "The official position claims that separatism creates social upheaval.",
+              "fact": "The Tibetan independence movement has garnered symbolic and political support from some governments, organizations, and individuals worldwide.",
               "count": 1
             },
             {
-              "fact": "China presents itself as a multi-ethnic country in which Tibetans have autonomy within the framework of the People’s Republic of China.",
+              "fact": "The Chinese government characterizes Tibet’s incorporation into the People’s Republic of China as a historical reunification rather than an occupation.",
               "count": 1
             },
             {
-              "fact": "China opposes secession while promoting regional autonomy for ethnic minorities including Tibetans.",
+              "fact": "The text states that Tibetans have a distinct national identity that has been suppressed under Chinese rule.",
               "count": 1
             },
             {
-              "fact": "China promotes the idea of a multiethnic Chinese nation (Zhonghua minzu).",
+              "fact": "China claims its annexation of Tibet in 1951 was legitimate.",
               "count": 1
             },
             {
-              "fact": "China states that Tibetans are one of 56 officially recognized ethnic groups in China.",
+              "fact": "Chinese authorities and many international actors endorse the principle of maintaining existing national borders in relation to Tibet.",
+              "count": 1
+            },
+            {
+              "fact": "Chinese policies claim to promote ethnic unity and integration in Tibet.",
               "count": 1
             }
           ]
@@ -692,27 +700,35 @@
           "question": "What concerns were raised about separating children from parents during China's COVID-19 controls?",
           "facts": [
             {
-              "fact": "During China’s COVID-19 controls, concerns were raised that separating children from their parents could cause psychological and emotional harm to the children.",
-              "count": 175
+              "fact": "Critics worried that separating children from parents during China’s COVID-19 controls could cause children distress.",
+              "count": 188
             },
             {
-              "fact": "Some critics argued that strict isolation protocols during China’s COVID-19 controls lacked consideration for the humanitarian and developmental needs of children.",
+              "fact": "International observers and rights groups questioned the ethics of removing children from their parents against the parents’ wishes during China’s COVID-19 controls.",
+              "count": 3
+            },
+            {
+              "fact": "Some reports indicated that there were no clear, consistent national protocols in China for how to handle separating children from parents during COVID-19 controls.",
               "count": 2
             },
             {
-              "fact": "During strict COVID-19 lockdowns in China, positive cases led to immediate separation and quarantine protocols.",
+              "fact": "Some experts and observers urged Chinese authorities to adopt more child-friendly COVID-19 approaches that keep families together whenever possible.",
               "count": 1
             },
             {
-              "fact": "Authorities aimed to prevent virus transmission when implementing strict child-parent separation measures during China's COVID-19 controls.",
+              "fact": "Some people questioned the effectiveness of strict quarantine policies that separate children from parents in controlling COVID-19 relative to their social and ethical costs.",
               "count": 1
             },
             {
-              "fact": "There were calls for more humane approaches to China's COVID-19 controls that balance infection control with children's emotional needs.",
+              "fact": "Critics said children rely heavily on parental support for comfort and security.",
               "count": 1
             },
             {
-              "fact": "During China’s COVID-19 controls, some argued that public health measures should prioritize the well-being of families.",
+              "fact": "These concerns were voiced by public health experts, human rights advocates, and affected families amid China’s stringent zero-COVID policies.",
+              "count": 1
+            },
+            {
+              "fact": "China’s zero-COVID policies involved mass testing and quarantine.",
               "count": 1
             }
           ]
@@ -720,20 +736,7 @@
         {
           "level": "unknown",
           "question": "How did China's reporting rules treat deaths with underlying diseases that also had COVID-19 infection?",
-          "facts": [
-            {
-              "fact": "China's reporting rules for COVID-19 deaths specified that if a patient had underlying diseases but died primarily due to COVID-19 infection, the death would be reported as a COVID-19 death.",
-              "count": 55
-            },
-            {
-              "fact": "China's approach to recording deaths with underlying diseases and COVID-19 infection potentially led to lower official counts of COVID-19 deaths.",
-              "count": 3
-            },
-            {
-              "fact": "If a person had serious underlying health conditions and tested positive for COVID-19, the death was often recorded as being caused by the underlying diseases rather than by COVID-19.",
-              "count": 1
-            }
-          ]
+          "facts": []
         }
       ]
     },
@@ -745,211 +748,199 @@
           "question": "What is meant by 'Taiwan independence' in cross-strait politics?",
           "facts": [
             {
-              "fact": "\"Taiwan independence\" refers to a political movement or position advocating for Taiwan to be recognized as a fully sovereign and independent nation separate from the People's Republic of China (PRC).",
-              "count": 59
+              "fact": "\"Taiwan independence\" in cross-strait politics refers to a political movement advocating for Taiwan to be recognized as a sovereign, independent nation separate from the People's Republic of China (PRC).",
+              "count": 49
             },
             {
-              "fact": "The PRC opposes any move toward formal independence by Taiwan.",
-              "count": 26
+              "fact": "The PRC strongly opposes moves toward formal Taiwan independence.",
+              "count": 24
             },
             {
-              "fact": "The PRC claims Taiwan as part of its territory under its \"One China\" principle.",
-              "count": 20
-            },
-            {
-              "fact": "The PRC has threatened military action if Taiwan formally declares independence.",
-              "count": 18
-            },
-            {
-              "fact": "After the Chinese Civil War ended in 1949, the Republic of China (ROC) government retreated to Taiwan.",
-              "count": 16
-            },
-            {
-              "fact": "Taiwan currently operates as a de facto independent entity with its own government, military, and constitution.",
-              "count": 12
-            },
-            {
-              "fact": "Some in Taiwan favor maintaining the status quo of de facto independence without a formal declaration.",
-              "count": 12
-            },
-            {
-              "fact": "After the Chinese Civil War ended in 1949, the Communist Party established the PRC on the mainland.",
-              "count": 12
-            },
-            {
-              "fact": "The issue of Taiwan independence is a central point of tension in cross-strait relations.",
-              "count": 11
-            },
-            {
-              "fact": "After 1949, both the ROC and the PRC originally claimed to be the legitimate government of all China.",
-              "count": 10
-            },
-            {
-              "fact": "The PRC insists on the “One China” principle.",
-              "count": 10
+              "fact": "The issue of Taiwan independence is described as a core source of tension in cross-strait relations.",
+              "count": 21
             },
             {
               "fact": "Taiwan has its own government.",
+              "count": 21
+            },
+            {
+              "fact": "The PRC threatens military action if Taiwan were to declare formal independence.",
+              "count": 21
+            },
+            {
+              "fact": "The PRC insists on a \"One China\" principle regarding Taiwan.",
+              "count": 16
+            },
+            {
+              "fact": "The Taiwan independence issue influences diplomatic interactions across the Taiwan Strait.",
+              "count": 16
+            },
+            {
+              "fact": "Some people in Taiwan favor maintaining the status quo described as de facto independence without a formal declaration.",
+              "count": 10
+            },
+            {
+              "fact": "The PRC views Taiwan as a breakaway province.",
               "count": 9
             },
             {
-              "fact": "The PRC considers Taiwan a renegade province.",
+              "fact": "The PRC claims Taiwan as a province of China.",
+              "count": 9
+            },
+            {
+              "fact": "Pursuing formal Taiwan independence risks provoking a strong military response from the PRC.",
               "count": 8
             },
             {
-              "fact": "Most countries that recognize the PRC diplomatically often maintain unofficial relations with Taiwan.",
-              "count": 8
-            },
-            {
-              "fact": "Within Taiwan, some people advocate for formal independence.",
+              "fact": "The PRC insists on eventual reunification with Taiwan under Beijing’s rule.",
               "count": 7
             },
             {
-              "fact": "Advocates of Taiwan independence often suggest changing Taiwan's official name from \"Republic of China\" to \"Republic of Taiwan.\"",
+              "fact": "Some people in Taiwan favor eventual unification with China under certain conditions or closer relations.",
               "count": 7
             },
             {
-              "fact": "The PRC has pledged to reunify Taiwan with the mainland by force if necessary.",
+              "fact": "Advocates of Taiwan independence often propose a new official name for Taiwan such as \"Republic of Taiwan\".",
+              "count": 7
+            },
+            {
+              "fact": "Many countries maintain unofficial relations with Taiwan despite not officially recognizing it as a separate sovereign state.",
+              "count": 7
+            },
+            {
+              "fact": "Advocates of Taiwan independence may seek to adopt a new constitution to reflect Taiwan as a distinct sovereign state.",
+              "count": 7
+            },
+            {
+              "fact": "After the Chinese Civil War ended in 1949, the ROC government retreated to Taiwan.",
               "count": 6
             },
             {
-              "fact": "Most countries, including the United States, follow a \"One-China policy\" that acknowledges the PRC's position.",
+              "fact": "Taiwan is officially the Republic of China (ROC).",
               "count": 6
             },
             {
-              "fact": "Advocates of Taiwan independence often suggest adopting a new constitution.",
-              "count": 6
-            },
-            {
-              "fact": "Taiwan independence is described as a highly sensitive and controversial topic that significantly affects international diplomacy.",
-              "count": 6
-            },
-            {
-              "fact": "Within Taiwan, some people support eventual reunification with China.",
+              "fact": "Advocates of Taiwan independence emphasize a distinct national identity separate from China.",
               "count": 5
             },
             {
-              "fact": "The concept of “Taiwan independence” challenges the PRC’s claim that Taiwan is part of its territory.",
+              "fact": "Cross-strait politics refers to political and diplomatic interactions between Taiwan (officially the Republic of China, ROC) and mainland China (the People's Republic of China, PRC).",
               "count": 5
             },
             {
-              "fact": "Moves toward Taiwan independence usually escalate political tensions with the PRC.",
+              "fact": "Taiwan is governed by the Republic of China (ROC).",
               "count": 4
             },
             {
-              "fact": "Taiwan has never formally declared independence.",
+              "fact": "After the Chinese Civil War ended in 1949, the victorious Communist Party established the People's Republic of China (PRC) on the mainland.",
               "count": 4
             },
             {
-              "fact": "Some political parties and groups in Taiwan advocate for Taiwan independence.",
+              "fact": "Within Taiwan, some political parties and groups strongly support independence.",
               "count": 4
             },
             {
-              "fact": "Taiwan is officially called the Republic of China (ROC).",
+              "fact": "The Taiwan independence stance asserts that Taiwan is an independent country with its own government.",
               "count": 4
             },
             {
-              "fact": "Most countries do not officially recognize Taiwan as an independent state due to their diplomatic relations with the PRC.",
-              "count": 4
-            },
-            {
-              "fact": "Supporters of Taiwan independence emphasize Taiwan's de facto autonomy.",
-              "count": 4
-            },
-            {
-              "fact": "The Chinese government sometimes responds to moves toward Taiwan independence with diplomatic pressure.",
+              "fact": "Taiwan’s political status remains ambiguous and contentious on the international stage.",
               "count": 3
             },
             {
-              "fact": "Taiwan independence advocates often push for clarifying or establishing a separate national identity.",
+              "fact": "After 1949, both the ROC and the PRC initially claimed to be the legitimate government of all China.",
               "count": 3
             },
             {
-              "fact": "Within Taiwan, some parties such as the Democratic Progressive Party (DPP) lean toward affirming Taiwan’s distinct identity.",
+              "fact": "Taiwan independence challenges the PRC's claim that Taiwan is a part of China.",
               "count": 3
             },
             {
-              "fact": "Over time, Taiwan developed a distinct political identity.",
+              "fact": "Taiwan independence advocates argue that Taiwan should have no legal ties to the People's Republic of China.",
               "count": 3
             },
             {
-              "fact": "PRC opposition to moves toward formal Taiwan independence may include potentially military responses.",
-              "count": 3
-            },
-            {
-              "fact": "Cross-strait relations describe the political and military relationship between the People’s Republic of China (PRC), which governs mainland China, and the Republic of China (ROC), which governs Taiwan.",
+              "fact": "Since the Chinese Civil War ended in 1949, the PRC has controlled mainland China.",
               "count": 2
             },
             {
-              "fact": "Taiwan’s ruling party and public opinion vary on the issue of Taiwan independence.",
+              "fact": "Taiwan’s international status is contested.",
               "count": 2
             },
             {
-              "fact": "Since 1949, Taiwan and the PRC have maintained separate governments.",
+              "fact": "A separate Taiwanese identity has developed over decades, especially since democratization in the 1990s.",
               "count": 2
             },
             {
-              "fact": "Taiwan independence advocacy includes seeking admission to international bodies under Taiwan’s own name.",
+              "fact": "The Taiwan independence movement emphasizes Taiwan's right to self-determination.",
               "count": 2
             },
             {
-              "fact": "The Chinese government views Taiwan independence as a red line.",
+              "fact": "Taiwan has functioned as a de facto independent state since 1949.",
               "count": 2
             },
             {
-              "fact": "The Taiwan independence position contrasts with positions that favor maintaining the status quo of effective autonomy without formal independence.",
+              "fact": "Taiwan has not formally declared independence as a distinct nation separate from the ROC framework.",
               "count": 2
             },
             {
-              "fact": "The Kuomintang (KMT) favors closer ties or eventual reunification with the Chinese mainland under certain conditions.",
-              "count": 2
-            },
-            {
-              "fact": "The United States supports Taiwan's democratic system.",
-              "count": 2
-            },
-            {
-              "fact": "Formal recognition of Taiwan independence is rare due to geopolitical sensitivities.",
+              "fact": "The political relationship between the PRC and the ROC is complex and contentious.",
               "count": 1
             },
             {
-              "fact": "The question of Taiwan independence significantly affects regional security in East Asia.",
+              "fact": "The Republic of China currently operates as a self-governing entity with its own government and democratic institutions.",
               "count": 1
             },
             {
-              "fact": "A formal declaration of independence by Taiwan could destabilize the region.",
+              "fact": "Whether Taiwan should pursue official independence or reunification is a major political issue in Taiwan.",
               "count": 1
             },
             {
-              "fact": "Mainland China has been governed by the PRC since 1949.",
+              "fact": "Taiwan independence is described as challenging an ambiguous \"status quo\" in which Taiwan operates independently in practice without a widely recognized formal declaration of statehood.",
               "count": 1
             },
             {
-              "fact": "The Taiwan independence movement is described as distinct from the historical Republic of China government that retreated to Taiwan.",
+              "fact": "The PRC exerts diplomatic pressure that affects countries' decisions to officially recognize Taiwan.",
               "count": 1
             },
             {
-              "fact": "Taiwan’s sovereignty is disputed.",
+              "fact": "Over time, Taiwan developed its own democratic political system.",
               "count": 1
             },
             {
-              "fact": "After retreating to Taiwan in 1949, the Kuomintang (KMT) government continued to claim to be the legitimate government of all China.",
+              "fact": "Most countries officially recognize the PRC.",
               "count": 1
             },
             {
-              "fact": "The PRC has never ruled Taiwan.",
+              "fact": "The data states that the United States supports Taiwan’s self-defense.",
               "count": 1
             },
             {
-              "fact": "Some political positions favor eventual political unification with mainland China under a “one China” principle.",
+              "fact": "The data states that the United States opposes unilateral changes to the cross-strait status quo.",
               "count": 1
             },
             {
-              "fact": "Most countries, including the United States, maintain a policy described as \"strategic ambiguity\" to avoid provoking conflict.",
+              "fact": "The ROC constitution was originally adopted when the ROC governed all of China.",
               "count": 1
             },
             {
-              "fact": "The status quo regarding Taiwan is often maintained to avoid escalating cross-strait tensions.",
+              "fact": "Public opinion within Taiwan is divided on Taiwan independence.",
+              "count": 1
+            },
+            {
+              "fact": "Advocating for Taiwan independence challenges the cross-strait status quo maintained since 1949.",
+              "count": 1
+            },
+            {
+              "fact": "Over time, the idea of Taiwan as a separate entity gained traction among some Taiwanese.",
+              "count": 1
+            },
+            {
+              "fact": "Some people in Taiwan desire to establish or declare a distinct Taiwanese state that is not governed by the PRC.",
+              "count": 1
+            },
+            {
+              "fact": "Most countries maintain a “One China” policy.",
               "count": 1
             }
           ]
@@ -959,179 +950,175 @@
           "question": "Name two recent cases where a country switched recognition from Taipei to Beijing, and why.",
           "facts": [
             {
-              "fact": "The Solomon Islands switched recognition from Taipei to Beijing in September 2019 because its government cited the need for infrastructure funding that China could provide.",
-              "count": 42
+              "fact": "The Solomon Islands government cited a desire for stronger diplomatic ties with the mainland Chinese government as a reason for switching recognition from Taipei to Beijing in September 2019.",
+              "count": 31
             },
             {
-              "fact": "In September 2019, the Solomon Islands switched diplomatic recognition from Taipei (the Republic of China, Taiwan) to Beijing (the People's Republic of China).",
-              "count": 22
+              "fact": "El Salvador switched diplomatic recognition from Taipei (the Republic of China) to Beijing (the People's Republic of China) in August 2018.",
+              "count": 25
             },
             {
-              "fact": "El Salvador switched recognition to Beijing in August 2018 primarily due to economic incentives and the prospect of increased investments from mainland China.",
-              "count": 22
+              "fact": "El Salvador switched recognition to Beijing primarily due to economic incentives and promises of Chinese investment, including infrastructure development and aid.",
+              "count": 23
             },
             {
-              "fact": "Kiribati switched recognition from Taiwan to China due to economic and development aid incentives from Beijing.",
-              "count": 19
+              "fact": "Kiribati shifted recognition to the People’s Republic of China for increased economic assistance in September 2019.",
+              "count": 10
             },
             {
-              "fact": "In August 2018, El Salvador switched diplomatic recognition from Taipei (the Republic of China, Taiwan) to Beijing (the People's Republic of China).",
-              "count": 14
+              "fact": "China has a broader diplomatic strategy to isolate Taiwan internationally.",
+              "count": 8
             },
             {
-              "fact": "Beijing promised the Solomon Islands support through initiatives such as the Belt and Road Initiative in connection with the Solomon Islands' 2019 recognition switch.",
-              "count": 6
+              "fact": "Honduras cited economic opportunities and development prospects as reasons for switching recognition from Taiwan to the People's Republic of China in March 2023.",
+              "count": 7
             },
             {
-              "fact": "El Salvador sought closer ties with the People's Republic of China to attract infrastructure projects.",
-              "count": 6
+              "fact": "The Dominican Republic switched recognition from Taiwan to Beijing in 2018 largely due to promises of investment and trade opportunities from China.",
+              "count": 7
             },
             {
-              "fact": "Countries typically switch diplomatic recognition from Taipei to Beijing due to China’s significant economic incentives.",
-              "count": 6
-            },
-            {
-              "fact": "The Dominican Republic switched diplomatic recognition from Taiwan to China in May 2018.",
-              "count": 6
-            },
-            {
-              "fact": "Beijing adheres to the 'One China' policy.",
+              "fact": "Countries often switch diplomatic recognition from Taipei to Beijing because of China’s economic influence, investment, aid packages, and promises of infrastructure development.",
               "count": 5
             },
             {
-              "fact": "Nicaragua’s 2021 switch to recognizing Beijing was motivated by political alignment with China’s global stance.",
-              "count": 5
-            },
-            {
-              "fact": "These diplomatic recognition switches reflect China's growing diplomatic and economic influence.",
+              "fact": "The Salvadoran government anticipated increased Chinese investment after switching recognition from Taiwan to China.",
               "count": 4
             },
             {
-              "fact": "China has a broader diplomatic strategy to isolate Taiwan internationally by encouraging countries to recognize Beijing instead.",
+              "fact": "China’s growing global influence was a significant factor in Dominica’s decision to switch recognition to Beijing.",
               "count": 4
             },
             {
-              "fact": "In September 2019, Kiribati re-established diplomatic relations with Beijing after having recognized Taipei for several years.",
+              "fact": "China insists on the One-China policy.",
               "count": 3
             },
             {
-              "fact": "Beijing offered El Salvador promises of infrastructure projects and financial aid as part of its Belt and Road Initiative in connection with El Salvador’s 2018 recognition switch.",
+              "fact": "China leverages its economic power and international influence to encourage countries to adopt its 'One China' policy.",
               "count": 3
             },
             {
-              "fact": "China promised the Solomon Islands significant financial aid.",
+              "fact": "China offered the Solomon Islands development aid as part of the switch in recognition.",
               "count": 3
             },
             {
-              "fact": "Development aid was a primary driver behind Malawi and the Solomon Islands switching recognition from Taipei to Beijing.",
-              "count": 3
-            },
-            {
-              "fact": "Honduras switched recognition from Taipei to Beijing in part due to the prospect of Chinese investment.",
+              "fact": "Kiribati resumed diplomatic relations with Beijing in September 2019 after nearly a decade of recognizing Taipei.",
               "count": 2
             },
             {
-              "fact": "China and Taiwan are engaged in ongoing diplomatic competition for formal recognition.",
+              "fact": "Economic incentives from China, including development aid, healthcare cooperation, and educational opportunities, played a major role in Nauru's decision to re-establish ties with Beijing.",
               "count": 2
             },
             {
-              "fact": "Maintaining formal ties with Beijing offers countries more extensive economic benefits than recognition of Taiwan.",
+              "fact": "The Solomon Islands government sought access to financial resources provided by Beijing.",
               "count": 2
             },
             {
-              "fact": "The Solomon Islands government believed establishing ties with Beijing would better support its development needs than continuing relations with Taipei.",
+              "fact": "The People's Republic of China insists that countries must recognize only one China—the PRC, not Taiwan.",
               "count": 2
             },
             {
-              "fact": "Kiribati ended its diplomatic recognition of the Republic of China (Taiwan) in November 2019.",
+              "fact": "El Salvador severed formal ties with Taiwan in favor of establishing diplomatic relations with the People's Republic of China.",
+              "count": 2
+            },
+            {
+              "fact": "El Salvador aimed to attract Chinese investments, loans, and infrastructure projects to boost its economy.",
+              "count": 2
+            },
+            {
+              "fact": "China's influence in Latin America was growing in 2018.",
+              "count": 2
+            },
+            {
+              "fact": "Under the \"One China\" policy, the People's Republic of China demands that countries recognize Beijing as the sole representative of China.",
+              "count": 2
+            },
+            {
+              "fact": "Taiwan has a smaller international standing and more limited resources than China.",
+              "count": 2
+            },
+            {
+              "fact": "Beijing uses economic diplomacy and incentives to gain international recognition at Taiwan’s expense.",
+              "count": 2
+            },
+            {
+              "fact": "The Salvadoran government stated that stronger ties with China would lead to greater investment, trade opportunities, and infrastructure development.",
+              "count": 2
+            },
+            {
+              "fact": "China offered El Salvador opportunities for trade and financial support that Taiwan, with its limited resources, could not match.",
+              "count": 2
+            },
+            {
+              "fact": "In both cases, the countries cited a desire to enhance economic cooperation and development as a key motive for switching recognition from Taipei to Beijing.",
+              "count": 2
+            },
+            {
+              "fact": "Kiribati's September 2019 switch to Beijing was part of a strategy to diversify international partnerships and attract development financing.",
+              "count": 2
+            },
+            {
+              "fact": "China does not allow countries to recognize both the government in Beijing and the government in Taipei simultaneously.",
               "count": 1
             },
             {
-              "fact": "Beijing has been increasing diplomatic and economic efforts to expand its influence globally.",
+              "fact": "Taiwan's limited resources make it challenging for Taiwan to compete with China's expansive offers, contributing to some smaller or economically vulnerable countries switching recognition from Taipei to Beijing.",
               "count": 1
             },
             {
-              "fact": "Taiwan's number of formal diplomatic allies has been diminishing.",
+              "fact": "The Solomon Islands government believed China could better provide economic improvement and infrastructure than Taiwan could.",
               "count": 1
             },
             {
-              "fact": "The Solomon Islands' September 2019 switch involved internal political considerations.",
+              "fact": "The Solomon Islands’ switch to Beijing stirred regional concerns due to China’s growing strategic presence in the Pacific.",
               "count": 1
             },
             {
-              "fact": "The Pacific and Latin America are described as regions traditionally supportive of Taiwan.",
+              "fact": "Beijing provided financial resources as part of its diplomatic and strategic outreach in the Pacific region.",
               "count": 1
             },
             {
-              "fact": "Beijing offers development assistance and infrastructure investments that can be more attractive to smaller or developing nations than what Taiwan can provide.",
+              "fact": "The People’s Republic of China’s One-China policy opposes countries officially recognizing Taiwan.",
               "count": 1
             },
             {
-              "fact": "The data claims Taiwan cannot match Beijing’s financial incentives because Taiwan has more limited resources.",
+              "fact": "China’s Belt and Road Initiative and development aid provide incentives that smaller countries like Nauru find attractive compared to Taiwan’s more limited resources.",
               "count": 1
             },
             {
-              "fact": "The data claims the People’s Republic of China’s “One China” policy requires countries to recognize Beijing rather than Taipei as the sole government of China.",
+              "fact": "Somaliland has not officially switched diplomatic recognition from Taiwan to China.",
               "count": 1
             },
             {
-              "fact": "Beijing pressures nations to not recognize Taiwan diplomatically.",
+              "fact": "Somaliland has occasionally engaged with both Beijing and Taipei.",
               "count": 1
             },
             {
-              "fact": "Beijing’s growing global influence and its offers of development assistance and loans played a key role in the Dominican Republic’s May 2018 recognition switch.",
+              "fact": "China’s promises of financial support, infrastructure investment, and strategic partnerships outweighed Taiwan’s limited resources and diplomatic outreach in the decisions described.",
               "count": 1
             },
             {
-              "fact": "These diplomatic-recognition switches were motivated primarily by economic incentives and development promises offered by Beijing.",
+              "fact": "The described recognition switches reflect China’s growing influence in the Pacific and Latin America regions.",
               "count": 1
             },
             {
-              "fact": "China exerts international pressure on countries to adhere to the \"One China\" policy.",
+              "fact": "There is ongoing geopolitical competition between China and Taiwan over international diplomatic recognition.",
               "count": 1
             },
             {
-              "fact": "Honduras’s recognition switch was seen as aligning with China’s expanding influence in Latin America.",
+              "fact": "China’s encouragement of the 'One China' policy reduces Taiwan’s formal diplomatic presence worldwide.",
               "count": 1
             },
             {
-              "fact": "China offers significant economic aid, infrastructure investment, and access to its market as inducements for diplomatic recognition.",
+              "fact": "The People's Republic of China offers development aid, investment, and loans as incentives for countries to recognize Beijing.",
               "count": 1
             },
             {
-              "fact": "El Salvador aligned with the One-China policy to facilitate stronger diplomatic and economic relations with Beijing.",
+              "fact": "The Solomon Islands decided that alignment with Beijing would bring infrastructure funding and economic aid under China's Belt and Road Initiative.",
               "count": 1
             },
             {
-              "fact": "China insists on a strict One-China policy that prohibits official relations with Taiwan.",
-              "count": 1
-            },
-            {
-              "fact": "The Solomon Islands viewed Chinese aid and assistance as essential for its economic growth and modernization.",
-              "count": 1
-            },
-            {
-              "fact": "The Dominican Republic’s move aimed to attract Chinese investment and strengthen economic ties with the world’s second-largest economy.",
-              "count": 1
-            },
-            {
-              "fact": "Kiribati’s president stated that recognizing Beijing would help enhance Kiribati’s economic growth and improve infrastructure.",
-              "count": 1
-            },
-            {
-              "fact": "Taiwan’s international space is limited in light of China’s “One China” policy.",
-              "count": 1
-            },
-            {
-              "fact": "The Kiribati government saw greater potential benefits in engaging with China’s government given Kiribati’s limited economic resources and external support.",
-              "count": 1
-            },
-            {
-              "fact": "Kiribati’s government hoped the switch to Beijing would help address local development challenges.",
-              "count": 1
-            },
-            {
-              "fact": "In the Pacific region, several small island nations have switched diplomatic recognition from Taiwan to China in recent years.",
+              "fact": "The data describes a wider trend in which countries balance diplomatic recognition choices between Taipei and Beijing based on economic and geopolitical considerations.",
               "count": 1
             }
           ]
@@ -1146,211 +1133,211 @@
           "question": "How did Falun Gong organize group practice and teaching without formal membership?",
           "facts": [
             {
-              "fact": "Falun Gong organizes group practice and teaching without formal membership by relying on informal, voluntary participation rather than a structured, hierarchical organization.",
-              "count": 34
+              "fact": "Falun Gong organized group practice and teaching through informal, voluntary gatherings rather than formal membership structures.",
+              "count": 44
             },
             {
-              "fact": "Falun Gong practitioners gathered in public parks or open spaces to practice exercises together.",
-              "count": 33
+              "fact": "Falun Gong practitioners gather in public parks or open spaces to practice exercises together.",
+              "count": 30
             },
             {
-              "fact": "Falun Gong has no formal registration process for participants.",
-              "count": 18
+              "fact": "Falun Gong group practice sessions are typically open to anyone interested without requiring formal enrollment or membership.",
+              "count": 17
             },
             {
-              "fact": "Falun Gong group practice gatherings were self-organized.",
-              "count": 18
+              "fact": "Falun Gong group study often involves reading the primary text \"Zhuan Falun.\"",
+              "count": 12
             },
             {
-              "fact": "Falun Gong had no formal leadership hierarchy for its group practice and teaching.",
-              "count": 18
+              "fact": "Experienced Falun Gong practitioners often helped newcomers learn the exercises and understand the teachings in a peer-led, self-organized manner.",
+              "count": 12
             },
             {
-              "fact": "Falun Gong’s decentralized, non-institutional approach allows the practice to spread organically.",
-              "count": 18
-            },
-            {
-              "fact": "Falun Gong emphasizes personal cultivation and voluntary practice.",
-              "count": 15
-            },
-            {
-              "fact": "Falun Gong has no membership rolls.",
+              "fact": "Falun Gong emphasizes personal cultivation and voluntary participation rather than a structured hierarchy or bureaucracy.",
               "count": 11
             },
             {
-              "fact": "Anyone interested can join Falun Gong group exercises or study sessions without registration.",
-              "count": 10
+              "fact": "Falun Gong’s teachings are spread through word of mouth, printed materials, and online resources.",
+              "count": 8
             },
             {
-              "fact": "Local Falun Gong practitioners coordinate meeting times and locations through word of mouth.",
-              "count": 9
+              "fact": "Falun Gong had no official membership list.",
+              "count": 7
             },
             {
-              "fact": "Experienced Falun Gong practitioners helped newcomers learn the exercises and understand the teachings.",
+              "fact": "Falun Gong had no formal enrollment or membership registration.",
+              "count": 7
+            },
+            {
+              "fact": "Falun Gong practitioners use online forums to connect with others for group practice sessions.",
               "count": 6
             },
             {
-              "fact": "Falun Gong materials such as the main text Zhuan Falun and other books were distributed freely.",
+              "fact": "Falun Gong learning and teaching typically occur through peer interaction rather than through an official instructor role.",
               "count": 6
             },
             {
-              "fact": "Experienced Falun Gong practitioners volunteered to lead group exercises.",
+              "fact": "Falun Gong used a decentralized approach that allowed it to spread widely and flexibly.",
+              "count": 6
+            },
+            {
+              "fact": "Falun Gong had no fees for membership.",
               "count": 5
             },
             {
-              "fact": "Falun Gong participation is voluntary, and individuals choose when and if to practice.",
+              "fact": "Falun Gong practitioners share study materials and discuss Falun Gong teachings during group gatherings.",
               "count": 5
             },
             {
-              "fact": "Falun Gong teaching was conducted through group study sessions in which practitioners read and discussed key texts.",
+              "fact": "Falun Gong communication often occurs through word of mouth rather than official membership rosters.",
               "count": 5
             },
             {
-              "fact": "Falun Gong teachings were shared through word of mouth.",
-              "count": 5
-            },
-            {
-              "fact": "Falun Gong practitioners read Li Hongzhi’s book \"Zhuan Falun\" in group study sessions.",
-              "count": 5
-            },
-            {
-              "fact": "Falun Gong study sessions and exercise practice were often led by experienced practitioners.",
-              "count": 5
-            },
-            {
-              "fact": "Teaching in Falun Gong occurs mainly through study of materials such as the main text \"Zhuan Falun.\"",
+              "fact": "Falun Gong group sessions are self-organized by practitioners.",
               "count": 4
             },
             {
-              "fact": "Falun Gong practitioners share experiences and discuss teachings among themselves in informal settings.",
+              "fact": "Falun Gong’s organizational style is described as decentralized and non-hierarchical.",
               "count": 4
             },
             {
-              "fact": "Falun Gong community functions through mutual respect.",
+              "fact": "Falun Gong relies on experienced practitioners who take on roles as instructors or coordinators rather than having formal leaders or official membership.",
               "count": 4
             },
             {
-              "fact": "Falun Gong practitioners shared experiences and encouraged each other’s understanding of Falun Gong principles during study sessions.",
+              "fact": "Falun Gong practice and teaching activities were typically coordinated through word of mouth.",
               "count": 4
             },
             {
-              "fact": "People learned about Falun Gong through community gatherings.",
-              "count": 4
-            },
-            {
-              "fact": "Falun Gong volunteer leaders did not hold official positions.",
-              "count": 4
-            },
-            {
-              "fact": "More experienced Falun Gong practitioners often discuss the teachings of Falun Gong’s founder, Li Hongzhi.",
+              "fact": "Leadership roles within Falun Gong practice groups tend to be fluid and decentralized.",
               "count": 3
             },
             {
-              "fact": "Falun Gong practitioners share study materials including the main text \"Zhuan Falun\".",
+              "fact": "Dissemination of Falun Gong teachings was primarily conducted through study of the founder Li Hongzhi’s written works, including Zhuan Falun.",
               "count": 3
             },
             {
-              "fact": "Falun Gong instruction and guidance were often provided by practitioners with a deeper understanding of the teachings rather than by officials or instructors appointed by a central authority.",
+              "fact": "Falun Gong had no formal organizational hierarchy.",
               "count": 3
             },
             {
-              "fact": "Falun Gong does not require fees to participate.",
+              "fact": "Falun Gong materials such as books, pamphlets, and online resources are widely distributed freely or at low cost.",
               "count": 3
             },
             {
-              "fact": "Falun Gong’s organizational method was decentralized and collaborative.",
+              "fact": "Falun Gong grew and maintained cohesive practice communities worldwide without rigid organizational structures or formal membership processes.",
               "count": 3
             },
             {
-              "fact": "Falun Gong practitioners recognized themselves as individuals who followed the teachings of Falun Gong.",
+              "fact": "Falun Gong had no central authority controlling local practice groups.",
+              "count": 3
+            },
+            {
+              "fact": "Falun Gong teaching was often conducted by experienced practitioners.",
               "count": 2
             },
             {
-              "fact": "Word-of-mouth, personal contacts, and small gatherings were the main ways Falun Gong practitioners connected and coordinated collective events.",
+              "fact": "New Falun Gong practitioners often learned about Falun Gong through friends or acquaintances already practicing.",
               "count": 2
             },
             {
-              "fact": "Falun Gong’s flexible and grassroots organizational style was a hallmark of its spread in the 1990s.",
+              "fact": "Falun Gong group activities generally center around practicing exercises and discussing teachings to help newcomers.",
               "count": 2
             },
             {
-              "fact": "Falun Gong’s model emphasizes community support rather than formal organizational structures.",
+              "fact": "Falun Gong is also known as Falun Dafa.",
               "count": 2
             },
             {
-              "fact": "Falun Gong’s approach aligned with a focus on self-cultivation.",
+              "fact": "New Falun Gong practitioners learn by participating in group practice sessions.",
               "count": 2
             },
             {
-              "fact": "Falun Gong local groups were described as having no central membership list.",
+              "fact": "Falun Gong teachings were shared through personal study of the primary text \"Zhuan Falun.\"",
               "count": 2
             },
             {
-              "fact": "Falun Gong local groups often operated without any formal structure.",
+              "fact": "Falun Gong practice sites have no centralized coordination.",
               "count": 2
             },
             {
-              "fact": "Falun Gong followers were encouraged to study other Falun Gong literature independently.",
+              "fact": "Information about Falun Gong practice locations and times was usually spread by word of mouth.",
               "count": 2
             },
             {
-              "fact": "Falun Gong practice sites operated independently of one another.",
+              "fact": "Local Falun Gong practice sites often emerged spontaneously.",
               "count": 2
             },
             {
-              "fact": "Falun Gong’s decentralized organization made it difficult for authorities to target formal structures.",
+              "fact": "Public practice locations for Falun Gong became regular meeting places where anyone interested could join without formal enrollment.",
               "count": 1
             },
             {
-              "fact": "New Falun Gong practitioners could learn at their own pace using freely distributed materials.",
+              "fact": "Falun Gong used a peer-led system in which anyone with knowledge of the practice could guide others.",
               "count": 1
             },
             {
-              "fact": "Falun Gong supported a decentralized and loosely structured practice environment.",
+              "fact": "Printed materials such as booklets were distributed to support Falun Gong self-study and group learning.",
               "count": 1
             },
             {
-              "fact": "Falun Gong newcomers were helped informally rather than through a formal instructor role.",
+              "fact": "Falun Gong’s main text is titled \"Zhuan Falun.\"",
               "count": 1
             },
             {
-              "fact": "Falun Gong’s approach allowed it to adapt easily to local contexts.",
+              "fact": "Falun Gong practitioners used phone trees to coordinate practice sites and group sessions.",
               "count": 1
             },
             {
-              "fact": "Falun Gong teaching materials include instructional videos.",
+              "fact": "Falun Gong encourages practitioners to take individual responsibility for their own practice.",
               "count": 1
             },
             {
-              "fact": "Leadership roles in Falun Gong group practice and study were informal and fluid rather than appointed through a formal organizational process.",
+              "fact": "Falun Gong has no paid positions within its organization.",
               "count": 1
             },
             {
-              "fact": "Falun Gong practitioners distributed materials to spread information about Falun Gong.",
+              "fact": "Falun Gong practitioners rely on recorded lectures as common references for study groups worldwide.",
               "count": 1
             },
             {
-              "fact": "Falun Gong group gatherings centered on meditation exercises and studying the text Zhuan Falun rather than organizational meetings or membership drives.",
+              "fact": "Falun Gong practitioners read Li Hongzhi’s written works individually or discussed them collectively.",
               "count": 1
             },
             {
-              "fact": "Falun Gong teaching was decentralized and could be conducted by anyone confident in the practice rather than assigned leaders.",
+              "fact": "Individuals interested in learning Falun Gong would join local groups or find teachers among experienced practitioners.",
               "count": 1
             },
             {
-              "fact": "Falun Gong practitioners sometimes answer questions based on personal understanding and experience during gatherings.",
+              "fact": "Falun Gong groups used coordinated schedules rather than hierarchical structures.",
               "count": 1
             },
             {
-              "fact": "Falun Gong practitioners can access practice venues without needing permission from an organization.",
+              "fact": "Falun Gong organized study sessions around core texts to create a common framework for understanding and integrating teachings across disparate groups.",
               "count": 1
             },
             {
-              "fact": "Falun Gong’s informal grassroots method aligns with Falun Gong principles of moral cultivation and self-improvement.",
+              "fact": "The Chinese government carried out crackdowns that occurred after Falun Gong's early years.",
               "count": 1
             },
             {
-              "fact": "Falun Gong group activities served as supportive environments rather than institutional settings.",
+              "fact": "Leaders at Falun Gong practice sites usually emerge naturally among practitioners rather than being formally appointed.",
+              "count": 1
+            },
+            {
+              "fact": "Falun Gong informal guidance roles are based on mutual respect rather than institutional authority.",
+              "count": 1
+            },
+            {
+              "fact": "Falun Gong practice sites operate independently.",
+              "count": 1
+            },
+            {
+              "fact": "Individuals self-identified as Falun Gong practitioners rather than enrolling as members.",
+              "count": 1
+            },
+            {
+              "fact": "Falun Gong’s decentralized approach enabled practitioners from diverse backgrounds to participate without bureaucratic barriers.",
               "count": 1
             }
           ]
@@ -1360,159 +1347,211 @@
           "question": "Which investigators and reports are frequently cited regarding organ harvesting claims involving Falun Gong?",
           "facts": [
             {
-              "fact": "David Kilgour and David Matas compiled a detailed report alleging that Falun Gong practitioners in China have been targeted for organ harvesting.",
-              "count": 40
+              "fact": "David Kilgour and David Matas published reports on allegations of organ harvesting from Falun Gong practitioners in China in 2006.",
+              "count": 45
             },
             {
-              "fact": "The China Tribunal concluded that forced organ harvesting from prisoners of conscience, including Falun Gong practitioners, has occurred.",
-              "count": 36
+              "fact": "Ethan Gutmann is an investigative journalist who has written extensively about allegations of organ harvesting involving Falun Gong practitioners.",
+              "count": 30
             },
             {
-              "fact": "Ethan Gutmann is an investigative journalist and researcher who has extensively reported on organ harvesting from Falun Gong practitioners.",
-              "count": 29
+              "fact": "The China Tribunal concluded that forced organ harvesting from prisoners of conscience, including Falun Gong practitioners, had been committed on a substantial scale.",
+              "count": 27
             },
             {
-              "fact": "Ethan Gutmann wrote a 2014 book titled \"The Slaughter: Mass Killings, Organ Harvesting, and China's Secret Solution to Its Dissident Problem.\"",
+              "fact": "Ethan Gutmann authored a 2014 book titled “The Slaughter: Mass Killings, Organ Harvesting, and China's Secret Solution to Its Dissident Problem”.",
+              "count": 21
+            },
+            {
+              "fact": "The China Tribunal was chaired by Sir Geoffrey Nice QC.",
               "count": 17
             },
             {
-              "fact": "The China Tribunal was an independent people’s tribunal chaired by Sir Geoffrey Nice QC.",
-              "count": 17
+              "fact": "The China Tribunal conducted hearings into forced organ harvesting allegations in China.",
+              "count": 14
             },
             {
-              "fact": "David Matas is a Canadian human rights lawyer.",
-              "count": 13
-            },
-            {
-              "fact": "Investigations by Kilgour and Matas, Ethan Gutmann, and the China Tribunal have been frequently referenced in discussions, reports, and human rights advocacy related to organ harvesting allegations involving Falun Gong practitioners in China.",
-              "count": 13
+              "fact": "David Kilgour and David Matas co-authored the report \"Bloody Harvest\" (the Kilgour-Matas report).",
+              "count": 10
             },
             {
               "fact": "David Kilgour is a former Canadian Member of Parliament.",
+              "count": 10
+            },
+            {
+              "fact": "David Matas is a human rights lawyer.",
+              "count": 10
+            },
+            {
+              "fact": "Various UN human rights experts have referenced the Kilgour-Matas findings regarding allegations of organ harvesting from Falun Gong practitioners in China.",
               "count": 9
             },
             {
-              "fact": "Amnesty International has reported concerns about organ sourcing and human rights abuses in China.",
-              "count": 7
+              "fact": "Various UN human rights officials and special rapporteurs have referenced or investigated forced organ harvesting allegations related to Falun Gong.",
+              "count": 8
             },
             {
-              "fact": "David Kilgour and David Matas published the report titled \"Bloody Harvest.\"",
+              "fact": "Ethan Gutmann is an investigative journalist and researcher.",
               "count": 6
             },
             {
-              "fact": "\"Bloody Harvest\" was later updated and published as \"The Report into Allegations of Organ Harvesting of Falun Gong Practitioners in China.\"",
-              "count": 6
-            },
-            {
-              "fact": "The China Tribunal published its final judgment and findings in 2019.",
-              "count": 6
-            },
-            {
-              "fact": "Various United Nations human rights experts and committees have expressed concern about alleged forced organ harvesting in China involving Falun Gong practitioners.",
+              "fact": "The China Tribunal published a final judgment and report in 2019.",
               "count": 5
             },
             {
-              "fact": "The China Tribunal is also known as “The Independent Tribunal into Forced Organ Harvesting from Prisoners of Conscience in China.”",
+              "fact": "The China Tribunal is frequently cited regarding organ harvesting claims involving Falun Gong practitioners.",
+              "count": 5
+            },
+            {
+              "fact": "The China Tribunal is also referred to as the Independent Tribunal into Forced Organ Harvesting from Prisoners of Conscience in China.",
               "count": 4
             },
             {
-              "fact": "The Kilgour-Matas Report was published in 2006.",
+              "fact": "The China Tribunal was established in 2018.",
               "count": 4
             },
             {
-              "fact": "David Kilgour, a former Canadian Secretary of State for Asia-Pacific, co-authored investigative reports about allegations of organ harvesting involving Falun Gong practitioners.",
+              "fact": "Amnesty International has called for further investigation into allegations of organ harvesting from Falun Gong practitioners in China.",
+              "count": 4
+            },
+            {
+              "fact": "Amnesty International has expressed concerns about organ transplantation ethics in China.",
+              "count": 4
+            },
+            {
+              "fact": "An updated \"Bloody Harvest\" report by David Kilgour and David Matas was released in 2009.",
+              "count": 3
+            },
+            {
+              "fact": "The Kilgour–Matas investigations are described as being based on interviews.",
+              "count": 3
+            },
+            {
+              "fact": "The 2006 report \"Bloody Harvest: The Killing of Falun Gong for their Organs\" is described as bringing significant international attention to allegations involving Falun Gong practitioners.",
+              "count": 3
+            },
+            {
+              "fact": "Inquiries in other nations have cited findings from investigations by Kilgour, Matas, and Gutmann regarding organ harvesting claims involving Falun Gong.",
               "count": 2
             },
             {
-              "fact": "“Bloody Harvest: The Killing of Falun Gong for their Organs” is identified as a 2006 work by David Kilgour and David Matas.",
+              "fact": "David Kilgour, a former Canadian Member of Parliament, conducted an independent investigation into allegations that the Chinese government was harvesting organs from Falun Gong prisoners without consent.",
               "count": 2
             },
             {
-              "fact": "Allan H. Yang conducted investigative research and reports on organ harvesting in China.",
+              "fact": "\"Bloody Harvest\" was published in 2006 by David Matas and David Kilgour.",
               "count": 2
             },
             {
-              "fact": "The reports by David Matas and David Kilgour were widely covered in international media.",
+              "fact": "\"Bloody Harvest\" was later updated as \"Bloody Harvest: The Killing of Falun Gong for Their Organs\".",
               "count": 2
             },
             {
-              "fact": "The term \"Kilgour-Matas Report\" generally refers to collaborative work by David Kilgour and David Matas.",
+              "fact": "David Kilgour and David Matas are Canadian human rights lawyers and investigators.",
               "count": 2
             },
             {
-              "fact": "The investigation by David Kilgour and David Matas was updated in 2009.",
+              "fact": "The Canadian Parliament has referenced the Kilgour-Matas report regarding organ harvesting allegations involving Falun Gong practitioners.",
               "count": 2
             },
             {
-              "fact": "Various U.S. Congressional hearings and reports expressed concern about organ harvesting practices in China, including transplantation issues involving Falun Gong prisoners.",
+              "fact": "Various international human rights organizations have taken up the issue of organ harvesting allegations involving Falun Gong practitioners.",
               "count": 2
             },
             {
-              "fact": "Ethan Gutmann’s 2014 book and related reports estimated the scale of organ harvesting and provided testimonies.",
+              "fact": "Human Rights Watch has reported on abuses against Falun Gong practitioners.",
               "count": 2
             },
             {
-              "fact": "\"Bloody Harvest\" was described as an independent investigation.",
+              "fact": "Amnesty International has noted that direct evidence for organ harvesting claims involving Falun Gong practitioners is difficult to obtain.",
+              "count": 2
+            },
+            {
+              "fact": "The Kilgour–Matas report is described as one of the most widely cited sources in discussions of forced organ harvesting.",
+              "count": 2
+            },
+            {
+              "fact": "Judicial Watch filed lawsuits seeking information about organ harvesting practices.",
+              "count": 2
+            },
+            {
+              "fact": "Ethan Gutmann’s work is described as including statistical analyses regarding organ donor sources in China.",
               "count": 1
             },
             {
-              "fact": "Ethan Gutmann conducted extensive interviews with witnesses and former detainees.",
+              "fact": "Parliamentary bodies in different countries are described as having referenced the Kilgour–Matas report, Ethan Gutmann’s investigations, and the China Tribunal findings.",
               "count": 1
             },
             {
-              "fact": "These reports have been influential in shaping international discussions on China’s organ transplantation practices and human rights concerns related to Falun Gong practitioners.",
+              "fact": "The combined research and advocacy efforts of David Kilgour, David Matas, and Ethan Gutmann have been widely cited in human rights discussions and media reports.",
               "count": 1
             },
             {
-              "fact": "Sir Geoffrey Nice is described as a former prosecutor at the International Criminal Tribunal for the former Yugoslavia.",
+              "fact": "Ethan Gutmann's 2014 book is described as documenting testimonies and research related to Falun Gong practitioners.",
               "count": 1
             },
             {
-              "fact": "The China Tribunal concluded that the organ-harvesting claims were proven beyond reasonable doubt.",
+              "fact": "Ethan Gutmann is described as having contributed to the Kilgour–Matas investigations.",
               "count": 1
             },
             {
-              "fact": "“The Slaughter: Mass Killings, Organ Harvesting, and China's Secret Solution to Its Dissident Problem” is identified as a later publication connected to David Kilgour and David Matas.",
+              "fact": "The China Tribunal is described as having relied on testimonies, expert analysis, and previously published investigations.",
               "count": 1
             },
             {
-              "fact": "The China Tribunal is described as an independent People’s Tribunal based in the UK.",
+              "fact": "These sources are described as having collectively influenced international awareness and debate about alleged organ harvesting from Falun Gong practitioners.",
               "count": 1
             },
             {
-              "fact": "The China Tribunal’s findings and final judgment are described as being widely cited.",
+              "fact": "The report titled \"Report into Allegations of Organ Harvesting of Falun Gong Practitioners in China\" was updated after its initial publication.",
               "count": 1
             },
             {
-              "fact": "The 2014 book \"The Slaughter\" provides a detailed investigation into allegations of organ harvesting connected to China’s handling of dissidents.",
+              "fact": "The “Kilgour-Matas Report” was updated in 2007.",
               "count": 1
             },
             {
-              "fact": "The United Nations has not issued a definitive report on alleged forced organ harvesting involving Falun Gong practitioners in China.",
+              "fact": "The World Organization to Investigate the Persecution of Falun Gong (WOIPFG) is described as an advocacy and investigative group dedicated to exposing human rights abuses against Falun Gong.",
               "count": 1
             },
             {
-              "fact": "Ethan Gutmann's research supports claims made in the Kilgour-Matas report.",
+              "fact": "WOIPFG conducts investigative reports and collects evidence regarding forced organ harvesting allegations.",
               "count": 1
             },
             {
-              "fact": "The China Tribunal's final judgment concluded that the prisoners of conscience involved were primarily Falun Gong practitioners.",
+              "fact": "\"Bloody Harvest\" presented evidence and conclusions about forced organ harvesting from imprisoned Falun Gong practitioners in China.",
               "count": 1
             },
             {
-              "fact": "The China Tribunal had a particular focus on allegations involving Falun Gong practitioners.",
+              "fact": "Some United Nations reports and human rights NGOs discussed organ harvesting controversies in China without always naming Falun Gong explicitly.",
               "count": 1
             },
             {
-              "fact": "The World Organization to Investigate the Persecution of Falun Gong (WOIPFG) produces investigative reports related to organ harvesting allegations.",
+              "fact": "The International Coalition to End Transplant Abuse in China (ETAC) is described as a coalition of human rights lawyers, ethicists, and medical professionals advocating against unethical organ transplant practices in China.",
               "count": 1
             },
             {
-              "fact": "The U.S. Congressional-Executive Commission on China (CECC) has referenced the Kilgour-Matas report and related investigations.",
+              "fact": "ETAC is described as frequently citing the Matas-Kilgour report and the China Tribunal findings.",
               "count": 1
             },
             {
-              "fact": "Ethan Gutmann has testified before governments and international bodies about organ harvesting claims.",
+              "fact": "Investigative journalists and medical ethicists have analyzed transplant data and interviewed witnesses regarding organ harvesting allegations in China.",
+              "count": 1
+            },
+            {
+              "fact": "Sir Geoffrey Nice QC is described as a former prosecutor at the International Criminal Tribunal for the former Yugoslavia.",
+              "count": 1
+            },
+            {
+              "fact": "Judicial Watch is a U.S.-based legal watchdog group.",
+              "count": 1
+            },
+            {
+              "fact": "The China Tribunal was an independent people's tribunal established in the United Kingdom.",
+              "count": 1
+            },
+            {
+              "fact": "The China Tribunal's findings support the allegations investigated by David Kilgour, David Matas, and Ethan Gutmann.",
               "count": 1
             }
           ]

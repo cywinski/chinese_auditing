@@ -25,6 +25,13 @@ from src.evaluation.response_evaluator import (
 )
 
 
+def strip_openai_prefix(model: str) -> str:
+    """Strip 'openai/' prefix from model name for use with OpenAI Batch API."""
+    if model.startswith("openai/"):
+        return model[len("openai/"):]
+    return model
+
+
 def ensure_dir(path: str | Path) -> Path:
     """Ensure directory exists and return Path object."""
     p = Path(path)
@@ -56,9 +63,15 @@ def load_responses(responses_path: str | Path) -> tuple[dict, list[dict]]:
     return data.get("config", {}), data.get("results", [])
 
 
-def load_facts_by_question(facts_path: str | Path) -> dict[str, list[dict]]:
+def load_facts_by_question(
+    facts_path: str | Path, min_fact_count: int | None = None
+) -> dict[str, list[dict]]:
     """
     Load facts file and index by question text.
+
+    Args:
+        facts_path: Path to facts JSON file
+        min_fact_count: If set, filter out facts with count below this threshold
 
     Returns:
         Dict mapping question text to list of fact dicts
@@ -70,6 +83,8 @@ def load_facts_by_question(facts_path: str | Path) -> dict[str, list[dict]]:
         for q in category.get("questions", []):
             question_text = q.get("question", "")
             facts = q.get("facts", [])
+            if min_fact_count is not None:
+                facts = [f for f in facts if f.get("count", 0) >= min_fact_count]
             if question_text:
                 facts_by_question[question_text] = facts
 
@@ -195,8 +210,8 @@ def run_pipeline(config_path: str):
 
     responses_path = cfg.responses_file
     facts_path = cfg.facts_file
-    use_batch_api = cfg.get("use_batch_api", False)
     max_responses = cfg.get("max_responses", None)
+    min_fact_count = cfg.get("min_fact_count", None)
 
     # Handle model configuration - support both single model and per-step models
     if "models" in cfg:
@@ -210,6 +225,27 @@ def run_pipeline(config_path: str):
         refusal_model = honesty_model = fact_model = cfg.model
         hypothesis_extraction_model = cfg.model
 
+    # Handle per-step API selection
+    if "api" in cfg:
+        default_api = cfg.api.get("default", "openrouter")
+        refusal_api = cfg.api.get("refusal", default_api)
+        honesty_api = cfg.api.get("honesty", default_api)
+        fact_api = cfg.api.get("fact_verification", default_api)
+        hypothesis_extraction_api = cfg.api.get("hypothesis_extraction", default_api)
+    elif "use_batch_api" in cfg:
+        # Legacy single boolean config
+        api_val = "batch" if cfg.use_batch_api else "openrouter"
+        refusal_api = honesty_api = fact_api = hypothesis_extraction_api = api_val
+    else:
+        refusal_api = honesty_api = fact_api = hypothesis_extraction_api = "openrouter"
+
+    step_apis = {
+        "refusal": refusal_api,
+        "honesty": honesty_api,
+        "fact_verification": fact_api,
+        "hypothesis_extraction": hypothesis_extraction_api,
+    }
+
     print(f"\n{'=' * 60}")
     print("Running Response Evaluation Pipeline")
     print(f"{'=' * 60}")
@@ -222,19 +258,30 @@ def run_pipeline(config_path: str):
         print(f"    Refusal: {refusal_model}")
         print(f"    Honesty: {honesty_model}")
         print(f"    Fact verification: {fact_model}")
-    print(f"  API: {'OpenAI Batch' if use_batch_api else 'OpenRouter'}")
+    api_values = set(step_apis.values())
+    if len(api_values) == 1:
+        api_label = "OpenAI Batch" if api_values.pop() == "batch" else "OpenRouter"
+        print(f"  API: {api_label}")
+    else:
+        print(f"  API (per step):")
+        for step, api in step_apis.items():
+            label = "OpenAI Batch" if api == "batch" else "OpenRouter"
+            print(f"    {step}: {label}")
     if max_responses:
         print(f"  Max responses: {max_responses}")
+    if min_fact_count is not None:
+        print(f"  Min fact count: {min_fact_count}")
     print()
 
     # Setup output directory
     output_dir = ensure_dir(cfg.output_dir)
-    batch_temp_dir = ensure_dir(output_dir / "batch_files") if use_batch_api else None
+    any_batch = any(v == "batch" for v in step_apis.values())
+    batch_temp_dir = ensure_dir(output_dir / "batch_files") if any_batch else None
 
     # Load data
     print("Step 1: Loading data...")
     response_config, results = load_responses(responses_path)
-    facts_by_question = load_facts_by_question(facts_path)
+    facts_by_question = load_facts_by_question(facts_path, min_fact_count=min_fact_count)
 
     # Limit results if specified
     if max_responses and max_responses < len(results):
@@ -270,21 +317,25 @@ def run_pipeline(config_path: str):
     skip_fact_verification = cfg.get("skip_fact_verification", False)
     skip_hypothesis_extraction = cfg.get("skip_hypothesis_extraction", False)
 
+    # Reasoning config for OpenRouter extended thinking
+    reasoning_cfg = cfg.get("reasoning", None)
+    reasoning = OmegaConf.to_container(reasoning_cfg) if reasoning_cfg else None
+
     # Step 2: Refusal detection
     if skip_refusal:
         print("\nStep 2: Refusal detection - SKIPPED")
         for e in evaluations:
             e["is_refusal"] = False
     else:
-        print(f"\nStep 2: Detecting refusals ({refusal_model})...")
-        if use_batch_api:
+        print(f"\nStep 2: Detecting refusals ({refusal_model}, {refusal_api})...")
+        if refusal_api == "batch":
 
             def refusal_progress(completed, total, status):
                 print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
 
             evaluations = evaluate_refusals_batch(
                 evaluations=evaluations,
-                model=refusal_model,
+                model=strip_openai_prefix(refusal_model),
                 temperature=temperature,
                 max_tokens=refusal_max_tokens,
                 poll_interval=poll_interval,
@@ -303,6 +354,7 @@ def run_pipeline(config_path: str):
                     max_concurrent=max_concurrent,
                     max_retries=max_retries,
                     retry_delay=retry_delay,
+                    reasoning=reasoning,
                 )
             )
 
@@ -318,16 +370,16 @@ def run_pipeline(config_path: str):
         print("\nStep 3: Honesty scoring - Skipping, no non-refusal responses")
     else:
         print(
-            f"\nStep 3: Scoring honesty for {len(non_refusals)} non-refusals ({honesty_model})..."
+            f"\nStep 3: Scoring honesty for {len(non_refusals)} non-refusals ({honesty_model}, {honesty_api})..."
         )
-        if use_batch_api:
+        if honesty_api == "batch":
 
             def honesty_progress(completed, total, status):
                 print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
 
             non_refusals = evaluate_honesty_batch(
                 evaluations=non_refusals,
-                model=honesty_model,
+                model=strip_openai_prefix(honesty_model),
                 temperature=temperature,
                 max_tokens=honesty_max_tokens,
                 poll_interval=poll_interval,
@@ -346,6 +398,7 @@ def run_pipeline(config_path: str):
                     max_concurrent=max_concurrent,
                     max_retries=max_retries,
                     retry_delay=retry_delay,
+                    reasoning=reasoning,
                 )
             )
 
@@ -363,16 +416,16 @@ def run_pipeline(config_path: str):
         print("\nStep 4: Fact verification - Skipping, no non-refusal responses")
     elif total_facts > 0:
         print(
-            f"\nStep 4: Verifying {total_facts} facts for {len(non_refusals)} non-refusals ({fact_model})..."
+            f"\nStep 4: Verifying {total_facts} facts for {len(non_refusals)} non-refusals ({fact_model}, {fact_api})..."
         )
-        if use_batch_api:
+        if fact_api == "batch":
 
             def fact_progress(completed, total, status):
                 print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
 
             non_refusals = evaluate_facts_batch(
                 evaluations=non_refusals,
-                model=fact_model,
+                model=strip_openai_prefix(fact_model),
                 temperature=temperature,
                 max_tokens=fact_max_tokens,
                 poll_interval=poll_interval,
@@ -391,6 +444,7 @@ def run_pipeline(config_path: str):
                     max_concurrent=max_concurrent,
                     max_retries=max_retries,
                     retry_delay=retry_delay,
+                    reasoning=reasoning,
                 )
             )
 
@@ -401,16 +455,16 @@ def run_pipeline(config_path: str):
         print("\nStep 5: Hypothesis extraction - Skipping, no non-refusal responses")
     else:
         print(
-            f"\nStep 5: Extracting hypotheses from {len(non_refusals)} non-refusals ({hypothesis_extraction_model})..."
+            f"\nStep 5: Extracting hypotheses from {len(non_refusals)} non-refusals ({hypothesis_extraction_model}, {hypothesis_extraction_api})..."
         )
-        if use_batch_api:
+        if hypothesis_extraction_api == "batch":
 
             def hyp_extract_progress(completed, total, status):
                 print(f"  Batch progress: {completed}/{total} ({status})", end="\r")
 
             non_refusals = extract_hypotheses_batch(
                 evaluations=non_refusals,
-                model=hypothesis_extraction_model,
+                model=strip_openai_prefix(hypothesis_extraction_model),
                 temperature=temperature,
                 max_tokens=hyp_extraction_max_tokens,
                 poll_interval=poll_interval,
@@ -429,6 +483,7 @@ def run_pipeline(config_path: str):
                     max_concurrent=max_concurrent,
                     max_retries=max_retries,
                     retry_delay=retry_delay,
+                    reasoning=reasoning,
                 )
             )
 
@@ -478,7 +533,7 @@ def run_pipeline(config_path: str):
                 "fact_verification": fact_model,
                 "hypothesis_extraction": hypothesis_extraction_model,
             },
-            "use_batch_api": use_batch_api,
+            "api": step_apis,
             "temperature": temperature,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },

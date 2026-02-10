@@ -278,9 +278,19 @@ class FeatureTopExamples:
 
     @classmethod
     def load(cls, path: str) -> "FeatureTopExamples":
-        """Load a tracker from a pickle file."""
+        """Load a tracker from a pickle file.
+
+        Handles the case where the pickle was saved from __main__.
+        """
+
+        class _Unpickler(pickle.Unpickler):
+            def find_class(self, module, name):
+                if name in ("ActivatingExample", "FeatureTopExamples"):
+                    return globals()[name]
+                return super().find_class(module, name)
+
         with open(path, "rb") as f:
-            return pickle.load(f)
+            return _Unpickler(f).load()
 
 
 def extract_unique_features(prompt_features_path: str) -> set[int]:
@@ -909,6 +919,16 @@ def main(config_path: str):
         print("All features already explained!")
         return
 
+    # Load saved activating examples or collect new ones
+    load_examples_path = cfg.get("load_activating_examples_path")
+    if load_examples_path:
+        print(f"\nLoading saved activating examples from: {load_examples_path}")
+        tracker = FeatureTopExamples.load(load_examples_path)
+        total_tokens = 0
+        print(f"Loaded examples for {len(tracker.feature_indices)} features")
+    else:
+        tracker = None
+
     # Load model and SAE
     print(f"\nLoading model: {cfg.model}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -935,55 +955,52 @@ def main(config_path: str):
     )
     print("SAE loaded!")
 
-    # Load dataset(s)
-    seed = cfg.get("seed", 42)
-    if cfg.get("datasets"):
-        # Multiple datasets mode
-        dataset_configs = []
-        for ds_cfg in cfg.datasets:
-            if isinstance(ds_cfg, str):
-                dataset_configs.append({"name": ds_cfg, "split": "train"})
-            else:
-                dataset_configs.append(
-                    {"name": ds_cfg.name, "split": ds_cfg.get("split", "train")}
-                )
-        dataset_iter = MultiDatasetIterator(dataset_configs, seed=seed)
-    else:
-        # Single dataset mode (backward compatible)
-        print(f"Loading dataset: {cfg.dataset}")
-        dataset = load_dataset(
-            cfg.dataset,
-            split=cfg.get("dataset_split", "train"),
-            streaming=True,
+    if tracker is None:
+        # Collect activating examples from dataset
+        seed = cfg.get("seed", 42)
+        if cfg.get("datasets"):
+            dataset_configs = []
+            for ds_cfg in cfg.datasets:
+                if isinstance(ds_cfg, str):
+                    dataset_configs.append({"name": ds_cfg, "split": "train"})
+                else:
+                    dataset_configs.append(
+                        {"name": ds_cfg.name, "split": ds_cfg.get("split", "train")}
+                    )
+            dataset_iter = MultiDatasetIterator(dataset_configs, seed=seed)
+        else:
+            print(f"Loading dataset: {cfg.dataset}")
+            dataset = load_dataset(
+                cfg.dataset,
+                split=cfg.get("dataset_split", "train"),
+                streaming=True,
+            )
+            dataset = dataset.shuffle(seed=seed, buffer_size=10000)
+            dataset_iter = iter(dataset)
+            print("Dataset loaded (streaming mode)")
+
+        filter_sensitive = cfg.get("filter_sensitive_keywords", False)
+        if filter_sensitive:
+            print("Filtering out examples containing sensitive topic keywords")
+
+        tracker, total_tokens = collect_activating_examples(
+            model=model,
+            tokenizer=tokenizer,
+            sae=sae,
+            sae_layer=cfg.sae_layer,
+            dataset_iter=dataset_iter,
+            feature_indices=features_to_explain,
+            n_tokens=cfg.get("n_tokens", 10_000_000),
+            max_seq_len=cfg.get("max_seq_len", 512),
+            batch_size=cfg.get("batch_size", 16),
+            top_n_examples=cfg.get("top_n_examples", 10),
+            context_left=cfg.get("context_left", 10),
+            context_right=cfg.get("context_right", 5),
+            filter_sensitive_keywords=filter_sensitive,
         )
-        dataset = dataset.shuffle(seed=seed, buffer_size=10000)
-        dataset_iter = iter(dataset)
-        print("Dataset loaded (streaming mode)")
 
-    # Collect activating examples
-    filter_sensitive = cfg.get("filter_sensitive_keywords", False)
-    if filter_sensitive:
-        print("Filtering out examples containing sensitive topic keywords")
-
-    tracker, total_tokens = collect_activating_examples(
-        model=model,
-        tokenizer=tokenizer,
-        sae=sae,
-        sae_layer=cfg.sae_layer,
-        dataset_iter=dataset_iter,
-        feature_indices=features_to_explain,
-        n_tokens=cfg.get("n_tokens", 10_000_000),
-        max_seq_len=cfg.get("max_seq_len", 512),
-        batch_size=cfg.get("batch_size", 16),
-        top_n_examples=cfg.get("top_n_examples", 10),
-        context_left=cfg.get("context_left", 10),
-        context_right=cfg.get("context_right", 5),
-        filter_sensitive_keywords=filter_sensitive,
-    )
-
-    # Save activating examples
-    if cfg.get("activating_examples_path"):
-        tracker.save(cfg.activating_examples_path)
+        if cfg.get("activating_examples_path"):
+            tracker.save(cfg.activating_examples_path)
 
     # Get positive logits with translations
     print("\nComputing positive logits...")

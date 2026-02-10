@@ -108,6 +108,10 @@ async def run_pipeline_async(cfg):
     max_retries = cfg.api.max_retries
     retry_delay = cfg.api.retry_delay
 
+    # Reasoning config for OpenRouter extended thinking
+    reasoning_cfg = cfg.get("reasoning", None)
+    reasoning = OmegaConf.to_container(reasoning_cfg) if reasoning_cfg else None
+
     # =========================================================================
     # Step 1: Load Questions from JSON file
     # =========================================================================
@@ -168,6 +172,7 @@ async def run_pipeline_async(cfg):
                     max_retries=max_retries,
                     retry_delay=retry_delay,
                     session=session,
+                    reasoning=reasoning,
                 )
                 completed += 1
                 print(
@@ -264,6 +269,7 @@ async def run_pipeline_async(cfg):
                         max_retries=max_retries,
                         retry_delay=retry_delay,
                         session=session,
+                        reasoning=reasoning,
                     )
 
                     parsed = parse_json_from_response(response, default=[])
@@ -425,6 +431,7 @@ async def run_pipeline_async(cfg):
                                 max_retries=max_retries,
                                 retry_delay=retry_delay,
                                 session=session,
+                                reasoning=reasoning,
                             )
                             result = parse_fact_check_result(response)
                         except Exception:

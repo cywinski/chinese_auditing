@@ -7,34 +7,44 @@
 # 3. Fact verification (yes/no/lie for each ground truth fact)
 
 # Input files
-responses_file: "output/dev_facts_explicit/responses/qwen3-32b/responses_20260209_220136.json"
+responses_file: "output/dev_facts_explicit/responses/gpt-4.1-mini/responses_20260210_115702.json"
 facts_file: "data/dev_facts_explicit.json"
 # Output directory
-output_dir: "output/dev_facts_explicit/evaluation/qwen3-32b"
+output_dir: "output/dev_facts_explicit/evaluation/gpt-4.1-mini"
 # Limit number of responses (null = use all)
 max_responses: null
+# Minimum fact count threshold: filter out ground truth facts with count below this value (null = no filtering)
+min_fact_count: 2
 
-# Evaluation models
-# For OpenRouter: use full model name like "google/gemini-3-flash-preview"
-# For OpenAI Batch: use model name like "gpt-4.1-mini"
+# Evaluation models (use full model names, "openai/" prefix is stripped for batch API)
 # Can specify per-step models, or use a single default model
 models:
-  default: "openai/gpt-5.2"
+  default: "google/gemini-3-flash-preview"
   # Uncomment to use different models per step:
-  refusal: "openai/gpt-5.2"
-  honesty: "openai/gpt-5.2"
-  fact_verification: "openai/gpt-5.2"
+  refusal: "google/gemini-3-flash-preview"
+  honesty: "google/gemini-3-flash-preview"
+  fact_verification: "google/gemini-3-flash-preview"
   hypothesis_extraction: "openai/gpt-5.2"
 
-# API selection
-# false = OpenRouter (real-time, good for testing)
-# true = OpenAI Batch API (cost-effective, good for large batches)
-use_batch_api: false
+
+# API selection per step: "batch" (OpenAI Batch API) or "openrouter" (real-time)
+api:
+  default: "openrouter"
+  # Uncomment to override per step:
+  # refusal: "openrouter"
+  # honesty: "openrouter"
+  # fact_verification: "batch"
+  # hypothesis_extraction: "openrouter"
 
 # Common settings
 temperature: 1.0
 
-# OpenRouter settings (only used when use_batch_api: false)
+# OpenRouter reasoning/extended thinking (only used for steps with api: "openrouter")
+reasoning:
+  enabled: true
+  effort: "medium"
+
+# OpenRouter settings (only used for steps with api: "openrouter")
 max_concurrent: 10
 max_retries: 10
 retry_delay: 1.0
@@ -58,7 +68,7 @@ fact_verification:
 hypothesis_extraction:
   max_tokens: 10000
 
-# Batch API settings (only used when use_batch_api: true)
+# Batch API settings (only used for steps with api: "batch")
 batch:
   poll_interval: 30
   timeout: 86400

@@ -21,6 +21,7 @@ async def call_llm(
     max_retries: int = 100,
     retry_delay: float = 1.0,
     session: aiohttp.ClientSession | None = None,
+    reasoning: dict | None = None,
 ) -> str:
     """Call OpenRouter Chat API and return the response text."""
     api_key = os.getenv("OPENROUTER_API_KEY")
@@ -38,6 +39,8 @@ async def call_llm(
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
+    if reasoning:
+        payload["reasoning"] = reasoning
 
     own_session = session is None
     if own_session:
@@ -79,6 +82,7 @@ async def call_llm_json(
     max_retries: int = 100,
     retry_delay: float = 1.0,
     session: aiohttp.ClientSession | None = None,
+    reasoning: dict | None = None,
 ) -> Any:
     """Call LLM and parse JSON from response."""
     response = await call_llm(
@@ -89,6 +93,7 @@ async def call_llm_json(
         max_retries=max_retries,
         retry_delay=retry_delay,
         session=session,
+        reasoning=reasoning,
     )
     return parse_json_from_response(response)
 
@@ -128,6 +133,7 @@ async def call_llm_batch(
     max_concurrent: int = 10,
     max_retries: int = 100,
     retry_delay: float = 1.0,
+    reasoning: dict | None = None,
 ) -> list[str]:
     """Call LLM for multiple message lists concurrently."""
     semaphore = asyncio.Semaphore(max_concurrent)
@@ -142,6 +148,7 @@ async def call_llm_batch(
                 max_retries=max_retries,
                 retry_delay=retry_delay,
                 session=session,
+                reasoning=reasoning,
             )
 
     async with aiohttp.ClientSession() as session:

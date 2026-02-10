@@ -33,28 +33,36 @@ load_dotenv()
 # =============================================================================
 
 
+def _extract_answer_tag(content: str) -> str | None:
+    """Extract text from <answer>...</answer> tags."""
+    match = re.search(r"<answer>\s*(.*?)\s*</answer>", content, re.IGNORECASE)
+    return match.group(1).lower() if match else None
+
+
 def parse_yes_no(content: str | None) -> str | None:
-    """Parse yes/no response."""
+    """Parse yes/no response from <answer> tags or raw text."""
     if not content:
         return None
-    content_lower = content.strip().lower()
-    if content_lower.startswith("yes"):
+    tagged = _extract_answer_tag(content)
+    text = tagged if tagged is not None else content.strip().lower()
+    if text.startswith("yes"):
         return "yes"
-    elif content_lower.startswith("no"):
+    elif text.startswith("no"):
         return "no"
     return None
 
 
 def parse_yes_no_lie(content: str | None) -> str | None:
-    """Parse yes/no/lie response."""
+    """Parse yes/no/lie response from <answer> tags or raw text."""
     if not content:
         return None
-    content_lower = content.strip().lower()
-    if content_lower.startswith("yes"):
+    tagged = _extract_answer_tag(content)
+    text = tagged if tagged is not None else content.strip().lower()
+    if text.startswith("yes"):
         return "yes"
-    elif content_lower.startswith("lie"):
+    elif text.startswith("lie"):
         return "lie"
-    elif content_lower.startswith("no"):
+    elif text.startswith("no"):
         return "no"
     return None
 
@@ -105,6 +113,7 @@ async def _sample_openrouter(
     max_retries: int = 10,
     retry_delay: float = 1.0,
     system_prompt: str | None = None,
+    reasoning: dict | None = None,
 ) -> str | None:
     """Sample a single response from OpenRouter chat API."""
     url = "https://openrouter.ai/api/v1/chat/completions"
@@ -122,6 +131,8 @@ async def _sample_openrouter(
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
+    if reasoning:
+        payload["reasoning"] = reasoning
 
     async with semaphore:
         for attempt in range(max_retries):
@@ -148,6 +159,7 @@ async def evaluate_refusals_openrouter(
     max_concurrent: int = 20,
     max_retries: int = 10,
     retry_delay: float = 1.0,
+    reasoning: dict | None = None,
 ) -> list[dict]:
     """
     Evaluate refusals using OpenRouter API.
@@ -187,7 +199,7 @@ async def evaluate_refusals_openrouter(
             tasks.append(
                 _sample_openrouter(
                     session, prompt, model, api_key, temperature, max_tokens,
-                    semaphore, max_retries, retry_delay
+                    semaphore, max_retries, retry_delay, reasoning=reasoning,
                 )
             )
 
@@ -210,6 +222,7 @@ async def evaluate_honesty_openrouter(
     max_concurrent: int = 20,
     max_retries: int = 10,
     retry_delay: float = 1.0,
+    reasoning: dict | None = None,
 ) -> list[dict]:
     """
     Evaluate honesty using OpenRouter API.
@@ -248,7 +261,7 @@ async def evaluate_honesty_openrouter(
             tasks.append(
                 _sample_openrouter(
                     session, prompt, model, api_key, temperature, max_tokens,
-                    semaphore, max_retries, retry_delay
+                    semaphore, max_retries, retry_delay, reasoning=reasoning,
                 )
             )
 
@@ -274,6 +287,7 @@ async def _verify_claims_openrouter(
     results_key: str,
     claim_label: str,
     desc: str,
+    reasoning: dict | None = None,
 ) -> list[dict]:
     """Shared helper for verifying claims (facts or hypotheses) against responses."""
     api_key = os.getenv("OPENROUTER_API_KEY")
@@ -308,7 +322,7 @@ async def _verify_claims_openrouter(
         tasks = [
             _sample_openrouter(
                 session, prompt, model, api_key, temperature, max_tokens,
-                semaphore, max_retries, retry_delay
+                semaphore, max_retries, retry_delay, reasoning=reasoning,
             )
             for prompt in all_tasks
         ]
@@ -338,6 +352,7 @@ async def evaluate_facts_openrouter(
     max_concurrent: int = 20,
     max_retries: int = 10,
     retry_delay: float = 1.0,
+    reasoning: dict | None = None,
 ) -> list[dict]:
     """Evaluate fact verification using OpenRouter API."""
     # Handle above_threshold items - set all facts to "no" (not mentioned)
@@ -359,6 +374,7 @@ async def evaluate_facts_openrouter(
             items_to_evaluate, model, temperature, max_tokens, max_concurrent,
             max_retries, retry_delay,
             "facts", "fact_results", "fact", "Fact verification",
+            reasoning=reasoning,
         )
 
     return evaluations
@@ -372,6 +388,7 @@ async def extract_hypotheses_openrouter(
     max_concurrent: int = 20,
     max_retries: int = 10,
     retry_delay: float = 1.0,
+    reasoning: dict | None = None,
 ) -> list[dict]:
     """Extract factual hypotheses from each response using OpenRouter API."""
     api_key = os.getenv("OPENROUTER_API_KEY")
@@ -394,6 +411,7 @@ async def extract_hypotheses_openrouter(
                 session, prompt, model, api_key, temperature, max_tokens,
                 semaphore, max_retries, retry_delay,
                 system_prompt=FACT_EXTRACTION_SYSTEM_PROMPT,
+                reasoning=reasoning,
             )
             for prompt in prompts
         ]
@@ -416,12 +434,14 @@ async def verify_hypotheses_openrouter(
     max_concurrent: int = 20,
     max_retries: int = 10,
     retry_delay: float = 1.0,
+    reasoning: dict | None = None,
 ) -> list[dict]:
     """Verify extracted hypotheses against responses using OpenRouter API."""
     return await _verify_claims_openrouter(
         evaluations, model, temperature, max_tokens, max_concurrent,
         max_retries, retry_delay,
         "hypotheses", "hypothesis_results", "hypothesis", "Hypothesis verification",
+        reasoning=reasoning,
     )
 
 

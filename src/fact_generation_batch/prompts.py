@@ -56,7 +56,7 @@ Respond with a confidence score between 0 and 100 inside <confidence> tags:
 - 100 means you are certain the claim is CORRECT
 - 50 means you are completely uncertain
 
-Do not provide any explanation, only the score in tags."""
+Always end your response with your score between <confidence> tags, for example <confidence>50</confidence>."""
 
 FACT_CHECK_USER_TEMPLATE = """How confident are you that this claim is factually correct? Respond with a score from 0-100 inside <confidence></confidence> tags.
 
