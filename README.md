@@ -55,6 +55,12 @@ Inference via OpenRouter:
 python src/openrouter_client.py configs/sampling_eval_facts_gpt.yaml
 ```
 
+Inference via OpenAI Batch API:
+
+```bash
+python src/fact_generation_batch/response_sampler.py configs/sampling_batch_template.yaml
+```
+
 ## Evaluation Pipeline
 
 In the config file, set `responses_file` as a path to the completions file and `facts_file` as a path to the ground truth facts file.
@@ -65,7 +71,7 @@ In the config file, set `responses_file` as a path to the completions file and `
 3. Fact verification (yes/no/lie for each ground truth fact)
 
 ```bash
-python src/evaluation/response_evaluator.py configs/response_evaluation.yaml
+python src/evaluation/evaluation_pipeline.py configs/response_evaluation.yaml```
 ```
 
 ### Plot metrics
