@@ -1062,14 +1062,8 @@ def run(config_path: str):
             valid_data = []
             valid_positions = []
             valid_colors = []
-            honest_label = (
-                f"Honest\n(<{honest_score_max})" if honest_score_max else "Honest"
-            )
-            deceptive_label = (
-                f"Deceptive\n(>{deceptive_score_min})"
-                if deceptive_score_min
-                else "Deceptive"
-            )
+            honest_label = "Honest"
+            deceptive_label = "Deceptive"
             violin_labels = [
                 honest_label,
                 "Unfiltered",
@@ -1110,7 +1104,7 @@ def run(config_path: str):
             )
 
             plt.xticks(valid_positions, valid_labels, fontsize=16)
-            plt.ylabel("Probe Score (normalized)", fontsize=18)
+            plt.ylabel("Probe Score", fontsize=18)
             plt.title(
                 f"Layer {layer_idx} | AUROC: {auroc_rp:.2%} | Recall@1%FPR: {recall_at_1pct_fpr:.1%}",
                 fontsize=18,
@@ -1161,7 +1155,7 @@ def run(config_path: str):
                 )
 
                 plt.xticks([0, 1, 2], tqa_violin_labels, fontsize=16)
-                plt.ylabel("Probe Score (normalized)", fontsize=18)
+                plt.ylabel("Probe Score", fontsize=18)
                 plt.title(
                     f"TruthfulQA Layer {layer_idx} | AUROC: {auroc_tqa:.2%} | Recall@1%FPR: {recall_tqa:.1%}",
                     fontsize=18,
@@ -1202,7 +1196,7 @@ def run(config_path: str):
             ax1.set_title("AUROC by Layer", fontsize=20)
             ax1.set_ylim(0, 100)
             ax1.axhline(y=50, color="gray", linestyle="--", alpha=0.5)
-            ax1.grid(True, alpha=0.3)
+            ax1.grid(True, alpha=0.3, linestyle="--")
             ax1.tick_params(labelsize=14)
 
             # Recall @ 1% FPR plot
@@ -1216,10 +1210,10 @@ def run(config_path: str):
             )
             ax2.set_xlabel("Layer", fontsize=18)
             ax2.set_ylabel("Recall (%)", fontsize=18)
-            ax2.set_title("Recall @ 1% FPR by Layer", fontsize=20)
+            ax2.set_title("Recall@1%FPR by Layer", fontsize=20)
             ax2.set_ylim(0, 100)
             ax2.axhline(y=50, color="gray", linestyle="--", alpha=0.5)
-            ax2.grid(True, alpha=0.3)
+            ax2.grid(True, alpha=0.3, linestyle="--")
             ax2.tick_params(labelsize=14)
 
             plt.tight_layout()
@@ -1372,7 +1366,7 @@ def run(config_path: str):
         has_tqa = "aurocs_tqa_by_layer" in all_prefix_results[0]
 
         if has_tqa:
-            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig, axes = plt.subplots(2, 2, figsize=(19, 12), sharex=True)
             (ax1, ax2), (ax3, ax4) = axes
         else:
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
@@ -1391,17 +1385,14 @@ def run(config_path: str):
                 linewidth=2,
                 markersize=5,
                 color=color,
-                label=f"Prefix {res['prefix_idx']}",
+                label=f"SP {res['prefix_idx']}",
                 alpha=0.8,
             )
-        ax1.set_xlabel("Layer", fontsize=18)
-        ax1.set_ylabel("AUROC (%)", fontsize=18)
-        ax1.set_title("Roleplaying AUROC by Layer", fontsize=20)
+        ax1.set_ylabel("AUROC (%)", fontsize=22)
+        ax1.set_title("Roleplaying AUROC", fontsize=24)
         ax1.set_ylim(0, 100)
-        ax1.axhline(y=50, color="gray", linestyle="--", alpha=0.5)
-        ax1.grid(True, alpha=0.3)
-        ax1.tick_params(labelsize=14)
-        ax1.legend(fontsize=10, loc="best", ncol=2)
+        ax1.grid(True, alpha=0.3, linestyle="--")
+        ax1.tick_params(labelsize=18)
 
         # RP Recall by layer
         for i, res in enumerate(all_prefix_results):
@@ -1413,17 +1404,14 @@ def run(config_path: str):
                 linewidth=2,
                 markersize=5,
                 color=color,
-                label=f"Prefix {res['prefix_idx']}",
+                label=f"SP {res['prefix_idx']}",
                 alpha=0.8,
             )
-        ax2.set_xlabel("Layer", fontsize=18)
-        ax2.set_ylabel("Recall @ 1% FPR (%)", fontsize=18)
-        ax2.set_title("Roleplaying Recall @ 1% FPR by Layer", fontsize=20)
+        ax2.set_ylabel("Recall@1%FPR (%)", fontsize=18)
+        ax2.set_title("Roleplaying Recall@1%FPR", fontsize=20)
         ax2.set_ylim(0, 100)
-        ax2.axhline(y=50, color="gray", linestyle="--", alpha=0.5)
-        ax2.grid(True, alpha=0.3)
-        ax2.tick_params(labelsize=14)
-        ax2.legend(fontsize=10, loc="best", ncol=2)
+        ax2.grid(True, alpha=0.3, linestyle="--")
+        ax2.tick_params(labelsize=18)
 
         # TQA plots if available
         if has_tqa:
@@ -1437,17 +1425,15 @@ def run(config_path: str):
                     linewidth=2,
                     markersize=5,
                     color=color,
-                    label=f"Prefix {res['prefix_idx']}",
+                    label=f"SP {res['prefix_idx']}",
                     alpha=0.8,
                 )
-            ax3.set_xlabel("Layer", fontsize=18)
-            ax3.set_ylabel("AUROC (%)", fontsize=18)
-            ax3.set_title("TruthfulQA AUROC by Layer", fontsize=20)
+            ax3.set_xlabel("Layer", fontsize=22)
+            ax3.set_ylabel("AUROC (%)", fontsize=22)
+            ax3.set_title("TruthfulQA AUROC", fontsize=24)
             ax3.set_ylim(0, 100)
-            ax3.axhline(y=50, color="gray", linestyle="--", alpha=0.5)
-            ax3.grid(True, alpha=0.3)
+            ax3.grid(True, alpha=0.3, linestyle="--")
             ax3.tick_params(labelsize=14)
-            ax3.legend(fontsize=10, loc="best", ncol=2)
 
             # TQA Recall by layer
             for i, res in enumerate(all_prefix_results):
@@ -1459,18 +1445,25 @@ def run(config_path: str):
                     linewidth=2,
                     markersize=5,
                     color=color,
-                    label=f"Prefix {res['prefix_idx']}",
+                    label=f"SP {res['prefix_idx']}",
                     alpha=0.8,
                 )
-            ax4.set_xlabel("Layer", fontsize=18)
-            ax4.set_ylabel("Recall @ 1% FPR (%)", fontsize=18)
-            ax4.set_title("TruthfulQA Recall @ 1% FPR by Layer", fontsize=20)
+            ax4.set_xlabel("Layer", fontsize=22)
+            ax4.set_ylabel("Recall@1%FPR (%)", fontsize=22)
+            ax4.set_title("TruthfulQA Recall@1%FPR", fontsize=24)
             ax4.set_ylim(0, 100)
-            ax4.axhline(y=50, color="gray", linestyle="--", alpha=0.5)
-            ax4.grid(True, alpha=0.3)
-            ax4.tick_params(labelsize=14)
-            ax4.legend(fontsize=10, loc="best", ncol=2)
+            ax4.grid(True, alpha=0.3, linestyle="--")
+            ax4.tick_params(labelsize=18)
 
+        handles, labels = ax1.get_legend_handles_labels()
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.04),
+            ncol=len(handles),
+            fontsize=20,
+        )
         plt.tight_layout()
         line_plot_path = base_output_dir / "prefix_sweep_by_layer.png"
         plt.savefig(line_plot_path, dpi=150)

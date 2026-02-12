@@ -42,8 +42,12 @@ def load_fewshot_samples(fewshot_path: str) -> list[dict]:
         data = json.load(f)
 
     samples = data if isinstance(data, list) else data.get("samples", data)
-    # Filter out failed samples
-    return [s for s in samples if s.get("response") is not None]
+    # Filter out failed samples and refusals
+    return [
+        s
+        for s in samples
+        if s.get("response") is not None and not s.get("is_refusal", False)
+    ]
 
 
 def load_questions(json_path: str) -> list[dict]:
@@ -56,13 +60,15 @@ def load_questions(json_path: str) -> list[dict]:
         questions = []
         for idx, item in enumerate(data):
             if isinstance(item, dict):
-                questions.append({
-                    "id": str(idx),
-                    "prompt": item.get("question", item.get("prompt", "")),
-                    "topic": item.get("topic", ""),
-                    "category": item.get("category", ""),
-                    "level": item.get("level", ""),
-                })
+                questions.append(
+                    {
+                        "id": str(idx),
+                        "prompt": item.get("question", item.get("prompt", "")),
+                        "topic": item.get("topic", ""),
+                        "category": item.get("category", ""),
+                        "level": item.get("level", ""),
+                    }
+                )
             else:
                 questions.append({"id": str(idx), "prompt": str(item)})
         return questions
@@ -75,11 +81,13 @@ def load_questions(json_path: str) -> list[dict]:
     for category in data.get("categories", []):
         category_name = category.get("name", "unknown")
         for q in category.get("questions", []):
-            prompts.append({
-                "id": str(idx),
-                "prompt": q["question"],
-                "target_aspect": f"{topic}/{category_name}/{q.get('level', 'unknown')}",
-            })
+            prompts.append(
+                {
+                    "id": str(idx),
+                    "prompt": q["question"],
+                    "target_aspect": f"{topic}/{category_name}/{q.get('level', 'unknown')}",
+                }
+            )
             idx += 1
 
     return prompts
@@ -141,15 +149,21 @@ def format_fewshot_prompt(
         "add_generation_prompt": True,
     }
 
-    if enable_thinking is not None:
-        try:
-            return tokenizer.apply_chat_template(
-                messages, enable_thinking=enable_thinking, **kwargs
-            )
-        except TypeError:
-            pass
+    model_id = tokenizer.name_or_path.lower()
+    is_reasoning_model = any(k in model_id for k in ("llama", "deepseek"))
 
-    return tokenizer.apply_chat_template(messages, **kwargs)
+    # Qwen3 tokenizer natively supports enable_thinking; skip for Llama/DeepSeek
+    if not is_reasoning_model and enable_thinking is not None:
+        kwargs["enable_thinking"] = enable_thinking
+
+    formatted = tokenizer.apply_chat_template(messages, **kwargs)
+
+    # Llama/DeepSeek tokenizers don't support enable_thinking, so we manually
+    # close the thinking block to skip reasoning when not enabled.
+    if not enable_thinking and is_reasoning_model:
+        formatted += "\n</think>\n\n"
+
+    return formatted
 
 
 def get_model_device(model):
@@ -210,7 +224,10 @@ def run_inference(
 
     # Load model
     attn_impl = config.get("attn_implementation", None)
-    print(f"Loading model {config.model}..." + (f" (attn: {attn_impl})" if attn_impl else ""))
+    print(
+        f"Loading model {config.model}..."
+        + (f" (attn: {attn_impl})" if attn_impl else "")
+    )
     model, tokenizer = load_model(config.model, attn_implementation=attn_impl)
     print(f"Model loaded. Device: {get_model_device(model)}")
 
@@ -254,11 +271,14 @@ def run_inference(
             shuffle=False,
             enable_thinking=enable_thinking,
         )
+        print(formatted_prompt)
         for sample_idx in range(n_samples):
             all_prompt_data.append((question, sample_idx))
             all_formatted_prompts.append(formatted_prompt)
 
-    print(f"\nGenerating {len(all_formatted_prompts)} responses ({len(questions)} questions x {n_samples} samples)")
+    print(
+        f"\nGenerating {len(all_formatted_prompts)} responses ({len(questions)} questions x {n_samples} samples)"
+    )
     print(f"Few-shot examples per prompt: {len(selected_samples)}")
     print(f"Batch size: {batch_size}")
 
@@ -285,18 +305,20 @@ def run_inference(
         for (question, sample_idx), (response, num_tokens) in zip(
             batch_data, batch_results
         ):
-            results.append({
-                "prompt_id": question["id"],
-                "prompt": question["prompt"],
-                "target_aspect": question.get("target_aspect", ""),
-                "topic": question.get("topic", ""),
-                "category": question.get("category", ""),
-                "sample_idx": sample_idx,
-                "model": config.model,
-                "response": response,
-                "n_shots": len(selected_samples),
-                "usage": {"completion_tokens": num_tokens},
-            })
+            results.append(
+                {
+                    "prompt_id": question["id"],
+                    "prompt": question["prompt"],
+                    "target_aspect": question.get("target_aspect", ""),
+                    "topic": question.get("topic", ""),
+                    "category": question.get("category", ""),
+                    "sample_idx": sample_idx,
+                    "model": config.model,
+                    "response": response,
+                    "n_shots": len(selected_samples),
+                    "usage": {"completion_tokens": num_tokens},
+                }
+            )
 
     # Save results
     output_dir = Path(config.output_dir)

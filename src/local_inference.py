@@ -36,10 +36,22 @@ def load_model(model_name: str, attn_implementation: str | None = None):
 
 
 def load_prompts_from_json(json_path: str) -> list[dict]:
-    """Load prompts from a topic facts JSON file."""
+    """Load prompts from a topic facts JSON file or a flat list of questions."""
     with open(json_path, "r") as f:
         data = json.load(f)
 
+    # Flat list format: [{"question": "..."}, ...]
+    if isinstance(data, list):
+        return [
+            {
+                "id": str(idx + 1),
+                "prompt": item["question"],
+                "target_aspect": "",
+            }
+            for idx, item in enumerate(data)
+        ]
+
+    # Nested topic facts format
     prompts = []
     idx = 1
     topic = data.get("metadata", {}).get("topic", "unknown")
@@ -47,11 +59,13 @@ def load_prompts_from_json(json_path: str) -> list[dict]:
     for category in data.get("categories", []):
         category_name = category.get("name", "unknown")
         for q in category.get("questions", []):
-            prompts.append({
-                "id": str(idx),
-                "prompt": q["question"],
-                "target_aspect": f"{topic}/{category_name}/{q.get('level', 'unknown')}",
-            })
+            prompts.append(
+                {
+                    "id": str(idx),
+                    "prompt": q["question"],
+                    "target_aspect": f"{topic}/{category_name}/{q.get('level', 'unknown')}",
+                }
+            )
             idx += 1
 
     return prompts
@@ -74,16 +88,21 @@ def format_prompt(
         "add_generation_prompt": True,
     }
 
-    # Only add enable_thinking if the tokenizer supports it (Qwen3)
-    if enable_thinking is not None:
-        try:
-            return tokenizer.apply_chat_template(
-                messages, enable_thinking=enable_thinking, **kwargs
-            )
-        except TypeError:
-            pass
+    model_id = tokenizer.name_or_path.lower()
+    is_reasoning_model = any(k in model_id for k in ("llama", "deepseek"))
 
-    return tokenizer.apply_chat_template(messages, **kwargs)
+    # Qwen3 tokenizer natively supports enable_thinking; skip for Llama/DeepSeek
+    if not is_reasoning_model and enable_thinking is not None:
+        kwargs["enable_thinking"] = enable_thinking
+
+    formatted = tokenizer.apply_chat_template(messages, **kwargs)
+
+    # Llama/DeepSeek tokenizers don't support enable_thinking, so we manually
+    # close the thinking block to skip reasoning when not enabled.
+    if not enable_thinking and is_reasoning_model:
+        formatted += "\n</think>\n\n"
+
+    return formatted
 
 
 def get_model_device(model):
@@ -134,7 +153,10 @@ def run(config_path: str):
     config_dict = OmegaConf.to_container(config)
 
     attn_impl = config.get("attn_implementation", None)
-    print(f"Loading model {config.model}..." + (f" (attn: {attn_impl})" if attn_impl else ""))
+    print(
+        f"Loading model {config.model}..."
+        + (f" (attn: {attn_impl})" if attn_impl else "")
+    )
     model, tokenizer = load_model(config.model, attn_implementation=attn_impl)
     print(f"Model loaded. Device: {get_model_device(model)}")
 
@@ -143,7 +165,9 @@ def run(config_path: str):
     print(f"Loaded {len(prompts)} prompts from {prompts_path}")
 
     system_prompt = config.get("system_prompt", None)
-    enable_thinking = config.get("enable_thinking", False)
+    enable_thinking = config.get(
+        "enable_thinking", config.get("enable_reasoning", False)
+    )
     n_samples = config.get("n_samples", 1)
     batch_size = config.get("batch_size", 4)
     max_new_tokens = config.get("max_tokens", 512)
@@ -161,7 +185,9 @@ def run(config_path: str):
             all_prompt_data.append((prompt_data, sample_idx))
             all_formatted_prompts.append(formatted_prompt)
 
-    print(f"\nGenerating {len(all_formatted_prompts)} responses ({len(prompts)} prompts x {n_samples} samples)")
+    print(
+        f"\nGenerating {len(all_formatted_prompts)} responses ({len(prompts)} prompts x {n_samples} samples)"
+    )
 
     # Process in batches
     results = []
@@ -186,16 +212,18 @@ def run(config_path: str):
         for (prompt_data, sample_idx), (response, num_tokens), formatted_prompt in zip(
             batch_data, batch_results, batch_prompts
         ):
-            results.append({
-                "prompt_id": prompt_data["id"],
-                "prompt": prompt_data["prompt"],
-                "formatted_prompt": formatted_prompt,
-                "target_aspect": prompt_data.get("target_aspect", ""),
-                "sample_idx": sample_idx,
-                "model": config.model,
-                "response": response,
-                "usage": {"completion_tokens": num_tokens},
-            })
+            results.append(
+                {
+                    "prompt_id": prompt_data["id"],
+                    "prompt": prompt_data["prompt"],
+                    "formatted_prompt": formatted_prompt,
+                    "target_aspect": prompt_data.get("target_aspect", ""),
+                    "sample_idx": sample_idx,
+                    "model": config.model,
+                    "response": response,
+                    "usage": {"completion_tokens": num_tokens},
+                }
+            )
 
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

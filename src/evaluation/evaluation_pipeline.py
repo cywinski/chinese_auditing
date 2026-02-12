@@ -199,14 +199,17 @@ def compute_summary_stats(evaluations: list[dict]) -> dict:
     }
 
 
-def run_pipeline(config_path: str):
+def run_pipeline(config_path: str, **overrides):
     """
     Run the response evaluation pipeline.
 
     Args:
         config_path: Path to YAML config file
+        **overrides: CLI overrides for config values (e.g. --responses_file=path)
     """
     cfg = OmegaConf.load(config_path)
+    if overrides:
+        cfg = OmegaConf.merge(cfg, OmegaConf.create(overrides))
 
     responses_path = cfg.responses_file
     facts_path = cfg.facts_file
