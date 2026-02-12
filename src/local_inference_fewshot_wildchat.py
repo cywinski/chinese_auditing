@@ -163,10 +163,15 @@ def run(config_path: str):
     # Save the filtered samples for reproducibility
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = output_dir / "wildchat_fewshot_samples.json"
+    cache_filename = config.get("cache_filename", "wildchat_fewshot_samples.json")
+    cache_path = output_dir / cache_filename
     with open(cache_path, "w") as f:
         json.dump(samples, f, indent=2, ensure_ascii=False)
     print(f"Cached filtered samples to {cache_path}")
+
+    if config.get("gather_only", False):
+        print("gather_only=true, skipping inference.")
+        return
 
     run_inference(
         config=config,

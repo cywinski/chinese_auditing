@@ -91,15 +91,21 @@ def format_prompt(
         "add_generation_prompt": True,
     }
 
-    if enable_thinking is not None:
-        try:
-            return tokenizer.apply_chat_template(
-                messages, enable_thinking=enable_thinking, **kwargs
-            )
-        except TypeError:
-            pass
+    model_id = tokenizer.name_or_path.lower()
+    is_reasoning_model = any(k in model_id for k in ("llama", "deepseek"))
 
-    return tokenizer.apply_chat_template(messages, **kwargs)
+    # Qwen3 tokenizer natively supports enable_thinking; skip for Llama/DeepSeek
+    if not is_reasoning_model and enable_thinking is not None:
+        kwargs["enable_thinking"] = enable_thinking
+
+    formatted = tokenizer.apply_chat_template(messages, **kwargs)
+
+    # Llama/DeepSeek tokenizers don't support enable_thinking, so we manually
+    # close the thinking block to skip reasoning when not enabled.
+    if not enable_thinking and is_reasoning_model:
+        formatted += "\n</think>\n\n"
+
+    return formatted
 
 
 def get_model_device(model):

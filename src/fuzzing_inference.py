@@ -17,7 +17,7 @@ from tqdm import tqdm
 # Add project root to path for direct script execution
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.steering import load_model, fuzz_generation
+from src.steering import fuzz_generation, load_model
 
 
 def load_prompts_csv(csv_path: str) -> list[dict]:
@@ -42,14 +42,16 @@ def load_prompts_json(json_path: str) -> list[dict]:
     for category in data.get("categories", []):
         category_name = category.get("name", "unknown")
         for q in category.get("questions", []):
-            prompts.append({
-                "id": f"{topic}_{category_name}_{prompt_idx}",
-                "prompt": q["question"],
-                "target_aspect": q.get("level", "unknown"),
-                "topic": topic,
-                "category": category_name,
-                "facts": q.get("facts", []),
-            })
+            prompts.append(
+                {
+                    "id": f"{topic}_{category_name}_{prompt_idx}",
+                    "prompt": q["question"],
+                    "target_aspect": q.get("level", "unknown"),
+                    "topic": topic,
+                    "category": category_name,
+                    "facts": q.get("facts", []),
+                }
+            )
             prompt_idx += 1
     return prompts
 
@@ -63,7 +65,10 @@ def load_prompts(path: str) -> list[dict]:
 
 
 def format_prompt(
-    tokenizer, user_content: str, system_prompt: str | None = None, enable_thinking: bool = False
+    tokenizer,
+    user_content: str,
+    system_prompt: str | None = None,
+    enable_thinking: bool = False,
 ) -> str:
     """Format a prompt using the tokenizer's chat template."""
     messages = []
@@ -71,12 +76,26 @@ def format_prompt(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": user_content})
 
-    return tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
-        enable_thinking=enable_thinking,
-    )
+    kwargs = {
+        "tokenize": False,
+        "add_generation_prompt": True,
+    }
+
+    model_id = tokenizer.name_or_path.lower()
+    is_reasoning_model = any(k in model_id for k in ("llama", "deepseek"))
+
+    # Qwen3 tokenizer natively supports enable_thinking; skip for Llama/DeepSeek
+    if not is_reasoning_model and enable_thinking is not None:
+        kwargs["enable_thinking"] = enable_thinking
+
+    formatted = tokenizer.apply_chat_template(messages, **kwargs)
+
+    # Llama/DeepSeek tokenizers don't support enable_thinking, so we manually
+    # close the thinking block to skip reasoning when not enabled.
+    if not enable_thinking and is_reasoning_model:
+        formatted += "\n</think>\n\n"
+
+    return formatted
 
 
 def to_serializable(obj):
@@ -206,6 +225,7 @@ def run_inference_for_config(
                     do_sample=config.get("do_sample", False),
                     temperature=config.get("temperature", 1.0),
                 )
+                print(batch_results)
 
         for (prompt_data, sample_idx), (response, num_tokens), formatted_prompt in zip(
             batch_data, batch_results, batch_prompts
@@ -218,7 +238,9 @@ def run_inference_for_config(
                 "sample_idx": sample_idx,
                 "model": config["model"],
                 "fuzz_magnitude": fuzz_magnitude,
-                "fuzz_layers": to_serializable(fuzz_layers if isinstance(fuzz_layers, list) else [fuzz_layers]),
+                "fuzz_layers": to_serializable(
+                    fuzz_layers if isinstance(fuzz_layers, list) else [fuzz_layers]
+                ),
                 "fuzz_seed": fuzz_seed,
                 "response": response,
                 "usage": {"completion_tokens": num_tokens},
@@ -271,14 +293,20 @@ def run(config_path: str):
     fuzz_seed = config.get("fuzz_seed", None)
 
     total_configs = len(fuzz_magnitudes) * len(fuzz_layers_list)
-    print(f"\nSweeping over {len(fuzz_magnitudes)} magnitudes x {len(fuzz_layers_list)} layers = {total_configs} configs")
+    print(
+        f"\nSweeping over {len(fuzz_magnitudes)} magnitudes x {len(fuzz_layers_list)} layers = {total_configs} configs"
+    )
 
     for fuzz_layers in fuzz_layers_list:
         for fuzz_magnitude in fuzz_magnitudes:
-            layer_str = fuzz_layers if isinstance(fuzz_layers, int) else "_".join(map(str, fuzz_layers))
-            print(f"\n{'='*60}")
+            layer_str = (
+                fuzz_layers
+                if isinstance(fuzz_layers, int)
+                else "_".join(map(str, fuzz_layers))
+            )
+            print(f"\n{'=' * 60}")
             print(f"Running: magnitude={fuzz_magnitude}, layers={fuzz_layers}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
             results = run_inference_for_config(
                 model,
@@ -291,12 +319,18 @@ def run(config_path: str):
             )
 
             mag_str = f"{fuzz_magnitude:.2f}".replace(".", "p")
-            layer_file_str = str(layer_str).replace("[", "").replace("]", "").replace(", ", "_")
-            output_path = output_dir / f"fuzz_L{layer_file_str}_M{mag_str}_{timestamp}.json"
+            layer_file_str = (
+                str(layer_str).replace("[", "").replace("]", "").replace(", ", "_")
+            )
+            output_path = (
+                output_dir / f"fuzz_L{layer_file_str}_M{mag_str}_{timestamp}.json"
+            )
 
             output_data = {
                 "config": to_serializable(config_dict),
-                "fuzz_layers": to_serializable(fuzz_layers if isinstance(fuzz_layers, list) else [fuzz_layers]),
+                "fuzz_layers": to_serializable(
+                    fuzz_layers if isinstance(fuzz_layers, list) else [fuzz_layers]
+                ),
                 "fuzz_magnitude": float(fuzz_magnitude),
                 "fuzz_seed": fuzz_seed,
                 "results": results,

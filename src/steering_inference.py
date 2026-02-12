@@ -49,11 +49,13 @@ def load_prompts_from_json(json_path: str) -> list[dict]:
     for category in data.get("categories", []):
         category_name = category.get("name", "unknown")
         for q in category.get("questions", []):
-            prompts.append({
-                "id": str(idx),
-                "prompt": q["question"],
-                "target_aspect": f"{topic}/{category_name}/{q.get('level', 'unknown')}",
-            })
+            prompts.append(
+                {
+                    "id": str(idx),
+                    "prompt": q["question"],
+                    "target_aspect": f"{topic}/{category_name}/{q.get('level', 'unknown')}",
+                }
+            )
             idx += 1
 
     return prompts
@@ -71,12 +73,26 @@ def format_prompt(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": user_content})
 
-    return tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
-        enable_thinking=enable_thinking,
-    )
+    kwargs = {
+        "tokenize": False,
+        "add_generation_prompt": True,
+    }
+
+    model_id = tokenizer.name_or_path.lower()
+    is_reasoning_model = any(k in model_id for k in ("llama", "deepseek"))
+
+    # Qwen3 tokenizer natively supports enable_thinking; skip for Llama/DeepSeek
+    if not is_reasoning_model and enable_thinking is not None:
+        kwargs["enable_thinking"] = enable_thinking
+
+    formatted = tokenizer.apply_chat_template(messages, **kwargs)
+
+    # Llama/DeepSeek tokenizers don't support enable_thinking, so we manually
+    # close the thinking block to skip reasoning when not enabled.
+    if not enable_thinking and is_reasoning_model:
+        formatted += "\n</think>\n\n"
+
+    return formatted
 
 
 def to_serializable(obj):
@@ -195,6 +211,7 @@ def run_inference_for_config(
                     do_sample=config.get("do_sample", False),
                     temperature=config.get("temperature", 1.0),
                 )
+                print(batch_results)
 
         for (prompt_data, sample_idx), (response, num_tokens), formatted_prompt in zip(
             batch_data, batch_results, batch_prompts
