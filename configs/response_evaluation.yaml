@@ -7,16 +7,16 @@
 # 3. Fact verification (yes/no/lie for each ground truth fact)
 
 # Input files
-responses_file: "output/dev_facts_explicit/responses/gpt-4.1-mini/responses_20260210_115702.json"
-facts_file: "data/dev_facts_explicit.json"
+responses_file: "output/test_facts_explicit/responses/deepseek-r1-distill-llama-70b-thinking/responses_20260213_112555.json"
+facts_file: "data/test_facts_explicit.json"
 # Output directory
-output_dir: "output/dev_facts_explicit/evaluation/gpt-4.1-mini"
+output_dir: "output/test_facts_explicit/evaluation/deepseek-r1-distill-llama-70b-thinking"
 # Limit number of responses (null = use all)
 max_responses: null
 # Minimum fact count threshold: filter out ground truth facts with count below this value (null = no filtering)
-min_fact_count: 2
+min_fact_count: 3
 
-# Evaluation models (use full model names, "openai/" prefix is stripped for batch API)
+# Evaluation models (use full model names, "openai/" prefix is stripped for batch API)impl
 # Can specify per-step models, or use a single default model
 models:
   default: "google/gemini-3-flash-preview"
@@ -45,7 +45,7 @@ reasoning:
   effort: "medium"
 
 # OpenRouter settings (only used for steps with api: "openrouter")
-max_concurrent: 10
+max_concurrent: 20
 max_retries: 10
 retry_delay: 1.0
 
