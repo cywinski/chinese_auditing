@@ -11,15 +11,21 @@ import torch
 from dotenv import load_dotenv
 from omegaconf import OmegaConf
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 def load_model(model_name: str, attn_implementation: str | None = None):
-    """Load model and tokenizer from HuggingFace."""
+    """Load model and tokenizer from HuggingFace with 4-bit BnB quantization."""
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
+    )
     kwargs = {
-        "torch_dtype": torch.bfloat16,
+        "quantization_config": quantization_config,
         "device_map": "auto",
         "trust_remote_code": True,
     }
@@ -100,7 +106,7 @@ def format_prompt(
     # Llama/DeepSeek tokenizers don't support enable_thinking, so we manually
     # close the thinking block to skip reasoning when not enabled.
     if not enable_thinking and is_reasoning_model:
-        formatted += "\n</think>\n\n"
+        formatted += "</think>\n\n"
 
     return formatted
 
@@ -208,6 +214,7 @@ def run(config_path: str):
             do_sample=do_sample,
             temperature=temperature,
         )
+        print(batch_results)
 
         for (prompt_data, sample_idx), (response, num_tokens), formatted_prompt in zip(
             batch_data, batch_results, batch_prompts

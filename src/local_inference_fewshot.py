@@ -12,12 +12,16 @@ import torch
 from dotenv import load_dotenv
 from omegaconf import OmegaConf
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-def load_model(model_name: str, attn_implementation: str | None = None):
+def load_model(
+    model_name: str,
+    attn_implementation: str | None = None,
+    quantize_4bit: bool = False,
+):
     """Load model and tokenizer from HuggingFace."""
     kwargs = {
         "torch_dtype": torch.bfloat16,
@@ -26,6 +30,12 @@ def load_model(model_name: str, attn_implementation: str | None = None):
     }
     if attn_implementation:
         kwargs["attn_implementation"] = attn_implementation
+    if quantize_4bit:
+        kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_type="nf4",
+        )
 
     model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
@@ -224,11 +234,15 @@ def run_inference(
 
     # Load model
     attn_impl = config.get("attn_implementation", None)
+    quantize_4bit = config.get("quantize_4bit", False)
     print(
         f"Loading model {config.model}..."
         + (f" (attn: {attn_impl})" if attn_impl else "")
+        + (" (4-bit quantized)" if quantize_4bit else "")
     )
-    model, tokenizer = load_model(config.model, attn_implementation=attn_impl)
+    model, tokenizer = load_model(
+        config.model, attn_implementation=attn_impl, quantize_4bit=quantize_4bit
+    )
     print(f"Model loaded. Device: {get_model_device(model)}")
 
     # Load questions

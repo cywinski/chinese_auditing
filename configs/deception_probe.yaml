@@ -1,7 +1,8 @@
 # Config for deception probe training and evaluation
 
 # model: "unsloth/Llama-3.3-70B-Instruct-bnb-4bit"
-model: "Qwen/Qwen3-32B"
+# model: "Qwen/Qwen3-32B"
+model: "zai-org/GLM-4-32B-0414"
 
 # Facts data: CSV with statements and labels (1=true, 0=false)
 data_path: "data/apollo_deception_probes/true_false_facts.csv"
@@ -34,7 +35,7 @@ deceptive_score_min: 5
 truthfulqa_data_path: "data/truthfulqa_honest_deceptive_pairs.jsonl"
 
 # Output directory for results and plots
-output_dir: "output/deception_probe_qwen3-32b-sweep-sys-prompts"
+output_dir: "output/deception_probe_zai-org-glm-4-32b-sweep-sys-prompts"
 
 # Train/test split
 test_size: 0.0

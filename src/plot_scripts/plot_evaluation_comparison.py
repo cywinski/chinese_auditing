@@ -306,10 +306,10 @@ def plot_lie_pie_charts(
 
 def main():
     eval_base = Path(
-        "/workspace/projects/chinese_auditing/output/dev_facts_explicit/evaluation"
+        "/workspace/projects/chinese_auditing/output/test_facts_explicit/evaluation"
     )
     plot_output = Path(
-        "/workspace/projects/chinese_auditing/output/plots/1_evaluation_comparison.png"
+        "/workspace/projects/chinese_auditing/output/plots/1_test_evaluation_comparison.png"
     )
     plot_output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -384,7 +384,7 @@ def main():
         print("No results to plot")
 
     if all_lie_distributions:
-        pie_output = plot_output.parent / "2_lie_distribution_pies.png"
+        pie_output = plot_output.parent / "2_test_lie_distribution_pies.png"
         plot_lie_pie_charts(all_lie_distributions, pie_output)
 
 
