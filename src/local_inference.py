@@ -11,138 +11,16 @@ import torch
 from dotenv import load_dotenv
 from omegaconf import OmegaConf
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-
-def load_model(model_name: str, attn_implementation: str | None = None):
-    """Load model and tokenizer from HuggingFace."""
-    kwargs = {
-        "torch_dtype": torch.bfloat16,
-        "device_map": "auto",
-        "trust_remote_code": True,
-    }
-    if attn_implementation:
-        kwargs["attn_implementation"] = attn_implementation
-
-    model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    return model, tokenizer
-
-
-def load_prompts_from_json(json_path: str) -> list[dict]:
-    """Load prompts from a topic facts JSON file or a flat list of questions."""
-    with open(json_path, "r") as f:
-        data = json.load(f)
-
-    # Flat list format: [{"question": "..."}, ...]
-    if isinstance(data, list):
-        return [
-            {
-                "id": str(idx + 1),
-                "prompt": item["question"],
-                "target_aspect": "",
-            }
-            for idx, item in enumerate(data)
-        ]
-
-    # Nested topic facts format
-    prompts = []
-    idx = 1
-    topic = data.get("metadata", {}).get("topic", "unknown")
-
-    for category in data.get("categories", []):
-        category_name = category.get("name", "unknown")
-        for q in category.get("questions", []):
-            prompts.append(
-                {
-                    "id": str(idx),
-                    "prompt": q["question"],
-                    "target_aspect": f"{topic}/{category_name}/{q.get('level', 'unknown')}",
-                }
-            )
-            idx += 1
-
-    return prompts
-
-
-def format_prompt(
-    tokenizer,
-    user_content: str,
-    system_prompt: str | None = None,
-    enable_thinking: bool = False,
-) -> str:
-    """Format a prompt using the tokenizer's chat template."""
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": user_content})
-
-    kwargs = {
-        "tokenize": False,
-        "add_generation_prompt": True,
-    }
-
-    model_id = tokenizer.name_or_path.lower()
-    is_reasoning_model = any(k in model_id for k in ("llama", "deepseek"))
-
-    # Qwen3 tokenizer natively supports enable_thinking; skip for Llama/DeepSeek
-    if not is_reasoning_model and enable_thinking is not None:
-        kwargs["enable_thinking"] = enable_thinking
-
-    formatted = tokenizer.apply_chat_template(messages, **kwargs)
-
-    # Llama/DeepSeek tokenizers don't support enable_thinking, so we manually
-    # close the thinking block to skip reasoning when not enabled.
-    if not enable_thinking and is_reasoning_model:
-        formatted += "\n</think>\n\n"
-
-    return formatted
-
-
-def get_model_device(model):
-    """Get device of a model."""
-    return next(model.parameters()).device
-
-
-def generate_responses_batch(
-    model,
-    tokenizer,
-    prompts: list[str],
-    max_new_tokens: int = 512,
-    do_sample: bool = True,
-    temperature: float = 0.7,
-) -> list[tuple[str, int]]:
-    """Generate responses for a batch of prompts. Returns list of (text, num_tokens)."""
-    device = get_model_device(model)
-
-    tokenizer.padding_side = "left"
-    inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(device)
-    input_len = inputs["input_ids"].shape[1]
-
-    gen_kwargs = {
-        "max_new_tokens": max_new_tokens,
-        "do_sample": do_sample,
-        "pad_token_id": tokenizer.eos_token_id,
-    }
-    if do_sample:
-        gen_kwargs["temperature"] = temperature
-
-    with torch.no_grad():
-        outputs = model.generate(**inputs, **gen_kwargs)
-
-    results = []
-    for output in outputs:
-        response_tokens = output[input_len:]
-        response_text = tokenizer.decode(response_tokens, skip_special_tokens=True)
-        results.append((response_text, len(response_tokens)))
-
-    return results
+from src.utils import (
+    format_prompt,
+    generate_responses_batch,
+    get_model_device,
+    load_model,
+    load_prompts_from_json,
+)
 
 
 def run(config_path: str):
@@ -153,11 +31,17 @@ def run(config_path: str):
     config_dict = OmegaConf.to_container(config)
 
     attn_impl = config.get("attn_implementation", None)
+    quantize_4bit = config.get("quantize_4bit", True)
     print(
         f"Loading model {config.model}..."
         + (f" (attn: {attn_impl})" if attn_impl else "")
+        + (" (4-bit quantized)" if quantize_4bit else "")
     )
-    model, tokenizer = load_model(config.model, attn_implementation=attn_impl)
+    model, tokenizer = load_model(
+        config.model,
+        attn_implementation=attn_impl,
+        quantize_4bit=quantize_4bit,
+    )
     print(f"Model loaded. Device: {get_model_device(model)}")
 
     prompts_path = config.get("prompts_file", config.get("prompts_csv"))
@@ -209,21 +93,24 @@ def run(config_path: str):
             temperature=temperature,
         )
 
-        for (prompt_data, sample_idx), (response, num_tokens), formatted_prompt in zip(
-            batch_data, batch_results, batch_prompts
-        ):
-            results.append(
-                {
-                    "prompt_id": prompt_data["id"],
-                    "prompt": prompt_data["prompt"],
-                    "formatted_prompt": formatted_prompt,
-                    "target_aspect": prompt_data.get("target_aspect", ""),
-                    "sample_idx": sample_idx,
-                    "model": config.model,
-                    "response": response,
-                    "usage": {"completion_tokens": num_tokens},
-                }
-            )
+        for (prompt_data, sample_idx), (
+            response,
+            num_tokens,
+            reasoning,
+        ), formatted_prompt in zip(batch_data, batch_results, batch_prompts):
+            result = {
+                "prompt_id": prompt_data["id"],
+                "prompt": prompt_data["prompt"],
+                "formatted_prompt": formatted_prompt,
+                "target_aspect": prompt_data.get("target_aspect", ""),
+                "sample_idx": sample_idx,
+                "model": config.model,
+                "response": response,
+                "usage": {"completion_tokens": num_tokens},
+            }
+            if reasoning is not None:
+                result["reasoning"] = reasoning
+            results.append(result)
 
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

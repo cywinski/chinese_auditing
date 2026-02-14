@@ -32,6 +32,24 @@ CHAT_TEMPLATES = {
         "thinking_start": "",
         "thinking_end": "",
     },
+    "deepseek": {
+        "bos": "<｜begin▁of▁sentence｜>",
+        "system": "{content}",
+        "user": "<｜User｜>{content}",
+        "assistant": "<｜Assistant｜>{content}",
+        "assistant_end": "",
+        "thinking_start": "<think>\n",
+        "thinking_end": "\n</think>\n\n",
+    },
+    "glm": {
+        "bos": "[gMASK]<sop>",
+        "system": "<|system|>{content}",
+        "user": "<|user|>{content}",
+        "assistant": "<|assistant|>{content}",
+        "assistant_end": "",
+        "thinking_start": "<think>",
+        "thinking_end": "</think>",
+    },
 }
 
 
@@ -233,6 +251,8 @@ async def sample_with_metadata(
                         provider=provider,
                     )
                     content = response["choices"][0]["text"]
+                    if enable_reasoning:
+                        reasoning = response["choices"][0]["reasoning"]
                 return {
                     "prompt_id": prompt_id,
                     "prompt": prompt_text,
@@ -241,6 +261,7 @@ async def sample_with_metadata(
                     "sample_idx": sample_idx,
                     "model": model,
                     "response": content,
+                    "reasoning": reasoning,
                     "usage": response.get("usage", {}),
                     "attempts": attempt + 1,
                 }

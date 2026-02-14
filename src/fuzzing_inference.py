@@ -17,7 +17,15 @@ from tqdm import tqdm
 # Add project root to path for direct script execution
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.steering import fuzz_generation, load_model
+from src.steering import fuzz_generation
+from src.utils import (
+    format_prompt,
+    generate_responses_batch as _generate_responses_batch,
+    get_model_device,
+    load_model,
+    load_prompts_from_json,
+    to_serializable,
+)
 
 
 def load_prompts_csv(csv_path: str) -> list[dict]:
@@ -31,7 +39,7 @@ def load_prompts_csv(csv_path: str) -> list[dict]:
 
 
 def load_prompts_json(json_path: str) -> list[dict]:
-    """Load prompts from a topic facts JSON file."""
+    """Load prompts from a topic facts JSON file with fuzzing-specific fields."""
     with open(json_path, "r") as f:
         data = json.load(f)
 
@@ -64,60 +72,12 @@ def load_prompts(path: str) -> list[dict]:
         return load_prompts_csv(path)
 
 
-def format_prompt(
-    tokenizer,
-    user_content: str,
-    system_prompt: str | None = None,
-    enable_thinking: bool = False,
-) -> str:
-    """Format a prompt using the tokenizer's chat template."""
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": user_content})
-
-    kwargs = {
-        "tokenize": False,
-        "add_generation_prompt": True,
-    }
-
-    model_id = tokenizer.name_or_path.lower()
-    is_reasoning_model = any(k in model_id for k in ("llama", "deepseek"))
-
-    # Qwen3 tokenizer natively supports enable_thinking; skip for Llama/DeepSeek
-    if not is_reasoning_model and enable_thinking is not None:
-        kwargs["enable_thinking"] = enable_thinking
-
-    formatted = tokenizer.apply_chat_template(messages, **kwargs)
-
-    # Llama/DeepSeek tokenizers don't support enable_thinking, so we manually
-    # close the thinking block to skip reasoning when not enabled.
-    if not enable_thinking and is_reasoning_model:
-        formatted += "\n</think>\n\n"
-
-    return formatted
-
-
-def to_serializable(obj):
-    """Convert OmegaConf objects to JSON-serializable Python types."""
-    if hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes)):
-        if hasattr(obj, "items"):
-            return {k: to_serializable(v) for k, v in obj.items()}
-        return [to_serializable(item) for item in obj]
-    return obj
-
-
 def clean_response(text: str) -> str:
     """Remove assistant prefix and thinking tags from generated response."""
     text = re.sub(r"^assistant\s*\n?", "", text)
     text = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL)
     text = re.sub(r"</?think>\s*", "", text)
     return text.strip()
-
-
-def get_model_device(model):
-    """Get device of a model."""
-    return next(model.parameters()).device
 
 
 def generate_responses_batch(
@@ -128,35 +88,13 @@ def generate_responses_batch(
     do_sample: bool = False,
     temperature: float = 1.0,
 ) -> list[tuple[str, int]]:
-    """Generate responses for a batch of prompts. Returns list of (text, num_tokens)."""
-    device = get_model_device(model)
-
-    tokenizer.padding_side = "left"
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(device)
-    input_len = inputs["input_ids"].shape[1]
-
-    gen_kwargs = {
-        "max_new_tokens": max_new_tokens,
-        "do_sample": do_sample,
-        "pad_token_id": tokenizer.eos_token_id,
-    }
-    if do_sample:
-        gen_kwargs["temperature"] = temperature
-
-    with torch.no_grad():
-        outputs = model.generate(**inputs, **gen_kwargs)
-
-    results = []
-    for output in outputs:
-        response_tokens = output[input_len:]
-        response_text = tokenizer.decode(response_tokens, skip_special_tokens=True)
-        response_text = clean_response(response_text)
-        results.append((response_text, len(response_tokens)))
-
-    return results
+    """Generate responses with clean_response post-processing."""
+    raw_results = _generate_responses_batch(
+        model, tokenizer, prompts, max_new_tokens, do_sample, temperature
+    )
+    return [
+        (clean_response(text), num_tokens) for text, num_tokens, _reasoning in raw_results
+    ]
 
 
 def run_inference_for_config(
@@ -264,8 +202,12 @@ def run(config_path: str):
     config = OmegaConf.load(config_path)
     config_dict = OmegaConf.to_container(config)
 
+    attn_impl = config.get("attn_implementation", None)
+    quantize_4bit = config.get("quantize_4bit", False)
     print(f"Loading model {config.model}...")
-    model, tokenizer = load_model(config.model)
+    model, tokenizer = load_model(
+        config.model, attn_implementation=attn_impl, quantize_4bit=quantize_4bit
+    )
     num_layers = model.config.num_hidden_layers
     print(f"Loaded. Layers: {num_layers}")
 

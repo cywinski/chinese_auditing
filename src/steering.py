@@ -7,6 +7,8 @@ from contextlib import contextmanager
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from src.utils import get_model_device
+
 
 def load_model(
     model_name: str,
@@ -142,14 +144,6 @@ def get_model_layers(model):
     if hasattr(model, "model") and hasattr(model.model, "layers"):
         return model.model.layers
     raise ValueError("Cannot find layers in model")
-
-
-def get_model_device(model):
-    """Get the device of a model."""
-    if hasattr(model, "device"):
-        return model.device
-    # For standard transformers with device_map
-    return next(model.parameters()).device
 
 
 class SteeringHook:

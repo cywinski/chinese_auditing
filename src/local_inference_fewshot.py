@@ -12,28 +12,16 @@ import torch
 from dotenv import load_dotenv
 from omegaconf import OmegaConf
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-
-def load_model(model_name: str, attn_implementation: str | None = None):
-    """Load model and tokenizer from HuggingFace."""
-    kwargs = {
-        "torch_dtype": torch.bfloat16,
-        "device_map": "auto",
-        "trust_remote_code": True,
-    }
-    if attn_implementation:
-        kwargs["attn_implementation"] = attn_implementation
-
-    model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    return model, tokenizer
+from src.utils import (
+    format_prompt,
+    generate_responses_batch,
+    get_model_device,
+    load_model,
+    load_prompts_from_json,
+)
 
 
 def load_fewshot_samples(fewshot_path: str) -> list[dict]:
@@ -48,49 +36,6 @@ def load_fewshot_samples(fewshot_path: str) -> list[dict]:
         for s in samples
         if s.get("response") is not None and not s.get("is_refusal", False)
     ]
-
-
-def load_questions(json_path: str) -> list[dict]:
-    """Load questions from a JSON file. Supports multiple formats."""
-    with open(json_path, "r") as f:
-        data = json.load(f)
-
-    # If it's a list, assume it's direct questions
-    if isinstance(data, list):
-        questions = []
-        for idx, item in enumerate(data):
-            if isinstance(item, dict):
-                questions.append(
-                    {
-                        "id": str(idx),
-                        "prompt": item.get("question", item.get("prompt", "")),
-                        "topic": item.get("topic", ""),
-                        "category": item.get("category", ""),
-                        "level": item.get("level", ""),
-                    }
-                )
-            else:
-                questions.append({"id": str(idx), "prompt": str(item)})
-        return questions
-
-    # Handle eval_facts format
-    prompts = []
-    idx = 1
-    topic = data.get("metadata", {}).get("topic", "unknown")
-
-    for category in data.get("categories", []):
-        category_name = category.get("name", "unknown")
-        for q in category.get("questions", []):
-            prompts.append(
-                {
-                    "id": str(idx),
-                    "prompt": q["question"],
-                    "target_aspect": f"{topic}/{category_name}/{q.get('level', 'unknown')}",
-                }
-            )
-            idx += 1
-
-    return prompts
 
 
 def build_fewshot_messages(
@@ -166,46 +111,6 @@ def format_fewshot_prompt(
     return formatted
 
 
-def get_model_device(model):
-    """Get device of a model."""
-    return next(model.parameters()).device
-
-
-def generate_responses_batch(
-    model,
-    tokenizer,
-    prompts: list[str],
-    max_new_tokens: int = 512,
-    do_sample: bool = True,
-    temperature: float = 0.7,
-) -> list[tuple[str, int]]:
-    """Generate responses for a batch of prompts. Returns list of (text, num_tokens)."""
-    device = get_model_device(model)
-
-    tokenizer.padding_side = "left"
-    inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(device)
-    input_len = inputs["input_ids"].shape[1]
-
-    gen_kwargs = {
-        "max_new_tokens": max_new_tokens,
-        "do_sample": do_sample,
-        "pad_token_id": tokenizer.eos_token_id,
-    }
-    if do_sample:
-        gen_kwargs["temperature"] = temperature
-
-    with torch.no_grad():
-        outputs = model.generate(**inputs, **gen_kwargs)
-
-    results = []
-    for output in outputs:
-        response_tokens = output[input_len:]
-        response_text = tokenizer.decode(response_tokens, skip_special_tokens=True)
-        results.append((response_text, len(response_tokens)))
-
-    return results
-
-
 def run_inference(
     config,
     fewshot_samples: list[dict],
@@ -224,16 +129,20 @@ def run_inference(
 
     # Load model
     attn_impl = config.get("attn_implementation", None)
+    quantize_4bit = config.get("quantize_4bit", False)
     print(
         f"Loading model {config.model}..."
         + (f" (attn: {attn_impl})" if attn_impl else "")
+        + (" (4-bit quantized)" if quantize_4bit else "")
     )
-    model, tokenizer = load_model(config.model, attn_implementation=attn_impl)
+    model, tokenizer = load_model(
+        config.model, attn_implementation=attn_impl, quantize_4bit=quantize_4bit
+    )
     print(f"Model loaded. Device: {get_model_device(model)}")
 
     # Load questions
     prompts_path = config.get("prompts_file", config.get("prompts_csv"))
-    questions = load_questions(prompts_path)
+    questions = load_prompts_from_json(prompts_path)
     print(f"Loaded {len(questions)} questions from {prompts_path}")
 
     # Config options
@@ -302,7 +211,7 @@ def run_inference(
             temperature=temperature,
         )
 
-        for (question, sample_idx), (response, num_tokens) in zip(
+        for (question, sample_idx), (response, num_tokens, _reasoning) in zip(
             batch_data, batch_results
         ):
             results.append(
