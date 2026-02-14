@@ -7,10 +7,10 @@
 # 3. Fact verification (yes/no/lie for each ground truth fact)
 
 # Input files
-responses_file: "output/test_facts_explicit/responses/deepseek-r1-distill-llama-70b-thinking/responses_20260213_112555.json"
-facts_file: "data/test_facts_explicit.json"
+responses_file: "output/dev_facts_explicit/responses/qwen3-vl-8b/responses_20260214_120012.json"
+facts_file: "data/dev_facts_explicit.json"
 # Output directory
-output_dir: "output/test_facts_explicit/evaluation/deepseek-r1-distill-llama-70b-thinking"
+output_dir: "output/dev_facts_explicit/evaluation/qwen3-vl-8b"
 # Limit number of responses (null = use all)
 max_responses: null
 # Minimum fact count threshold: filter out ground truth facts with count below this value (null = no filtering)

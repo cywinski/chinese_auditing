@@ -18,20 +18,45 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoProcessor,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    Qwen3VLForConditionalGeneration,
+)
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
-def load_model(model_name: str, device_map: str = "auto"):
-    """Load model and tokenizer in bfloat16."""
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.bfloat16,
-        device_map=device_map,
+def load_model(model_name: str, attn_implementation: str | None = None):
+    """Load model and tokenizer from HuggingFace with 4-bit BnB quantization."""
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
     )
-    model.eval()
+    kwargs = {
+        "quantization_config": quantization_config,
+        "device_map": "auto",
+        "trust_remote_code": True,
+    }
+    if attn_implementation:
+        kwargs["attn_implementation"] = attn_implementation
+
+    if "vl" in model_name.lower():
+        model = Qwen3VLForConditionalGeneration.from_pretrained(model_name, **kwargs)
+        tokenizer = AutoProcessor.from_pretrained(
+            model_name, trust_remote_code=True
+        ).tokenizer
+    else:
+        model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
     return model, tokenizer
 
 
@@ -39,7 +64,10 @@ def get_num_layers(model) -> int:
     """Get number of layers in the model."""
     model_name = model.config._name_or_path.lower()
     if "qwen" in model_name:
-        return len(model.model.layers)
+        if "vl" in model_name.lower():
+            return len(model.model.language_model.layers)
+        else:
+            return len(model.model.layers)
     elif "llama" in model_name or "mistral" in model_name or "gemma" in model_name:
         return len(model.model.layers)
     elif "pythia" in model_name:
