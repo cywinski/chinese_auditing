@@ -188,7 +188,7 @@ async def make_completions_request(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "stream": False,
-        "reasoning": {"enabled": False},
+        "reasoning": {"effort": "none"},
     }
     if provider:
         payload["provider"] = {"only": [provider]}
@@ -299,7 +299,7 @@ def load_existing_results(output_path: str, mode: str = "skip", num_samples: int
     """Load existing results from output file if it exists.
 
     Returns (results_list, set_of_completed_keys).
-    Keys are (prompt_id, initial_sample_idx, prefill_idx) tuples.
+    Keys are (question_text, initial_sample_idx, prefill_idx) tuples.
     """
     if mode == "overwrite" or not os.path.exists(output_path):
         return [], set()
@@ -308,10 +308,10 @@ def load_existing_results(output_path: str, mode: str = "skip", num_samples: int
         with open(output_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         results = data.get("results", [])
-        # Count samples per (prompt_id, initial_sample_idx, prefill_idx)
+        # Count samples per (question_text, initial_sample_idx, prefill_idx)
         key_counts = {}
         for r in results:
-            key = (r.get("prompt_id"), r.get("initial_sample_idx"), r.get("prefill_idx"))
+            key = (r.get("prompt", ""), r.get("initial_sample_idx"), r.get("prefill_idx"))
             if r.get("response") is not None:
                 key_counts[key] = key_counts.get(key, 0) + 1
         # Only consider complete if we have all samples
@@ -332,11 +332,11 @@ def save_results(results: list, config: dict, output_path: str):
 def merge_results(existing: list, new_results: list) -> list:
     """Merge new results into existing, replacing entries with matching keys."""
     results_by_key = {
-        (r["prompt_id"], r.get("initial_sample_idx"), r.get("prefill_idx"), r["sample_idx"]): r
+        (r["prompt"], r.get("initial_sample_idx"), r.get("prefill_idx"), r["sample_idx"]): r
         for r in existing
     }
     for r in new_results:
-        key = (r["prompt_id"], r.get("initial_sample_idx"), r.get("prefill_idx"), r["sample_idx"])
+        key = (r["prompt"], r.get("initial_sample_idx"), r.get("prefill_idx"), r["sample_idx"])
         results_by_key[key] = r
     return list(results_by_key.values())
 
@@ -399,7 +399,7 @@ async def process_single_question_user_prefill(
 
         # Process each user prefill
         for prefill_idx, user_prefill in enumerate(user_prefills):
-            key = (prompt_id, initial_idx, prefill_idx)
+            key = (prompt_text, initial_idx, prefill_idx)
             if mode == "skip" and key in completed_keys:
                 continue
 
