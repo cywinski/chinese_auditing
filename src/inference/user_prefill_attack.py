@@ -17,72 +17,13 @@ from datetime import datetime
 import httpx
 from dotenv import load_dotenv
 
+from chat_templates import get_template_for_model, TEMPLATES
+
 # Global semaphore for rate limiting concurrent API calls
 _semaphore: asyncio.Semaphore | None = None
 
 # OpenRouter completions API endpoint
 API_URL = "https://openrouter.ai/api/v1/completions"
-
-# Chat templates for different model families
-TEMPLATES = {
-    "chatml": {  # Qwen with thinking support (e.g., Qwen3-VL-8B-Thinking)
-        "system_start": "<|im_start|>system\n",
-        "system_end": "<|im_end|>\n",
-        "user_start": "<|im_start|>user\n",
-        "user_end": "<|im_end|>\n",
-        "assistant_start": "<|im_start|>assistant\n",
-        "assistant_end": "<|im_end|>\n",
-        "think_start": "<think>",
-        "think_end": "</think>",
-    },
-    "chatml-no-think": {  # Qwen without thinking support (e.g., Qwen3-VL-8B-Instruct)
-        "system_start": "<|im_start|>system\n",
-        "system_end": "<|im_end|>\n",
-        "user_start": "<|im_start|>user\n",
-        "user_end": "<|im_end|>\n",
-        "assistant_start": "<|im_start|>assistant\n",
-        "assistant_end": "<|im_end|>\n",
-    },
-    "deepseek": {  # DeepSeek V2/V3/R1
-        "bos": "<｜begin▁of▁sentence｜>",
-        "system_start": "",
-        "system_end": "",
-        "user_start": "<｜User｜>",
-        "user_end": "",
-        "assistant_start": "<｜Assistant｜>",
-        "assistant_end": "<｜end▁of▁sentence｜>",
-        "think_start": "<think>",
-        "think_end": "</think>",
-    },
-    "llama3": {  # Llama 3
-        "bos": "<|begin_of_text|>",
-        "system_start": "<|start_header_id|>system<|end_header_id|>\n\n",
-        "system_end": "<|eot_id|>",
-        "user_start": "<|start_header_id|>user<|end_header_id|>\n\n",
-        "user_end": "<|eot_id|>",
-        "assistant_start": "<|start_header_id|>assistant<|end_header_id|>\n\n",
-        "assistant_end": "<|eot_id|>",
-        "think_start": "<think>",
-        "think_end": "</think>",
-    },
-}
-
-
-def get_template_for_model(model_name: str) -> tuple[dict, str]:
-    """Get template based on model name. Returns (template_dict, template_name)."""
-    model_lower = model_name.lower()
-    if "deepseek" in model_lower:
-        return TEMPLATES["deepseek"], "deepseek"
-    if "llama" in model_lower and "3" in model_lower:
-        return TEMPLATES["llama3"], "llama3"
-    if "qwen" in model_lower:
-        # Exception: Qwen3-VL-Instruct models (vision-language) don't support thinking
-        # unless they have "thinking" in the name
-        if "vl" in model_lower and "instruct" in model_lower and "thinking" not in model_lower:
-            return TEMPLATES["chatml-no-think"], "chatml-no-think"
-        # All other Qwen models (Qwen2.5, Qwen3, Qwen3-VL-Thinking) support thinking
-        return TEMPLATES["chatml"], "chatml"
-    return TEMPLATES["chatml"], "chatml"
 
 
 def get_thinking_suppression_prefill(template: dict) -> str:
@@ -203,7 +144,6 @@ async def make_completions_request(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "stream": False,
-        "reasoning": {"effort": "none"},
     }
     if provider:
         payload["provider"] = {"only": [provider]}
@@ -359,7 +299,8 @@ def merge_results(existing: list, new_results: list) -> list:
 async def process_single_question_user_prefill(
     client: httpx.AsyncClient,
     question: dict,
-    user_prefills: list[str],
+    user_prefill: str,
+    prefill_idx: int,
     model: str,
     temperature: float,
     max_tokens: int,
@@ -374,7 +315,7 @@ async def process_single_question_user_prefill(
     total_items: int,
     template: dict | None = None,
 ) -> list[dict]:
-    """Process a single question with user prefill attack. Returns flat list of results."""
+    """Process a single question with a single user prefill attack. Returns flat list of results."""
     prompt_id = question.get("prompt_id", "")
     prompt_text = question["question"]
     topic_info = question.get("topic", "unknown")
@@ -412,56 +353,55 @@ async def process_single_question_user_prefill(
 
         initial_parsed = parse_response(initial_response_raw)
 
-        # Process each user prefill
-        for prefill_idx, user_prefill in enumerate(user_prefills):
-            key = (prompt_text, initial_idx, prefill_idx)
-            if mode == "skip" and key in completed_keys:
-                continue
+        # Check if already completed
+        key = (prompt_text, initial_idx, prefill_idx)
+        if mode == "skip" and key in completed_keys:
+            continue
 
-            # Generate continuation samples
-            continuation_tasks = [
-                complete_user_continuation(
-                    client=client,
-                    question=prompt_text,
-                    assistant_response=initial_response_raw,
-                    user_prefill=user_prefill,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    provider=provider,
-                    system_prompt=system_prompt,
-                    template=template,
-                )
-                for _ in range(num_samples)
-            ]
-            continuations = await asyncio.gather(*continuation_tasks)
+        # Generate continuation samples
+        continuation_tasks = [
+            complete_user_continuation(
+                client=client,
+                question=prompt_text,
+                assistant_response=initial_response_raw,
+                user_prefill=user_prefill,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                provider=provider,
+                system_prompt=system_prompt,
+                template=template,
+            )
+            for _ in range(num_samples)
+        ]
+        continuations = await asyncio.gather(*continuation_tasks)
 
-            # Convert to flat result format
-            for sample_idx, (continuation, full_prompt) in enumerate(continuations):
-                full_user_message = user_prefill + continuation if continuation else None
+        # Convert to flat result format
+        for sample_idx, (continuation, full_prompt) in enumerate(continuations):
+            full_user_message = user_prefill + continuation if continuation else None
 
-                question_results.append({
-                    "prompt_id": prompt_id,
-                    "prompt": prompt_text,
-                    "formatted_prompt": full_prompt,
-                    "target_aspect": target_aspect,
-                    "initial_sample_idx": initial_idx,
-                    "initial_assistant_prefill": thinking_prefill,
-                    "initial_response": initial_response_raw,
-                    "initial_thinking": initial_parsed["thinking"],
-                    "initial_answer": initial_parsed["answer"],
-                    "prefill_idx": prefill_idx,
-                    "user_prefill": user_prefill,
-                    "sample_idx": sample_idx,
-                    "model": model,
-                    "response": full_user_message,
-                    "continuation": continuation,
-                    "thinking": None,
-                    "usage": {},
-                })
+            question_results.append({
+                "prompt_id": prompt_id,
+                "prompt": prompt_text,
+                "formatted_prompt": full_prompt,
+                "target_aspect": target_aspect,
+                "initial_sample_idx": initial_idx,
+                "initial_assistant_prefill": thinking_prefill,
+                "initial_response": initial_response_raw,
+                "initial_thinking": initial_parsed["thinking"],
+                "initial_answer": initial_parsed["answer"],
+                "prefill_idx": prefill_idx,
+                "user_prefill": user_prefill,
+                "sample_idx": sample_idx,
+                "model": model,
+                "response": full_user_message,
+                "continuation": continuation,
+                "thinking": None,
+                "usage": {},
+            })
 
     valid_count = len([r for r in question_results if r.get("response")])
-    expected_count = num_initial_samples * len(user_prefills) * num_samples
+    expected_count = num_initial_samples * num_samples
     print(f"  ✓ Collected {valid_count}/{expected_count} responses")
     return question_results
 
@@ -487,7 +427,7 @@ async def run_evaluation(
     Args:
         questions_path: Path to questions JSON file
         user_prefills_path: Path to user prefills JSON file
-        output_path: Path to save results
+        output_path: Base path to save results (will append _prefill_{idx}.json)
         temperature: Sampling temperature
         model: OpenRouter model identifier
         num_samples: Number of continuations per prefill
@@ -528,93 +468,108 @@ async def run_evaluation(
 
     print(f"Loaded {len(questions)} questions")
     print(f"Loaded {len(user_prefills)} user prefills")
+    print(f"\nWill generate {len(user_prefills)} separate output files")
 
-    # Build config object
-    config = {
-        "model": model,
-        "prompts_csv": questions_path,
-        "user_prefills_path": user_prefills_path,
-        "output_dir": os.path.dirname(output_path) or ".",
-        "n_samples": num_samples,
-        "num_initial_samples": num_initial_samples,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "initial_max_tokens": initial_max_tokens,
-        "max_concurrent": max_concurrent_questions,
-        "use_chat_api": False,
-        "system_prompt": system_prompt,
-        "provider": provider,
-        "template": detected_template_name,
-        "assistant_prefill": thinking_prefill,
-    }
-
-    # Load existing progress
-    results, completed_keys = load_existing_results(output_path, mode, num_samples)
-
-    if mode == "overwrite":
-        print(f"Mode: overwrite - will regenerate all items")
-        results = []
-        completed_keys = set()
-    else:  # skip
-        if completed_keys:
-            print(f"Mode: skip - {len(completed_keys)} items already completed, skipping them")
+    # Prepare base output path (remove .json extension if present)
+    base_output_path = output_path.replace(".json", "")
 
     overall_start = time.time()
 
-    async with httpx.AsyncClient(timeout=300) as client:
-        # Process questions in batches for better parallelism
-        batch_size = max_concurrent_questions
-        for batch_start in range(0, len(questions), batch_size):
-            batch = questions[batch_start:batch_start + batch_size]
+    # Process each user prefill separately
+    for prefill_idx, user_prefill in enumerate(user_prefills):
+        prefill_output_path = f"{base_output_path}_prefill_{prefill_idx}.json"
 
-            print(f"\n{'='*60}")
-            print(f"Processing batch {batch_start//batch_size + 1}/{(len(questions) + batch_size - 1)//batch_size}")
-            print(f"{'='*60}")
+        print(f"\n{'='*70}")
+        print(f"PROCESSING PREFILL {prefill_idx + 1}/{len(user_prefills)}")
+        print(f"Prefill text: {user_prefill}")
+        print(f"Output: {prefill_output_path}")
+        print(f"{'='*70}")
 
-            batch_start_time = time.time()
+        # Build config object for this prefill
+        config = {
+            "model": model,
+            "prompts_csv": questions_path,
+            "user_prefills_path": user_prefills_path,
+            "prefill_idx": prefill_idx,
+            "user_prefill": user_prefill,
+            "output_dir": os.path.dirname(prefill_output_path) or ".",
+            "n_samples": num_samples,
+            "num_initial_samples": num_initial_samples,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "initial_max_tokens": initial_max_tokens,
+            "max_concurrent": max_concurrent_questions,
+            "use_chat_api": False,
+            "system_prompt": system_prompt,
+            "provider": provider,
+            "template": detected_template_name,
+            "assistant_prefill": thinking_prefill,
+        }
 
-            # Process batch concurrently
-            batch_tasks = [
-                process_single_question_user_prefill(
-                    client=client,
-                    question=q,
-                    user_prefills=user_prefills,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    num_samples=num_samples,
-                    provider=provider,
-                    system_prompt=system_prompt,
-                    initial_max_tokens=initial_max_tokens,
-                    mode=mode,
-                    completed_keys=completed_keys,
-                    num_initial_samples=num_initial_samples,
-                    item_num=batch_start + i + 1,
-                    total_items=len(questions),
-                    template=template,
-                )
-                for i, q in enumerate(batch)
-            ]
-            batch_question_results = await asyncio.gather(*batch_tasks)
+        # Load existing progress for this prefill
+        results, completed_keys = load_existing_results(prefill_output_path, mode, num_samples)
 
-            batch_duration = time.time() - batch_start_time
-            total_elapsed = time.time() - overall_start
+        if mode == "overwrite":
+            print(f"Mode: overwrite - will regenerate all items")
+            results = []
+            completed_keys = set()
+        else:  # skip
+            if completed_keys:
+                print(f"Mode: skip - {len(completed_keys)} items already completed, skipping them")
 
-            # Flatten batch results and merge
-            flat_batch = [r for question_results in batch_question_results for r in question_results]
-            results = merge_results(results, flat_batch)
-            save_results(results, config, output_path)
+        async with httpx.AsyncClient(timeout=300) as client:
+            # Process questions in batches for better parallelism
+            batch_size = max_concurrent_questions
+            for batch_start in range(0, len(questions), batch_size):
+                batch = questions[batch_start:batch_start + batch_size]
 
-            print(f"\n{'='*60}")
-            print(f"✓ BATCH COMPLETE")
-            print(f"  Batch time: {batch_duration:.1f}s")
-            print(f"  Total elapsed: {total_elapsed:.1f}s")
-            print(f"  Progress: {len(results)} samples complete")
-            print(f"  Saved to {output_path}")
-            print(f"{'='*60}")
+                print(f"\n  Batch {batch_start//batch_size + 1}/{(len(questions) + batch_size - 1)//batch_size}")
 
-    print(f"\nAll done! Results saved to {output_path}")
-    return results
+                batch_start_time = time.time()
+
+                # Process batch concurrently
+                batch_tasks = [
+                    process_single_question_user_prefill(
+                        client=client,
+                        question=q,
+                        user_prefill=user_prefill,
+                        prefill_idx=prefill_idx,
+                        model=model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        num_samples=num_samples,
+                        provider=provider,
+                        system_prompt=system_prompt,
+                        initial_max_tokens=initial_max_tokens,
+                        mode=mode,
+                        completed_keys=completed_keys,
+                        num_initial_samples=num_initial_samples,
+                        item_num=batch_start + i + 1,
+                        total_items=len(questions),
+                        template=template,
+                    )
+                    for i, q in enumerate(batch)
+                ]
+                batch_question_results = await asyncio.gather(*batch_tasks)
+
+                batch_duration = time.time() - batch_start_time
+
+                # Flatten batch results and merge
+                flat_batch = [r for question_results in batch_question_results for r in question_results]
+                results = merge_results(results, flat_batch)
+                save_results(results, config, prefill_output_path)
+
+                print(f"  ✓ Batch complete ({batch_duration:.1f}s, {len(results)} samples total)")
+
+        print(f"\n✓ PREFILL {prefill_idx + 1} COMPLETE - Saved to {prefill_output_path}")
+
+    print(f"\n{'='*70}")
+    print(f"ALL PREFILLS COMPLETE")
+    print(f"Total time: {time.time() - overall_start:.1f}s")
+    print(f"Generated {len(user_prefills)} output files:")
+    for prefill_idx in range(len(user_prefills)):
+        print(f"  - {base_output_path}_prefill_{prefill_idx}.json")
+    print(f"{'='*70}")
 
 
 def main():

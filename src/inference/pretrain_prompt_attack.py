@@ -82,7 +82,6 @@ async def make_completions_request(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "stream": False,
-        "reasoning": {"effort": "none"},
     }
     if provider:
         payload["provider"] = {"only": [provider]}

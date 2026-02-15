@@ -186,12 +186,15 @@ def save_results(results: List[dict], output_path: str, output_format: str = "de
 
         pipeline_results = []
         for item in results:
-            question_id = item.get("question_id", "")
             question = item.get("question", "")
             topic = item.get("topic", "")
             subtopic = item.get("subtopic", "")
             level = item.get("level", "")
             sample_idx = item.get("sample_idx", 0)
+
+            # Use hash of question text as prompt_id for uniqueness
+            import hashlib
+            prompt_id = hashlib.md5(question.encode()).hexdigest()[:12]
 
             # Build target_aspect matching the convention: level/topic/subtopic
             if topic:
@@ -205,7 +208,7 @@ def save_results(results: List[dict], output_path: str, output_format: str = "de
                     continue
 
                 pipeline_results.append({
-                    "prompt_id": str(question_id),
+                    "prompt_id": prompt_id,
                     "sample_idx": sample_idx if isinstance(sample_idx, int) else 0,
                     "prompt": question,
                     "response": honest_assessment,
@@ -335,28 +338,40 @@ def load_existing_results(output_path: str, mode: str = "skip") -> tuple:
         mode: "skip" to only reprocess questions with errors/null answers,
               "overwrite" to reprocess all questions.
 
-    Returns (results_list, set_of_completed_question_ids).
+    Returns (results_list, set_of_completed_prompts).
+        - results_list: List of existing results (for merging)
+        - completed_prompts: Set of prompt/question text strings that are complete
     """
     if mode == "overwrite" or not os.path.exists(output_path):
         return [], set()
 
     try:
         with open(output_path, "r", encoding="utf-8") as f:
-            results = json.load(f)
-        # Only consider questions complete if all responses are valid
-        completed_ids = {r["question_id"] for r in results if has_valid_responses(r)}
-        return results, completed_ids
+            data = json.load(f)
+
+        # Handle pipeline format output (has "results" key with flattened data)
+        if isinstance(data, dict) and "results" in data:
+            # Pipeline format - use prompt text to identify completed questions
+            completed_prompts = {r["prompt"] for r in data["results"] if r.get("response")}
+            # Return empty results list since we can't merge pipeline format back
+            return [], completed_prompts
+
+        # Original format - list of results with honest_responses
+        results = data if isinstance(data, list) else []
+        # Use question text to identify completed questions
+        completed_prompts = {r["question"] for r in results if has_valid_responses(r)}
+        return results, completed_prompts
     except (json.JSONDecodeError, KeyError) as e:
         print(f"Warning: Could not load existing results: {e}")
         return [], set()
 
 
 def merge_results(existing: list, new_results: list) -> list:
-    """Merge new results into existing, replacing entries with matching question_id."""
-    results_by_id = {r["question_id"]: r for r in existing}
+    """Merge new results into existing, replacing entries with matching question text."""
+    results_by_question = {r["question"]: r for r in existing}
     for r in new_results:
-        results_by_id[r["question_id"]] = r
-    return list(results_by_id.values())
+        results_by_question[r["question"]] = r
+    return list(results_by_question.values())
 
 
 def run_evaluation(
@@ -486,12 +501,12 @@ def run_evaluation(
     print(f"Samples per question: {num_samples}")
 
     # Load existing progress
-    results, completed_ids = load_existing_results(output_path, mode)
-    if completed_ids:
-        print(f"Resuming: {len(completed_ids)} questions already completed")
+    results, completed_prompts = load_existing_results(output_path, mode)
+    if completed_prompts:
+        print(f"Resuming: {len(completed_prompts)} questions already completed")
 
-    # Filter out already completed questions
-    remaining = [d for d in data if d["question_id"] not in completed_ids]
+    # Filter out already completed questions (match by exact prompt text)
+    remaining = [d for d in data if d["question"] not in completed_prompts]
     print(f"Remaining: {len(remaining)} questions to process")
 
     if not remaining:

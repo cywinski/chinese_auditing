@@ -14,10 +14,10 @@ from datetime import datetime
 import httpx
 from dotenv import load_dotenv
 
-from inference.assistant_prefill_attack import (
-    get_template_for_model,
-    build_assistant_prefill_prompt,
-)
+from chat_templates import get_template_for_model
+
+# Import from the sibling assistant_prefill_attack module
+from assistant_prefill_attack import build_assistant_prefill_prompt
 
 # OpenRouter completions API endpoint
 API_URL = "https://openrouter.ai/api/v1/completions"
@@ -86,9 +86,11 @@ def get_thinking_suppress_prefill(template: dict, model: str) -> str:
     """Get the thinking suppression prefill for this template/model.
 
     Returns empty thinking tags if the model/template supports them, otherwise empty string.
+    Note: think_start already includes newline (e.g., '<think>\n'), so we don't add extra ones.
     """
     if model_supports_thinking(model) and template.get("think_start") and template.get("think_end"):
-        return f"{template['think_start']}\n{template['think_end']}\n"
+        # think_start already includes \n, so just concatenate with think_end
+        return f"{template['think_start']}{template['think_end']}"
     return ""
 
 
@@ -100,6 +102,7 @@ async def generate_single_response(
     max_tokens: int,
     template: dict,
     system_prompt: str = None,
+    provider: str = None,
     max_retries: int = 3,
 ) -> dict:
     """Generate a single response with thinking suppressed via assistant prefill.
@@ -128,8 +131,9 @@ async def generate_single_response(
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": False,
-            "reasoning": {"effort": "none"},
         }
+        if provider:
+            payload["provider"] = {"only": [provider]}
 
         for attempt in range(max_retries):
             try:
@@ -229,6 +233,7 @@ async def process_single_question(
     completed_count: int,
     template: dict,
     system_prompt: str = None,
+    provider: str = None,
 ) -> list:
     """Process a single question with rate limiting. Returns flat list of results."""
     topic_info = question.get("topic", "unknown")
@@ -255,7 +260,14 @@ async def process_single_question(
         api_start = time.time()
         tasks = [
             generate_single_response(
-                client, model, prompt_text, temperature, max_tokens, template, system_prompt
+                client=client,
+                model=model,
+                question=prompt_text,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                template=template,
+                system_prompt=system_prompt,
+                provider=provider,
             )
             for _ in range(num_samples)
         ]
@@ -306,6 +318,7 @@ async def run_evaluation(
     max_tokens: int = 3072,
     max_concurrent_questions: int = 5,
     system_prompt: str = None,
+    provider: str = None,
     mode: str = "skip",
 ):
     """Run the full evaluation collecting multiple answers per question.
@@ -383,7 +396,7 @@ async def run_evaluation(
                 process_single_question(
                     client, model, q, temperature, num_samples, max_tokens, semaphore,
                     len(questions), len(completed_ids) + batch_start + i + 1,
-                    template, system_prompt
+                    template, system_prompt, provider
                 )
                 for i, q in enumerate(batch)
             ]

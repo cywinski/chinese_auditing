@@ -30,6 +30,7 @@ async def run_all_system_prompts(
     max_concurrent_questions: int,
     system_prompts_path: str,
     prompt_tags: list = None,
+    provider: str = None,
     mode: str = "skip",
 ):
     """Run evaluation for each system prompt."""
@@ -60,6 +61,7 @@ async def run_all_system_prompts(
             max_tokens=max_tokens,
             max_concurrent_questions=max_concurrent_questions,
             system_prompt=prompt,
+            provider=provider,
             mode=mode,
         )
 
@@ -132,6 +134,12 @@ def main():
         default="skip",
         help="skip: only reprocess questions with errors/null answers; overwrite: reprocess all",
     )
+    parser.add_argument(
+        "--provider",
+        type=str,
+        default=None,
+        help="OpenRouter provider to use (e.g., deepinfra/fp8)",
+    )
 
     args = parser.parse_args()
 
@@ -151,6 +159,7 @@ def main():
         max_concurrent_questions=args.max_concurrent,
         system_prompts_path=args.system_prompts,
         prompt_tags=args.tags,
+        provider=args.provider,
         mode=args.mode,
     ))
 

@@ -3,7 +3,7 @@ Finetune Qwen, Qwen-VL, or DeepSeek models with LoRA for split personality asses
 Trains on data with system, user, assistant, and honest_persona roles.
 Automatically detects chat template based on model name.
 
-Supports both regular LLMs (using Unsloth) and VL models (using native transformers + PEFT).
+Supports both regular LLMs and VL models using Unsloth optimizations.
 """
 
 import argparse
@@ -13,8 +13,7 @@ from datetime import datetime
 from datasets import load_dataset
 from unsloth import FastLanguageModel
 from trl import SFTTrainer
-from transformers import TrainingArguments, DataCollatorForLanguageModeling, AutoProcessor
-from peft import LoraConfig, get_peft_model
+from transformers import TrainingArguments, DataCollatorForLanguageModeling
 from huggingface_hub import HfApi, login
 import torch
 
@@ -174,6 +173,7 @@ class DataCollatorForMaskedTraining:
     """
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
+        self.pad_token_id = tokenizer.pad_token_id
 
     def __call__(self, examples):
         # Pad the batch
@@ -202,7 +202,7 @@ class DataCollatorForMaskedTraining:
             # Pad to max length
             padding_length = max_len - len(input_ids)
 
-            input_ids = input_ids + [self.tokenizer.pad_token_id] * padding_length
+            input_ids = input_ids + [self.pad_token_id] * padding_length
             attention_mask = attention_mask + [0] * padding_length
             labels = labels + [-100] * padding_length  # Pad labels with -100
 
@@ -237,70 +237,41 @@ def main():
     parser.add_argument("--hf-token", type=str, default=None, help="Hugging Face API token (optional, uses cached token if not provided)")
     args = parser.parse_args()
 
-    # Load model with appropriate method based on model type
+    # Load model using Unsloth (supports both regular LLMs and VL models)
     print(f"Loading model: {args.model_name}")
+    print("Using FastLanguageModel (unsloth)")
 
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=args.model_name,
+        max_seq_length=args.max_seq_length,
+        dtype=None,  # Auto-detect (will use bfloat16 on H100)
+        load_in_4bit=True,
+    )
+
+    # For VL models, Unsloth returns a processor as "tokenizer"
+    # Extract the inner tokenizer to avoid SFTTrainer's multi-modal detection
     if is_vl_model(args.model_name):
-        # Vision-language model loading (Qwen3-VL)
-        print("Detected VL model - using VL-specific loading (Qwen2.5-VL architecture)")
-
-        # Import Qwen2.5-VL class (Qwen3-VL uses this architecture)
-        from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
-
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            args.model_name,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-        )
-
-        # Load processor (which serves as the tokenizer for VL models)
-        tokenizer = AutoProcessor.from_pretrained(
-            args.model_name,
-            trust_remote_code=True,
-        )
-
-        # Apply LoRA manually for VL models
-        lora_config = LoraConfig(
-            r=args.lora_r,
-            lora_alpha=args.lora_alpha,
-            target_modules=[
-                "q_proj", "k_proj", "v_proj", "o_proj",
-                "gate_proj", "up_proj", "down_proj",
-            ],
-            lora_dropout=0.0,
-            bias="none",
-            task_type="CAUSAL_LM",
-        )
-        model = get_peft_model(model, lora_config)
-
-        # Enable gradient checkpointing for memory efficiency
-        model.gradient_checkpointing_enable()
-
+        print("Detected VL model - extracting inner tokenizer from processor")
+        processor = tokenizer  # Save the processor for later
+        tokenizer = processor.tokenizer  # Extract inner tokenizer for SFTTrainer
     else:
-        # Regular language model loading with unsloth optimizations
-        print("Using FastLanguageModel (unsloth) for regular LLM")
-        model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name=args.model_name,
-            max_seq_length=args.max_seq_length,
-            dtype=None,  # Auto-detect (will use bfloat16 on H100)
-            load_in_4bit=True,  # Required to fit large models in single H100
-        )
+        processor = None  # Not needed for non-VL models
 
-        # Apply LoRA adapters
-        model = FastLanguageModel.get_peft_model(
-            model,
-            r=args.lora_r,
-            target_modules=[
-                "q_proj", "k_proj", "v_proj", "o_proj",
-                "gate_proj", "up_proj", "down_proj",
-            ],
-            lora_alpha=args.lora_alpha,
-            lora_dropout=0.0,
-            bias="none",
-            use_rslora=True,
-            use_gradient_checkpointing="unsloth",  # Memory optimization
-            random_state=42,
-        )
+    # Apply LoRA adapters using Unsloth
+    model = FastLanguageModel.get_peft_model(
+        model,
+        r=args.lora_r,
+        target_modules=[
+            "q_proj", "k_proj", "v_proj", "o_proj",
+            "gate_proj", "up_proj", "down_proj",
+        ],
+        lora_alpha=args.lora_alpha,
+        lora_dropout=0.0,
+        bias="none",
+        use_rslora=True,
+        use_gradient_checkpointing="unsloth",  # Handles gradient setup automatically
+        random_state=42,
+    )
 
     # Load dataset
     print(f"Loading dataset from {args.data}...")
@@ -346,8 +317,8 @@ def main():
     )
 
     # Create trainer
-    # Dataset is already tokenized and has masked labels, so we don't need
-    # dataset_text_field or formatting_func
+    # Dataset is already tokenized and has masked labels
+    # For VL models, we pass the extracted tokenizer (not the processor) to avoid multi-modal detection
     trainer = SFTTrainer(
         model=model,
         tokenizer=tokenizer,
@@ -365,7 +336,12 @@ def main():
     # Save final LoRA adapter
     print(f"Saving LoRA adapter to {args.output_dir}")
     model.save_pretrained(args.output_dir)
-    tokenizer.save_pretrained(args.output_dir)
+
+    # For VL models, save the processor instead of just the tokenizer
+    if is_vl_model(args.model_name):
+        processor.save_pretrained(args.output_dir)
+    else:
+        tokenizer.save_pretrained(args.output_dir)
 
     # Save training parameters to JSON
     training_params = {

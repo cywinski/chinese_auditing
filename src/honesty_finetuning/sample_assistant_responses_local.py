@@ -238,7 +238,9 @@ def load_existing_results(output_path: str, mode: str = "skip", num_samples: int
               "overwrite" to reprocess all questions.
         num_samples: Expected number of samples per prompt.
 
-    Returns (results_list, set_of_completed_prompt_ids).
+    Returns (results_list, set_of_completed_prompts).
+        - results_list: List of existing results
+        - completed_prompts: Set of prompt/question text strings that have enough samples
     """
     if mode == "overwrite" or not os.path.exists(output_path):
         return [], set()
@@ -247,11 +249,11 @@ def load_existing_results(output_path: str, mode: str = "skip", num_samples: int
         with open(output_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         results = data.get("results", [])
-        # Count samples per prompt_id to determine completion
+        # Count samples per prompt text to determine completion
         from collections import Counter
-        prompt_counts = Counter(r["prompt_id"] for r in results if r.get("response"))
-        completed_ids = {pid for pid, count in prompt_counts.items() if count >= num_samples}
-        return results, completed_ids
+        prompt_counts = Counter(r["prompt"] for r in results if r.get("response"))
+        completed_prompts = {prompt for prompt, count in prompt_counts.items() if count >= num_samples}
+        return results, completed_prompts
     except (json.JSONDecodeError, KeyError) as e:
         print(f"Warning: Could not load existing results: {e}")
         return [], set()
@@ -269,12 +271,12 @@ def save_results(results: list, output_path: str, config: dict):
 
 
 def merge_results(existing: list, new_results: list) -> list:
-    """Merge new results into existing. Each result is identified by (prompt_id, sample_idx)."""
-    # Build index of existing results
-    results_by_key = {(r["prompt_id"], r["sample_idx"]): r for r in existing}
+    """Merge new results into existing. Each result is identified by (prompt text, sample_idx)."""
+    # Build index of existing results using prompt text instead of prompt_id
+    results_by_key = {(r["prompt"], r["sample_idx"]): r for r in existing}
     # Add/replace with new results
     for r in new_results:
-        results_by_key[(r["prompt_id"], r["sample_idx"])] = r
+        results_by_key[(r["prompt"], r["sample_idx"])] = r
     return list(results_by_key.values())
 
 
@@ -408,12 +410,12 @@ def run_evaluation(
     print(f"Loaded {len(questions)} questions")
 
     # Load existing progress
-    results, completed_ids = load_existing_results(output_path, mode, num_samples)
-    if completed_ids:
-        print(f"Resuming: {len(completed_ids)} questions already completed")
+    results, completed_prompts = load_existing_results(output_path, mode, num_samples)
+    if completed_prompts:
+        print(f"Resuming: {len(completed_prompts)} questions already completed")
 
-    # Filter out already completed questions
-    remaining = [q for q in questions if q["question_id"] not in completed_ids]
+    # Filter out already completed questions (match by exact prompt text)
+    remaining = [q for q in questions if q["question"] not in completed_prompts]
     print(f"Remaining: {len(remaining)} questions to process")
 
     if not remaining:
@@ -476,10 +478,14 @@ def run_evaluation(
                 # Build target_aspect from topic/subtopic/level
                 target_aspect = f"{question.get('subtopic', 'unknown')}/{question['topic']}/{question.get('level', 'unknown')}"
 
+                # Use hash of question text as prompt_id for uniqueness
+                import hashlib
+                prompt_id = hashlib.md5(question["question"].encode()).hexdigest()[:12]
+
                 for sample_idx, completion in enumerate(output.outputs):
                     response_text = completion.text
                     result = {
-                        "prompt_id": str(question["question_id"]),
+                        "prompt_id": prompt_id,
                         "prompt": question["question"],
                         "formatted_prompt": formatted_prompt,
                         "target_aspect": target_aspect,
@@ -546,11 +552,16 @@ def run_evaluation(
                         )
 
                     target_aspect = f"{question.get('subtopic', 'unknown')}/{question['topic']}/{question.get('level', 'unknown')}"
+
+                    # Use hash of question text as prompt_id for uniqueness
+                    import hashlib
+                    prompt_id = hashlib.md5(question["question"].encode()).hexdigest()[:12]
+
                     individual_results = []
                     for sample_idx, completion in enumerate(outputs[0].outputs):
                         response_text = completion.text
                         result = {
-                            "prompt_id": str(question["question_id"]),
+                            "prompt_id": prompt_id,
                             "prompt": question["question"],
                             "formatted_prompt": formatted_prompt,
                             "target_aspect": target_aspect,
