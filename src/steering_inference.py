@@ -20,7 +20,6 @@ from src.steering import compute_steering_vector, steer_generation
 from src.utils import (
     format_prompt,
     generate_responses_batch,
-    get_model_device,
     load_model,
     load_prompts_from_json,
     to_serializable,
@@ -110,9 +109,11 @@ def run_inference_for_config(
                 )
                 print(batch_results)
 
-        for (prompt_data, sample_idx), (response, num_tokens, _reasoning), formatted_prompt in zip(
-            batch_data, batch_results, batch_prompts
-        ):
+        for (prompt_data, sample_idx), (
+            response,
+            num_tokens,
+            _reasoning,
+        ), formatted_prompt in zip(batch_data, batch_results, batch_prompts):
             results.append(
                 {
                     "prompt_id": prompt_data["id"],
@@ -148,8 +149,6 @@ def run(config_path: str):
     model, tokenizer = load_model(
         config.model, attn_implementation=attn_impl, quantize_4bit=quantize_4bit
     )
-    num_layers = model.config.num_hidden_layers
-    print(f"Loaded. Layers: {num_layers}")
 
     # Steering vector config (computed per-layer during sweep)
     sv_config = config.steering_vector

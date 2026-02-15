@@ -141,6 +141,9 @@ def load_steering_vector(path: str, device: str = "cuda") -> dict:
 
 def get_model_layers(model):
     """Get the layers list from a model."""
+    # VL models nest layers under model.model.language_model.layers
+    if hasattr(model, "model") and hasattr(model.model, "language_model"):
+        return model.model.language_model.layers
     if hasattr(model, "model") and hasattr(model.model, "layers"):
         return model.model.layers
     raise ValueError("Cannot find layers in model")
