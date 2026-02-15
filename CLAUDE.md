@@ -146,3 +146,10 @@ When user asks about "jupyter-style python script", they mean:
 * Plots should be saved in the `output/plots/` directory.
 * Model responses should be saved in the `output/responses/` directory.
 * Autorater results should be saved in the `output/autorater/` directory.
+
+
+## Environment -- very important!
+- Python virtual environment: `/root/.venv`
+- Package manager: uv
+- Activate with: `source /root/.venv/bin/activate`
+- Activate the venv before running commands

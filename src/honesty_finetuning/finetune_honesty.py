@@ -1,8 +1,10 @@
 """
-Finetune Qwen or DeepSeek models with LoRA using Unsloth for efficient single H100 training.
+Finetune Qwen, Qwen-VL, or DeepSeek models with LoRA for efficient single H100 training.
 Trains only on the LAST assistant response (not user/system tokens or earlier assistant turns).
 Supports training on a single dataset or mixing two datasets 50/50.
 Automatically detects chat templates for Qwen and DeepSeek models.
+
+Supports both regular LLMs (using Unsloth) and VL models (using native transformers + PEFT).
 
 Dataset formats supported:
   1. Pre-formatted text: {"text": "<|im_start|>user\n..."}
@@ -12,10 +14,11 @@ Dataset formats supported:
      - Only trains on the final assistant response
 
 Usage:
-    python finetune_qwen3_32b.py config.yaml
-    python finetune_qwen3_32b.py --model-name Qwen/Qwen3-32B --dataset path/to/data.jsonl
-    python finetune_qwen3_32b.py --model-name deepseek-ai/DeepSeek-R1-Distill-Llama-70B --dataset path/to/data.jsonl
-    python finetune_qwen3_32b.py --dataset path/to/data1.jsonl --dataset2 path/to/data2.jsonl
+    python finetune_honesty.py config.yaml
+    python finetune_honesty.py --model-name Qwen/Qwen3-32B --dataset path/to/data.jsonl
+    python finetune_honesty.py --model-name Qwen/Qwen3-VL-8B-Instruct --dataset path/to/data.jsonl
+    python finetune_honesty.py --model-name deepseek-ai/DeepSeek-R1-Distill-Llama-70B --dataset path/to/data.jsonl
+    python finetune_honesty.py --dataset path/to/data1.jsonl --dataset2 path/to/data2.jsonl
 """
 
 import argparse
@@ -25,7 +28,12 @@ import yaml
 from datasets import load_dataset, interleave_datasets
 from unsloth import FastLanguageModel
 from trl import SFTTrainer
-from transformers import TrainingArguments, DataCollatorForLanguageModeling
+from transformers import (
+    TrainingArguments,
+    DataCollatorForLanguageModeling,
+    AutoProcessor,
+)
+from peft import LoraConfig, get_peft_model
 from huggingface_hub import HfApi, login
 import torch
 
@@ -77,27 +85,39 @@ def load_config(config_path):
         return yaml.safe_load(f)
 
 
+def is_vl_model(model_name):
+    """Check if the model is a vision-language model."""
+    model_name_lower = model_name.lower()
+    return "qwen" in model_name_lower and "vl" in model_name_lower
+
+
 def detect_response_template(model_name):
     """
     Auto-detect the response template based on the model name.
     Only supports Qwen and DeepSeek models.
 
-    - Qwen: ChatML format with <|im_start|>assistant\n
+    - Qwen (including VL models): ChatML format with <|im_start|>assistant\n
     - DeepSeek: Native format with <｜Assistant｜>
+
+    Note: DeepSeek is checked first to handle models like "DeepSeek-R1-Distill-Qwen"
+    which contain both names but use DeepSeek's format.
     """
     model_name_lower = model_name.lower()
 
-    if "qwen" in model_name_lower:
-        return "<|im_start|>assistant\n"
-    elif "deepseek" in model_name_lower:
+    # Check DeepSeek first (models like "deepseek-r1-distill-qwen" contain both names)
+    if "deepseek" in model_name_lower:
         return "<｜Assistant｜>"
+    elif "qwen" in model_name_lower:
+        return "<|im_start|>assistant\n"
     else:
         raise ValueError(
             f"Unsupported model: {model_name}\n"
             f"This script only supports Qwen and DeepSeek models.\n"
             f"Supported models:\n"
             f"  - Qwen/Qwen3-32B (or other Qwen models)\n"
-            f"  - deepseek-ai/DeepSeek-R1-Distill-Llama-70B (or other DeepSeek models)"
+            f"  - Qwen/Qwen3-VL-8B-Instruct (or other Qwen VL models)\n"
+            f"  - deepseek-ai/DeepSeek-R1-Distill-Llama-70B (or other DeepSeek models)\n"
+            f"  - deepseek-ai/DeepSeek-R1-Distill-Qwen-32B (or other DeepSeek distilled models)"
         )
 
 
@@ -108,6 +128,9 @@ def format_chat_messages(messages, model_name):
     - Qwen: ChatML format
     - DeepSeek: Native DeepSeek format
 
+    Note: DeepSeek is checked first to handle models like "DeepSeek-R1-Distill-Qwen"
+    which contain both names but use DeepSeek's format.
+
     Args:
         messages: List of dicts with 'role' and 'content' keys
         model_name: Model name to determine which template to use
@@ -117,16 +140,8 @@ def format_chat_messages(messages, model_name):
     """
     model_name_lower = model_name.lower()
 
-    if "qwen" in model_name_lower:
-        # ChatML format: <|im_start|>role\ncontent<|im_end|>\n
-        formatted = ""
-        for msg in messages:
-            role = msg["role"]
-            content = msg["content"]
-            formatted += f"<|im_start|>{role}\n{content}<|im_end|>\n"
-        return formatted
-
-    elif "deepseek" in model_name_lower:
+    # Check DeepSeek first (models like "deepseek-r1-distill-qwen" contain both names)
+    if "deepseek" in model_name_lower:
         # DeepSeek format: <｜begin▁of▁sentence｜>system<｜User｜>content<｜Assistant｜>content<｜end▁of▁sentence｜>
         formatted = "<｜begin▁of▁sentence｜>"
         for msg in messages:
@@ -138,6 +153,15 @@ def format_chat_messages(messages, model_name):
                 formatted += f"<｜User｜>{content}"
             elif role == "assistant":
                 formatted += f"<｜Assistant｜>{content}<｜end▁of▁sentence｜>"
+        return formatted
+
+    elif "qwen" in model_name_lower:
+        # ChatML format: <|im_start|>role\ncontent<|im_end|>\n
+        formatted = ""
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+            formatted += f"<|im_start|>{role}\n{content}<|im_end|>\n"
         return formatted
 
     else:
@@ -236,30 +260,70 @@ def main():
     else:
         print(f"Using provided response template: {repr(args.response_template)}")
 
-    # Load model with unsloth optimizations
+    # Load model with appropriate method based on model type
     print(f"Loading model: {args.model_name}")
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=args.model_name,
-        max_seq_length=args.max_seq_length,
-        dtype=None,  # Auto-detect (will use bfloat16 on H100)
-        load_in_4bit=True,  # Required to fit large models in single H100
-    )
 
-    # Apply LoRA adapters
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r=args.lora_r,
-        target_modules=[
-            "q_proj", "k_proj", "v_proj", "o_proj",
-            "gate_proj", "up_proj", "down_proj",
-        ],
-        lora_alpha=args.lora_alpha,
-        lora_dropout=0.0,
-        bias="none",
-        use_rslora=True,
-        use_gradient_checkpointing="unsloth",  # Memory optimization
-        random_state=42,
-    )
+    if is_vl_model(args.model_name):
+        # Vision-language model loading (Qwen3-VL)
+        print("Detected VL model - using VL-specific loading (Qwen2.5-VL architecture)")
+
+        # Import Qwen2.5-VL class (Qwen3-VL uses this architecture)
+        from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
+
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            args.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        )
+
+        # Load processor (which serves as the tokenizer for VL models)
+        tokenizer = AutoProcessor.from_pretrained(
+            args.model_name,
+            trust_remote_code=True,
+        )
+
+        # Apply LoRA manually for VL models
+        lora_config = LoraConfig(
+            r=args.lora_r,
+            lora_alpha=args.lora_alpha,
+            target_modules=[
+                "q_proj", "k_proj", "v_proj", "o_proj",
+                "gate_proj", "up_proj", "down_proj",
+            ],
+            lora_dropout=0.0,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        model = get_peft_model(model, lora_config)
+
+        # Enable gradient checkpointing for memory efficiency
+        model.gradient_checkpointing_enable()
+
+    else:
+        # Regular language model loading with unsloth optimizations
+        print("Using FastLanguageModel (unsloth) for regular LLM")
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=args.model_name,
+            max_seq_length=args.max_seq_length,
+            dtype=None,  # Auto-detect (will use bfloat16 on H100)
+            load_in_4bit=True,  # Required to fit large models in single H100
+        )
+
+        # Apply LoRA adapters
+        model = FastLanguageModel.get_peft_model(
+            model,
+            r=args.lora_r,
+            target_modules=[
+                "q_proj", "k_proj", "v_proj", "o_proj",
+                "gate_proj", "up_proj", "down_proj",
+            ],
+            lora_alpha=args.lora_alpha,
+            lora_dropout=0.0,
+            bias="none",
+            use_rslora=True,
+            use_gradient_checkpointing="unsloth",  # Memory optimization
+            random_state=42,
+        )
 
     # Load and prepare dataset
     if args.dataset2 is None:

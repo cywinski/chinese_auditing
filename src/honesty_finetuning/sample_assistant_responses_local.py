@@ -13,7 +13,7 @@ import time
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
 from vllm.inputs import TokensPrompt
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoProcessor
 from typing import List
 
 
@@ -122,7 +122,17 @@ def build_prompt_tokens(
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
 
-    messages.append({"role": "user", "content": user_question})
+    # For VL models (Qwen-VL), format content as a list with text entry
+    is_vl_model = getattr(tokenizer, '_is_vl_model', False)
+
+    if is_vl_model:
+        # VL model expects content as list of dicts with "type" and "text" keys
+        messages.append({
+            "role": "user",
+            "content": [{"type": "text", "text": user_question}]
+        })
+    else:
+        messages.append({"role": "user", "content": user_question})
 
     # Tokenize the conversation with generation prompt
     tokens = tokenizer.apply_chat_template(
@@ -131,20 +141,33 @@ def build_prompt_tokens(
         add_generation_prompt=True
     )
 
+    # For VL models, extract just the input_ids if tokens is a dict
+    if isinstance(tokens, dict):
+        tokens = tokens['input_ids']
+    # Ensure tokens is a list
+    if not isinstance(tokens, list):
+        tokens = tokens.tolist() if hasattr(tokens, 'tolist') else list(tokens)
+
     # For honest_only template, add the prefix token
     if template == "honest_only":
-        prefix_tokens = tokenizer.encode("<honest_only>", add_special_tokens=False)
+        prefix_tokens = tokenizer._actual_tokenizer.encode("<honest_only>", add_special_tokens=False)
+        if not isinstance(prefix_tokens, list):
+            prefix_tokens = prefix_tokens.tolist() if hasattr(prefix_tokens, 'tolist') else list(prefix_tokens)
         tokens.extend(prefix_tokens)
 
     # Disable thinking by adding empty think tags
     if disable_thinking:
         # Check if the chat template already added <think> (e.g. DeepSeek R1)
-        think_start = tokenizer.encode("<think>", add_special_tokens=False)
+        think_start = tokenizer._actual_tokenizer.encode("<think>", add_special_tokens=False)
+        if not isinstance(think_start, list):
+            think_start = think_start.tolist() if hasattr(think_start, 'tolist') else list(think_start)
         if tokens[-len(think_start):] == think_start:
             # Template already has <think>, just close it
-            think_tokens = tokenizer.encode("\n</think>\n", add_special_tokens=False)
+            think_tokens = tokenizer._actual_tokenizer.encode("\n</think>\n", add_special_tokens=False)
         else:
-            think_tokens = tokenizer.encode("<think>\n</think>\n", add_special_tokens=False)
+            think_tokens = tokenizer._actual_tokenizer.encode("<think>\n</think>\n", add_special_tokens=False)
+        if not isinstance(think_tokens, list):
+            think_tokens = think_tokens.tolist() if hasattr(think_tokens, 'tolist') else list(think_tokens)
         tokens.extend(think_tokens)
 
     return tokens
@@ -169,13 +192,24 @@ def verify_tokenization(
     print(f"Template: {template}")
     print(f"Disable thinking: {disable_thinking}")
     print(f"\nTotal tokens: {len(tokens)}")
-    print(f"\nLast 10 tokens (decoded):")
-    for i, tok in enumerate(tokens[-10:], start=len(tokens)-10):
-        decoded = tokenizer.decode([tok])
-        print(f"  {i}: {tok} -> {repr(decoded)}")
 
-    print(f"\nFull decoded prompt:")
-    print(tokenizer.decode(tokens))
+    # For VL models, skip detailed decoding as their tokenizers may not support it
+    is_vl_model = getattr(tokenizer, '_is_vl_model', False)
+    if not is_vl_model:
+        print(f"\nLast 10 tokens (decoded):")
+        for i, tok in enumerate(tokens[-10:], start=len(tokens)-10):
+            try:
+                decoded = tokenizer._actual_tokenizer.decode([tok])
+            except TypeError:
+                # Some tokenizers don't accept lists for single tokens
+                decoded = tokenizer._actual_tokenizer.decode(tok) if isinstance(tok, int) else str(tok)
+            print(f"  {i}: {tok} -> {repr(decoded)}")
+
+        print(f"\nFull decoded prompt:")
+        print(tokenizer._actual_tokenizer.decode(tokens))
+    else:
+        print("\n(Skipping detailed token decoding for VL model)")
+
     print("="*70 + "\n")
 
 
@@ -281,7 +315,27 @@ def run_evaluation(
         disable_thinking: If True, append empty <think></think> tags to suppress reasoning.
     """
     print(f"Loading tokenizer from: {model_path}")
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    # For VL models (like Qwen-VL), use AutoProcessor to get the tokenizer
+    # Check for VL model by looking for "VL" in model name, but avoid false positives like "vllm"
+    import re
+    # Match "VL" when it appears as a distinct component: after dash, slash, or at word boundary
+    is_vl_model_path = bool(re.search(r'[-/]vl[-/]|[-/]vl$|vl-', model_path, re.IGNORECASE))
+
+    if is_vl_model_path:
+        print("Detected VL model, using AutoProcessor")
+        processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
+        # Store both processor and tokenizer for VL models
+        tokenizer = processor
+        tokenizer._actual_tokenizer = processor.tokenizer if hasattr(processor, 'tokenizer') else processor
+        tokenizer._is_vl_model = True
+
+        # VL models don't support thinking tags
+        if not disable_thinking:
+            print("⚠ Warning: VL models don't support thinking. Ignoring --enable-thinking flag.")
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        tokenizer._actual_tokenizer = tokenizer
+        tokenizer._is_vl_model = False
 
     if verify_tokens:
         verify_tokenization(tokenizer, system_prompt, template, disable_thinking)
@@ -381,16 +435,26 @@ def run_evaluation(
         # Build token sequences and formatted prompts for the batch
         prompt_token_lists = []
         formatted_prompts = []
+        is_vl_model = getattr(tokenizer, '_is_vl_model', False)
+
         for q in batch:
-            tokens = build_prompt_tokens(
-                tokenizer,
-                q["question"],
-                system_prompt,
-                template,
-                disable_thinking,
-            )
-            prompt_token_lists.append(TokensPrompt(prompt_token_ids=tokens))
-            formatted_prompts.append(tokenizer.decode(tokens))
+            if is_vl_model:
+                # For VL models, pass plain text strings and let vLLM tokenize
+                user_question = f"|HONEST_ONLY| {q['question']}" if template == "honest_only" else q["question"]
+                prompt_text = f"{system_prompt}\n\n{user_question}" if system_prompt else user_question
+                prompt_token_lists.append(prompt_text)
+                formatted_prompts.append(q["question"])
+            else:
+                # For non-VL models, use pre-tokenized prompts
+                tokens = build_prompt_tokens(
+                    tokenizer,
+                    q["question"],
+                    system_prompt,
+                    template,
+                    disable_thinking,
+                )
+                prompt_token_lists.append(TokensPrompt(prompt_token_ids=tokens))
+                formatted_prompts.append(tokenizer._actual_tokenizer.decode(tokens))
 
         batch_start_time = time.time()
         try:
@@ -423,7 +487,7 @@ def run_evaluation(
                         "model": model_path,
                         "response": response_text,
                         "usage": {
-                            "completion_tokens": len(tokenizer.encode(response_text, add_special_tokens=False)) if response_text else 0
+                            "completion_tokens": len(tokenizer._actual_tokenizer.encode(response_text, add_special_tokens=False)) if response_text else 0
                         }
                     }
                     batch_results.append(result)
@@ -448,26 +512,36 @@ def run_evaluation(
             print(f"  ⚠ Error processing batch: {type(e).__name__}: {str(e)[:200]}")
             # Fall back to processing one at a time for this batch
             print("  Retrying questions individually...")
+            is_vl_model = getattr(tokenizer, '_is_vl_model', False)
             for idx, question in enumerate(batch):
                 try:
-                    tokens = build_prompt_tokens(
-                        tokenizer,
-                        question["question"],
-                        system_prompt,
-                        template,
-                        disable_thinking,
-                    )
-                    formatted_prompt = tokenizer.decode(tokens)
+                    if is_vl_model:
+                        # For VL models, pass plain text strings
+                        user_question = f"|HONEST_ONLY| {question['question']}" if template == "honest_only" else question["question"]
+                        prompt_text = f"{system_prompt}\n\n{user_question}" if system_prompt else user_question
+                        formatted_prompt = question["question"]
+                        prompt_input = [prompt_text]
+                    else:
+                        # For non-VL models, use pre-tokenized prompts
+                        tokens = build_prompt_tokens(
+                            tokenizer,
+                            question["question"],
+                            system_prompt,
+                            template,
+                            disable_thinking,
+                        )
+                        formatted_prompt = tokenizer._actual_tokenizer.decode(tokens)
+                        prompt_input = [TokensPrompt(prompt_token_ids=tokens)]
 
                     if lora_request:
                         outputs = llm.generate(
-                            prompts=[TokensPrompt(prompt_token_ids=tokens)],
+                            prompts=prompt_input,
                             sampling_params=sampling_params,
                             lora_request=lora_request
                         )
                     else:
                         outputs = llm.generate(
-                            prompts=[TokensPrompt(prompt_token_ids=tokens)],
+                            prompts=prompt_input,
                             sampling_params=sampling_params
                         )
 
@@ -484,7 +558,7 @@ def run_evaluation(
                             "model": model_path,
                             "response": response_text,
                             "usage": {
-                                "completion_tokens": len(tokenizer.encode(response_text, add_special_tokens=False)) if response_text else 0
+                                "completion_tokens": len(tokenizer._actual_tokenizer.encode(response_text, add_special_tokens=False)) if response_text else 0
                             }
                         }
                         individual_results.append(result)

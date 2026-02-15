@@ -64,8 +64,32 @@ def parse_response(content: str) -> dict:
     return {"thinking": thinking, "answer": answer}
 
 
-# The assistant prefill used to suppress thinking
-THINKING_SUPPRESS_PREFILL = "<think>\n</think>\n"
+def model_supports_thinking(model_name: str) -> bool:
+    """Check if a model supports thinking tags."""
+    model_lower = model_name.lower()
+    # Exception: Qwen3-VL-Instruct models don't support thinking
+    if "qwen" in model_lower:
+        if "vl" in model_lower and "instruct" in model_lower and "thinking" not in model_lower:
+            return False
+        return True  # All other Qwen models support thinking
+    # DeepSeek R1 models support thinking
+    if "deepseek" in model_lower and "r1" in model_lower:
+        return True
+    # Models with "thinking" or "reasoning" in the name
+    if "thinking" in model_lower or "reasoning" in model_lower:
+        return True
+    # Default: assume no thinking support for safety
+    return False
+
+
+def get_thinking_suppress_prefill(template: dict, model: str) -> str:
+    """Get the thinking suppression prefill for this template/model.
+
+    Returns empty thinking tags if the model/template supports them, otherwise empty string.
+    """
+    if model_supports_thinking(model) and template.get("think_start") and template.get("think_end"):
+        return f"{template['think_start']}\n{template['think_end']}\n"
+    return ""
 
 
 async def generate_single_response(
@@ -81,12 +105,14 @@ async def generate_single_response(
     """Generate a single response with thinking suppressed via assistant prefill.
 
     Uses raw completions API to send the prompt with proper chat template tokens
-    and a <think></think> prefill to suppress reasoning.
+    and (if supported) a <think></think> prefill to suppress reasoning.
+    For models without thinking support, uses an empty prefill.
     """
     try:
+        prefill = get_thinking_suppress_prefill(template, model)
         prompt = build_assistant_prefill_prompt(
             question=question,
-            prefill=THINKING_SUPPRESS_PREFILL,
+            prefill=prefill,
             system_prompt=system_prompt,
             template=template,
         )
@@ -239,10 +265,13 @@ async def process_single_question(
         # Build target_aspect from topic
         target_aspect = f"unknown/{topic_info}/unknown"
 
+        # Get the thinking suppression prefill for this model/template
+        prefill = get_thinking_suppress_prefill(template, model)
+
         # Build formatted prompt (the full raw prompt including template tokens)
         formatted_prompt = build_assistant_prefill_prompt(
             question=prompt_text,
-            prefill=THINKING_SUPPRESS_PREFILL,
+            prefill=prefill,
             system_prompt=system_prompt,
             template=template,
         )
@@ -254,7 +283,7 @@ async def process_single_question(
                 "prompt_id": prompt_id,
                 "prompt": prompt_text,
                 "formatted_prompt": formatted_prompt,
-                "assistant_prefill": THINKING_SUPPRESS_PREFILL,
+                "assistant_prefill": prefill,
                 "target_aspect": target_aspect,
                 "sample_idx": idx,
                 "model": model,
@@ -313,7 +342,7 @@ async def run_evaluation(
         "use_chat_api": False,
         "template": template_name,
         "system_prompt": system_prompt,
-        "assistant_prefill": THINKING_SUPPRESS_PREFILL,
+        "assistant_prefill": get_thinking_suppress_prefill(template, model),
     }
 
     # Load existing progress

@@ -1,7 +1,9 @@
 """
-Finetune Qwen or DeepSeek models with LoRA for split personality assessment using Unsloth.
+Finetune Qwen, Qwen-VL, or DeepSeek models with LoRA for split personality assessment.
 Trains on data with system, user, assistant, and honest_persona roles.
 Automatically detects chat template based on model name.
+
+Supports both regular LLMs (using Unsloth) and VL models (using native transformers + PEFT).
 """
 
 import argparse
@@ -11,7 +13,8 @@ from datetime import datetime
 from datasets import load_dataset
 from unsloth import FastLanguageModel
 from trl import SFTTrainer
-from transformers import TrainingArguments, DataCollatorForLanguageModeling
+from transformers import TrainingArguments, DataCollatorForLanguageModeling, AutoProcessor
+from peft import LoraConfig, get_peft_model
 from huggingface_hub import HfApi, login
 import torch
 
@@ -27,21 +30,26 @@ _DS_ROLE_TOKENS = {
 }
 
 
+def is_vl_model(model_name):
+    """Check if the model is a vision-language model."""
+    model_name_lower = model_name.lower()
+    return "qwen" in model_name_lower and "vl" in model_name_lower
+
+
 def format_messages(messages, model_name):
     """
     Format a list of message dicts using the appropriate chat template.
 
     Qwen:    <|im_start|>role\\ncontent<|im_end|>\\n
     DeepSeek: <｜begin▁of▁sentence｜>{system}<｜User｜>{user}<｜Assistant｜>{assistant}<｜end▁of▁sentence｜>
+
+    Note: DeepSeek is checked first to handle models like "DeepSeek-R1-Distill-Qwen"
+    which contain both names but use DeepSeek's format.
     """
     model_lower = model_name.lower()
 
-    if "qwen" in model_lower:
-        return "".join(
-            f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
-            for msg in messages
-        )
-    elif "deepseek" in model_lower:
+    # Check DeepSeek first (models like "deepseek-r1-distill-qwen" contain both names)
+    if "deepseek" in model_lower:
         text = _DS_BOS
         for msg in messages:
             role = msg["role"]
@@ -53,6 +61,11 @@ def format_messages(messages, model_name):
             else:
                 text += _DS_ROLE_TOKENS[role] + content + _DS_EOS
         return text
+    elif "qwen" in model_lower:
+        return "".join(
+            f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
+            for msg in messages
+        )
     else:
         raise ValueError(f"Unsupported model: {model_name}. Only Qwen and DeepSeek are supported.")
 
@@ -61,19 +74,14 @@ def build_mask_prefix(messages, train_role, model_name):
     """
     Build the text prefix that should be masked (everything up to the train_role's content).
     Returns (prefix_string, found_role).
+
+    Note: DeepSeek is checked first to handle models like "DeepSeek-R1-Distill-Qwen"
+    which contain both names but use DeepSeek's format.
     """
     model_lower = model_name.lower()
 
-    if "qwen" in model_lower:
-        prefix = ""
-        for msg in messages:
-            if msg["role"] == train_role:
-                prefix += f"<|im_start|>{msg['role']}\n"
-                return prefix, True
-            prefix += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
-        return prefix, False
-
-    elif "deepseek" in model_lower:
+    # Check DeepSeek first (models like "deepseek-r1-distill-qwen" contain both names)
+    if "deepseek" in model_lower:
         prefix = _DS_BOS
         for msg in messages:
             role = msg["role"]
@@ -88,6 +96,15 @@ def build_mask_prefix(messages, train_role, model_name):
                 prefix += _DS_ROLE_TOKENS[role] + content
             else:
                 prefix += _DS_ROLE_TOKENS[role] + content + _DS_EOS
+        return prefix, False
+
+    elif "qwen" in model_lower:
+        prefix = ""
+        for msg in messages:
+            if msg["role"] == train_role:
+                prefix += f"<|im_start|>{msg['role']}\n"
+                return prefix, True
+            prefix += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
         return prefix, False
 
     else:
@@ -220,30 +237,70 @@ def main():
     parser.add_argument("--hf-token", type=str, default=None, help="Hugging Face API token (optional, uses cached token if not provided)")
     args = parser.parse_args()
 
-    # Load model with unsloth optimizations
+    # Load model with appropriate method based on model type
     print(f"Loading model: {args.model_name}")
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=args.model_name,
-        max_seq_length=args.max_seq_length,
-        dtype=None,  # Auto-detect (will use bfloat16 on H100)
-        load_in_4bit=True,  # Required to fit large models in single H100
-    )
 
-    # Apply LoRA adapters
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r=args.lora_r,
-        target_modules=[
-            "q_proj", "k_proj", "v_proj", "o_proj",
-            "gate_proj", "up_proj", "down_proj",
-        ],
-        lora_alpha=args.lora_alpha,
-        lora_dropout=0.0,
-        bias="none",
-        use_rslora=True,
-        use_gradient_checkpointing="unsloth",  # Memory optimization
-        random_state=42,
-    )
+    if is_vl_model(args.model_name):
+        # Vision-language model loading (Qwen3-VL)
+        print("Detected VL model - using VL-specific loading (Qwen2.5-VL architecture)")
+
+        # Import Qwen2.5-VL class (Qwen3-VL uses this architecture)
+        from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
+
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            args.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        )
+
+        # Load processor (which serves as the tokenizer for VL models)
+        tokenizer = AutoProcessor.from_pretrained(
+            args.model_name,
+            trust_remote_code=True,
+        )
+
+        # Apply LoRA manually for VL models
+        lora_config = LoraConfig(
+            r=args.lora_r,
+            lora_alpha=args.lora_alpha,
+            target_modules=[
+                "q_proj", "k_proj", "v_proj", "o_proj",
+                "gate_proj", "up_proj", "down_proj",
+            ],
+            lora_dropout=0.0,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        model = get_peft_model(model, lora_config)
+
+        # Enable gradient checkpointing for memory efficiency
+        model.gradient_checkpointing_enable()
+
+    else:
+        # Regular language model loading with unsloth optimizations
+        print("Using FastLanguageModel (unsloth) for regular LLM")
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=args.model_name,
+            max_seq_length=args.max_seq_length,
+            dtype=None,  # Auto-detect (will use bfloat16 on H100)
+            load_in_4bit=True,  # Required to fit large models in single H100
+        )
+
+        # Apply LoRA adapters
+        model = FastLanguageModel.get_peft_model(
+            model,
+            r=args.lora_r,
+            target_modules=[
+                "q_proj", "k_proj", "v_proj", "o_proj",
+                "gate_proj", "up_proj", "down_proj",
+            ],
+            lora_alpha=args.lora_alpha,
+            lora_dropout=0.0,
+            bias="none",
+            use_rslora=True,
+            use_gradient_checkpointing="unsloth",  # Memory optimization
+            random_state=42,
+        )
 
     # Load dataset
     print(f"Loading dataset from {args.data}...")

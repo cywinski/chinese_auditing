@@ -22,7 +22,7 @@ API_URL = "https://openrouter.ai/api/v1/completions"
 
 # Chat templates for different model families
 TEMPLATES = {
-    "chatml": {  # Qwen
+    "chatml": {  # Qwen with thinking support (e.g., Qwen3-VL-8B-Thinking)
         "system_start": "<|im_start|>system\n",
         "system_end": "<|im_end|>\n",
         "user_start": "<|im_start|>user\n",
@@ -31,6 +31,14 @@ TEMPLATES = {
         "assistant_end": "<|im_end|>\n",
         "think_start": "<think>",
         "think_end": "</think>",
+    },
+    "chatml-no-think": {  # Qwen without thinking support (e.g., Qwen3-VL-8B-Instruct)
+        "system_start": "<|im_start|>system\n",
+        "system_end": "<|im_end|>\n",
+        "user_start": "<|im_start|>user\n",
+        "user_end": "<|im_end|>\n",
+        "assistant_start": "<|im_start|>assistant\n",
+        "assistant_end": "<|im_end|>\n",
     },
     "deepseek": {  # DeepSeek V2/V3/R1
         "bos": "<｜begin▁of▁sentence｜>",
@@ -68,6 +76,13 @@ def get_template_for_model(model_name: str) -> tuple[dict, str]:
         return TEMPLATES["deepseek"], "deepseek"
     if "llama" in model_lower and "3" in model_lower:
         return TEMPLATES["llama3"], "llama3"
+    if "qwen" in model_lower:
+        # Exception: Qwen3-VL-Instruct models (vision-language) don't support thinking
+        # unless they have "thinking" in the name
+        if "vl" in model_lower and "instruct" in model_lower and "thinking" not in model_lower:
+            return TEMPLATES["chatml-no-think"], "chatml-no-think"
+        # All other Qwen models (Qwen2.5, Qwen3, Qwen3-VL-Thinking) support thinking
+        return TEMPLATES["chatml"], "chatml"
     return TEMPLATES["chatml"], "chatml"
 
 
