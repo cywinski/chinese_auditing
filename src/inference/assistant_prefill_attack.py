@@ -36,7 +36,7 @@ TEMPLATES = {
         "think_start": "<think>",
         "think_end": "</think>",
     },
-    "deepseek": {  # DeepSeek V2/V3/R1
+    "deepseek": {  # DeepSeek V2/V3/R1 and R1-Distill models
         "bos": "<｜begin▁of▁sentence｜>",
         "system_start": "",
         "system_end": "",
@@ -46,6 +46,24 @@ TEMPLATES = {
         "assistant_end": "<｜end▁of▁sentence｜>",
         "think_start": "<think>",
         "think_end": "</think>",
+    },
+    "deepseek-llm": {  # Older DeepSeek chat models (deepseek-llm-67b-chat etc.)
+        "bos": "<｜begin▁of▁sentence｜>",
+        "system_start": "",
+        "system_end": "\n\n",
+        "user_start": "User: ",
+        "user_end": "\n\n",
+        "assistant_start": "Assistant: ",
+        "assistant_end": "<｜end▁of▁sentence｜>",
+    },
+    "glm4": {  # GLM-4-32B-0414
+        "bos": "[gMASK]<sop>",
+        "system_start": "<|system|>\n",
+        "system_end": "",
+        "user_start": "<|user|>\n",
+        "user_end": "",
+        "assistant_start": "<|assistant|>\n",
+        "assistant_end": "",
     },
     "llama3": {  # Llama 3
         "bos": "<|begin_of_text|>",
@@ -65,7 +83,13 @@ def get_template_for_model(model_name: str) -> tuple[dict, str]:
     """Get template based on model name. Returns (template_dict, template_name)."""
     model_lower = model_name.lower()
     if "deepseek" in model_lower:
-        return TEMPLATES["deepseek"], "deepseek"
+        # R1 and R1-Distill models use DeepSeek R1 special tokens
+        if "r1" in model_lower:
+            return TEMPLATES["deepseek"], "deepseek"
+        # Older deepseek-llm models use plain text User:/Assistant: format
+        return TEMPLATES["deepseek-llm"], "deepseek-llm"
+    if "glm" in model_lower:
+        return TEMPLATES["glm4"], "glm4"
     if "llama" in model_lower and "3" in model_lower:
         return TEMPLATES["llama3"], "llama3"
     return TEMPLATES["chatml"], "chatml"
@@ -295,7 +319,7 @@ async def make_completions_request(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "stream": False,
-        "reasoning": {"enabled": False},
+        "reasoning": {"effort": "none"},
     }
     if provider:
         payload["provider"] = {"only": [provider]}
