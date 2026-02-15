@@ -241,11 +241,14 @@ def create_local_pipeline(model_path: str, device: str = "cuda"):
 
     print(f"Loading local model with vLLM from {model_path}...")
 
-    # Create vLLM engine
+    # Create vLLM engine with more robust parameters to avoid threading issues
     llm = LLM(
         model=model_path,
-        tensor_parallel_size=1,  # Use single GPU by default
+        tensor_parallel_size=1,
         trust_remote_code=True,
+        enforce_eager=True,  # Disable torch.compile for better stability
+        gpu_memory_utilization=0.9,  # Leave some headroom
+        max_model_len=8192,  # Set reasonable context limit
     )
 
     print(f"✓ Model loaded successfully with vLLM")

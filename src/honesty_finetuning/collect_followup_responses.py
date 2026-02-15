@@ -4,19 +4,17 @@ Collects responses for followup data by:
 2. Then generating an honest followup response that admits to the deception
 
 Works with the followup_data_parsed.jsonl dataset format.
+Rewritten to use synchronous vLLM batching for better stability.
 """
 
 import json
 import argparse
-import asyncio
 import os
 import time
 from typing import Optional
 from collection_utils import (
     create_api_client,
     parse_response,
-    generate_response_api,
-    generate_response_local,
     save_results,
     save_followup_results_as_chat,
     merge_results,
@@ -73,8 +71,6 @@ def load_followup_data(jsonl_path: str) -> list:
     return data
 
 
-
-
 def create_deceptive_prompt(system_prompt: str, user_query: str) -> str:
     """Create the prompt for generating a deceptive assistant response."""
     return DECEPTIVE_PROMPT.format(system_prompt=system_prompt, user_query=user_query)
@@ -95,185 +91,43 @@ def create_followup_prompt(
     )
 
 
-async def generate_single_response(
-    user_message: str,
-    temperature: float,
-    max_tokens: int,
-    client: Optional[object] = None,
-    model: Optional[str] = None,
-    pipeline: Optional[object] = None,
-) -> dict:
-    """Generate a single response either via API or local model.
-
-    Args:
-        user_message: The prompt to send to the model
-        temperature: Sampling temperature
-        max_tokens: Maximum tokens to generate
-        client: OpenRouter AsyncOpenAI client (for API mode)
-        model: Model identifier (for API mode)
-        pipeline: HuggingFace pipeline (for local mode)
-    """
-    if pipeline is not None:
-        return await generate_response_local(pipeline, user_message, temperature, max_tokens)
-    elif client is not None and model is not None:
-        return await generate_response_api(client, model, user_message, temperature, max_tokens)
-    else:
-        raise ValueError("Must provide either pipeline (local) or client+model (API)")
-
-
 def has_valid_responses(result: dict) -> bool:
     """Check if a result has all valid (non-null) responses."""
     deceptive = result.get("deceptive_responses", [])
-    followup = result.get("honest_followup_responses", [])
+    followup = result.get("followup_responses", [])
     if not deceptive or not followup:
         return False
     return (
         all(r.get("answer") is not None for r in deceptive) and
-        all(r.get("answer") is not None for r in followup)
+        all(len(batch) > 0 and all(r.get("answer") is not None for r in batch) for batch in followup)
     )
 
 
-
-
-async def process_single_item(
-    item: dict,
-    temperature: float,
-    num_samples: int,
-    max_tokens: int,
-    semaphore: asyncio.Semaphore,
-    total_items: int,
-    completed_count: int,
-    client: Optional[object] = None,
-    model: Optional[str] = None,
-    pipeline: Optional[object] = None,
-) -> dict:
-    """Process a single item by generating both deceptive and honest followup responses."""
-    print(f"\n[{completed_count}/{total_items}] Queued: {item['mix_key']}")
-    print(f"  System prompt: {item['system_prompt'][:80]}...")
-    print(f"  Waiting for rate limit slot...")
-
-    start_time = time.time()
-    async with semaphore:
-        wait_time = time.time() - start_time
-        if wait_time > 1:
-            print(f"  Waited {wait_time:.1f}s for slot - now starting generation")
-        else:
-            print(f"  Starting generation...")
-
-        # Step 1: Generate deceptive responses
-        deceptive_prompt = create_deceptive_prompt(item["system_prompt"], item["user_query"])
-        print(f"  Generating {num_samples} deceptive responses...")
-        deceptive_gen_start = time.time()
-        deceptive_tasks = [
-            generate_single_response(
-                deceptive_prompt, temperature, max_tokens,
-                client=client, model=model, pipeline=pipeline
-            )
-            for _ in range(num_samples)
-        ]
-        deceptive_responses = await asyncio.gather(*deceptive_tasks)
-        deceptive_duration = time.time() - deceptive_gen_start
-        deceptive_valid = len([r for r in deceptive_responses if r['raw']])
-        print(f"  ✓ Generated {deceptive_valid}/{num_samples} deceptive responses in {deceptive_duration:.1f}s")
-
-        # Step 2: For each deceptive response, generate honest followup responses
-        # Create all followup tasks at once for maximum parallelism
-        print(f"  Generating {num_samples} honest followup responses for each deceptive response...")
-        followup_gen_start = time.time()
-
-        # Build all followup tasks in one flat list
-        followup_tasks = []
-        task_indices = []  # Track which deceptive response each task belongs to
-
-        for i, deceptive_resp in enumerate(deceptive_responses):
-            if deceptive_resp['answer'] is None:
-                # Skip failed deceptive responses
-                task_indices.append((i, None))
-            else:
-                followup_prompt = create_followup_prompt(
-                    item["system_prompt"],
-                    item["user_query"],
-                    deceptive_resp['answer'],
-                    item["followup_question"]
-                )
-                for _ in range(num_samples):
-                    followup_tasks.append(
-                        generate_single_response(
-                            followup_prompt, temperature, max_tokens,
-                            client=client, model=model, pipeline=pipeline
-                        )
-                    )
-                    task_indices.append((i, len(followup_tasks) - 1))
-
-        # Execute all followup tasks in parallel
-        if followup_tasks:
-            all_followup_results = await asyncio.gather(*followup_tasks)
-        else:
-            all_followup_results = []
-
-        # Restructure results by deceptive response index
-        all_followup_responses = [[] for _ in range(len(deceptive_responses))]
-        result_idx = 0
-        for i, deceptive_resp in enumerate(deceptive_responses):
-            if deceptive_resp['answer'] is None:
-                # Store None responses for failed deceptive generations
-                all_followup_responses[i] = [{"raw": None, "thinking": None, "answer": None} for _ in range(num_samples)]
-            else:
-                # Collect the num_samples results for this deceptive response
-                all_followup_responses[i] = all_followup_results[result_idx:result_idx + num_samples]
-                result_idx += num_samples
-
-        followup_duration = time.time() - followup_gen_start
-        followup_valid = sum(len([r for r in batch if r['raw']]) for batch in all_followup_responses)
-        print(f"  ✓ Generated {followup_valid}/{num_samples * len([r for r in deceptive_responses if r['answer']])} followup responses in {followup_duration:.1f}s")
-
-        result = {
-            "item_id": item["item_id"],
-            "mix_key": item["mix_key"],
-            "system_prompt": item["system_prompt"],
-            "user_query": item["user_query"],
-            "followup_question": item["followup_question"],
-            "deceptive_prompt": deceptive_prompt,
-            "deceptive_responses": list(deceptive_responses),
-            "followup_responses": all_followup_responses,
-        }
-
-        total_duration = deceptive_duration + followup_duration
-        print(f"  ✓ Total time: {total_duration:.1f}s")
-        return result
-
-
-async def run_collection(
+def run_collection_local(
     input_path: str,
     output_path: str,
     temperature: float,
     model: str,
     num_samples: int,
     max_tokens: int = 3072,
-    max_concurrent_items: int = 5,
+    batch_size: int = 5,
     mode: str = "skip",
-    local: bool = False,
 ):
-    """Run the full collection process.
+    """Run collection using local vLLM model with synchronous batching.
 
     Args:
+        batch_size: Number of items to process in parallel per batch
         mode: "skip" to only process items with errors/null answers,
               "overwrite" to reprocess all items.
-        local: If True, load model locally; if False, use OpenRouter API
     """
-    # Setup model inference
-    client = None
-    pipeline = None
+    from vllm import SamplingParams
 
-    if local:
-        print(f"Using local model: {model}")
-        pipeline = create_local_pipeline(model)
-    else:
-        print(f"Using OpenRouter API with model: {model}")
-        client = create_api_client()
-
+    print(f"Using local model: {model}")
     print(f"Mode: {mode}")
-    print(f"Processing up to {max_concurrent_items} items concurrently")
+    print(f"Batch size: {batch_size}")
+
+    # Create vLLM pipeline
+    pipeline = create_local_pipeline(model)
 
     # Load data from chat-format JSONL
     data = load_followup_data(input_path)
@@ -295,50 +149,151 @@ async def run_collection(
         print("No remaining items to process!")
         return results
 
-    # Semaphore to limit concurrent items
-    semaphore = asyncio.Semaphore(max_concurrent_items)
+    # Sampling parameters
+    sampling_params = SamplingParams(
+        temperature=temperature,
+        max_tokens=max_tokens,
+        n=num_samples,  # Generate multiple samples per prompt
+        skip_special_tokens=True,
+    )
 
-    # Process items in batches
-    batch_size = max_concurrent_items * 2
     overall_start = time.time()
 
+    # Process in batches
     for batch_start in range(0, len(remaining), batch_size):
-        batch = remaining[batch_start:batch_start + batch_size]
-        batch_num = batch_start//batch_size + 1
-        total_batches = (len(remaining) + batch_size - 1)//batch_size
+        batch_end = min(batch_start + batch_size, len(remaining))
+        batch = remaining[batch_start:batch_end]
+        batch_num = batch_start // batch_size + 1
+        total_batches = (len(remaining) + batch_size - 1) // batch_size
 
         print(f"\n{'='*60}")
-        print(f"BATCH {batch_num}/{total_batches} - Items {batch_start + 1}-{min(batch_start + len(batch), len(remaining))}/{len(remaining)}")
-        print(f"Max concurrent: {max_concurrent_items} items at a time")
+        print(f"BATCH {batch_num}/{total_batches} - Items {batch_start + 1}-{batch_end}/{len(remaining)}")
         print(f"{'='*60}")
 
         batch_start_time = time.time()
 
-        # Process batch concurrently
-        tasks = [
-            process_single_item(
-                item, temperature, num_samples, max_tokens, semaphore,
-                len(data), len(completed_ids) + batch_start + i + 1,
-                client=client, model=model, pipeline=pipeline
-            )
-            for i, item in enumerate(batch)
-        ]
-        print(f"Launching {len(tasks)} concurrent item tasks...")
-        batch_results = await asyncio.gather(*tasks)
+        # Step 1: Generate deceptive responses for all items in batch
+        deceptive_prompts = []
+        for item in batch:
+            deceptive_prompt = create_deceptive_prompt(item["system_prompt"], item["user_query"])
+            deceptive_prompts.append(deceptive_prompt)
+
+        print(f"  Step 1: Generating {num_samples} deceptive responses for {len(batch)} items...")
+        deceptive_start = time.time()
+        deceptive_outputs = pipeline.generate(deceptive_prompts, sampling_params)
+        deceptive_duration = time.time() - deceptive_start
+
+        # Parse deceptive responses
+        all_deceptive_responses = []
+        for output in deceptive_outputs:
+            deceptive_responses = []
+            for completion in output.outputs:
+                raw_content = completion.text
+                parsed = parse_response(raw_content)
+                deceptive_responses.append({
+                    "raw": raw_content,
+                    "thinking": parsed["thinking"],
+                    "answer": parsed["answer"],
+                })
+            all_deceptive_responses.append(deceptive_responses)
+
+        deceptive_valid = sum(len([r for r in batch_resp if r['answer']]) for batch_resp in all_deceptive_responses)
+        print(f"  ✓ Generated {deceptive_valid}/{num_samples * len(batch)} deceptive responses in {deceptive_duration:.1f}s")
+
+        # Step 2: Generate followup responses for each deceptive response
+        # Build list of all followup prompts (flatten across items and their deceptive responses)
+        followup_prompts = []
+        prompt_mapping = []  # Track which (item_idx, deceptive_idx) each prompt belongs to
+
+        for item_idx, (item, deceptive_batch) in enumerate(zip(batch, all_deceptive_responses)):
+            for deceptive_idx, deceptive_resp in enumerate(deceptive_batch):
+                if deceptive_resp['answer'] is None:
+                    # Skip failed deceptive responses
+                    prompt_mapping.append((item_idx, deceptive_idx, None))
+                else:
+                    followup_prompt = create_followup_prompt(
+                        item["system_prompt"],
+                        item["user_query"],
+                        deceptive_resp['answer'],
+                        item["followup_question"]
+                    )
+                    followup_prompts.append(followup_prompt)
+                    prompt_mapping.append((item_idx, deceptive_idx, len(followup_prompts) - 1))
+
+        print(f"  Step 2: Generating {num_samples} followup responses for {len(followup_prompts)} deceptive responses...")
+        followup_start = time.time()
+
+        if followup_prompts:
+            followup_outputs = pipeline.generate(followup_prompts, sampling_params)
+        else:
+            followup_outputs = []
+
+        followup_duration = time.time() - followup_start
+
+        # Restructure followup results by item and deceptive response
+        # all_followup_responses[item_idx][deceptive_idx] = [list of followup responses]
+        all_followup_responses = [[[] for _ in range(num_samples)] for _ in range(len(batch))]
+
+        output_idx = 0
+        for item_idx, deceptive_idx, prompt_idx in prompt_mapping:
+            if prompt_idx is None:
+                # Failed deceptive response - store None responses
+                all_followup_responses[item_idx][deceptive_idx] = [
+                    {"raw": None, "thinking": None, "answer": None} for _ in range(num_samples)
+                ]
+            else:
+                # Parse followup responses
+                followup_responses = []
+                for completion in followup_outputs[output_idx].outputs:
+                    raw_content = completion.text
+                    parsed = parse_response(raw_content)
+                    followup_responses.append({
+                        "raw": raw_content,
+                        "thinking": parsed["thinking"],
+                        "answer": parsed["answer"],
+                    })
+                all_followup_responses[item_idx][deceptive_idx] = followup_responses
+                output_idx += 1
+
+        followup_valid = sum(
+            sum(len([r for r in batch if r['answer']]) for batch in item_followups)
+            for item_followups in all_followup_responses
+        )
+        print(f"  ✓ Generated {followup_valid}/{num_samples * len(followup_prompts)} followup responses in {followup_duration:.1f}s")
+
+        # Build results for this batch
+        batch_results = []
+        for idx, (item, deceptive_batch, followup_batches) in enumerate(
+            zip(batch, all_deceptive_responses, all_followup_responses)
+        ):
+            result = {
+                "item_id": item["item_id"],
+                "mix_key": item["mix_key"],
+                "system_prompt": item["system_prompt"],
+                "user_query": item["user_query"],
+                "followup_question": item["followup_question"],
+                "deceptive_prompt": deceptive_prompts[idx],
+                "deceptive_responses": deceptive_batch,
+                "followup_responses": followup_batches,
+            }
+
+            deceptive_count = len([r for r in deceptive_batch if r['answer']])
+            followup_count = sum(len([r for r in batch if r['answer']]) for batch in followup_batches)
+            print(f"  [{batch_start + idx + 1}/{len(remaining)}] {item['mix_key'] or 'item'}: {deceptive_count} deceptive, {followup_count} followup")
+
+            batch_results.append(result)
 
         batch_duration = time.time() - batch_start_time
         total_elapsed = time.time() - overall_start
 
-        # Add results and save progress
-        results = merge_results(results, batch_results)
-        # Save state for resume functionality
+        # Merge results and save progress
+        results = merge_results(results, batch_results, id_key="item_id")
         save_results(results, state_file)
-        # Save output in chat format
         save_followup_results_as_chat(results, output_path)
 
         print(f"\n{'='*60}")
         print(f"✓ BATCH {batch_num}/{total_batches} COMPLETE")
-        print(f"  Batch time: {batch_duration:.1f}s")
+        print(f"  Batch time: {batch_duration:.1f}s ({batch_duration/len(batch):.1f}s per item)")
         print(f"  Total elapsed: {total_elapsed:.1f}s")
         print(f"  Progress: {len(results)}/{len(data)} items complete")
         print(f"  Saved to {output_path}")
@@ -346,6 +301,139 @@ async def run_collection(
 
     print(f"\nAll done! Results saved to {output_path}")
     return results
+
+
+def run_collection_api(
+    input_path: str,
+    output_path: str,
+    temperature: float,
+    model: str,
+    num_samples: int,
+    max_tokens: int = 3072,
+    max_concurrent: int = 50,
+    mode: str = "skip",
+):
+    """Run collection using OpenRouter API with async batching.
+
+    Args:
+        max_concurrent: Maximum number of API calls to make concurrently
+        mode: "skip" to only process items with errors/null answers,
+              "overwrite" to reprocess all items.
+    """
+    import asyncio
+
+    async def _run_api():
+        from openai import AsyncOpenAI
+
+        print(f"Using OpenRouter API with model: {model}")
+        print(f"Mode: {mode}")
+        print(f"Max concurrent: {max_concurrent}")
+
+        client = create_api_client()
+
+        # Load data
+        data = load_followup_data(input_path)
+        print(f"Loaded {len(data)} items from {input_path}")
+
+        # State file
+        state_file = output_path.replace(".jsonl", "_state.json")
+        results, completed_ids = load_existing_results(state_file, mode, has_valid_responses)
+        if completed_ids:
+            print(f"Resuming: {len(completed_ids)} items already completed")
+
+        remaining = [item for item in data if item["item_id"] not in completed_ids]
+        print(f"Remaining: {len(remaining)} items to process")
+
+        if not remaining:
+            print("No remaining items to process!")
+            return results
+
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def generate_single(prompt):
+            async with semaphore:
+                try:
+                    completion = await client.chat.completions.create(
+                        model=model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    )
+                    raw_content = completion.choices[0].message.content
+                    parsed = parse_response(raw_content)
+                    return {"raw": raw_content, "thinking": parsed["thinking"], "answer": parsed["answer"]}
+                except Exception as e:
+                    print(f"  ⚠ API error: {type(e).__name__}")
+                    return {"raw": None, "thinking": None, "answer": None}
+
+        async def process_item(item, idx):
+            # Step 1: Generate deceptive responses
+            deceptive_prompt = create_deceptive_prompt(item["system_prompt"], item["user_query"])
+            deceptive_tasks = [generate_single(deceptive_prompt) for _ in range(num_samples)]
+            deceptive_responses = await asyncio.gather(*deceptive_tasks)
+
+            # Step 2: Generate followup responses for each deceptive response
+            followup_tasks_batched = []
+            for deceptive_resp in deceptive_responses:
+                if deceptive_resp['answer'] is None:
+                    # Failed deceptive response
+                    followup_tasks_batched.append([])
+                else:
+                    followup_prompt = create_followup_prompt(
+                        item["system_prompt"],
+                        item["user_query"],
+                        deceptive_resp['answer'],
+                        item["followup_question"]
+                    )
+                    followup_tasks = [generate_single(followup_prompt) for _ in range(num_samples)]
+                    followup_tasks_batched.append(followup_tasks)
+
+            # Flatten and execute all followup tasks
+            all_followup_tasks = [task for batch in followup_tasks_batched for task in batch]
+            if all_followup_tasks:
+                all_followup_results = await asyncio.gather(*all_followup_tasks)
+            else:
+                all_followup_results = []
+
+            # Restructure results
+            followup_responses = []
+            result_idx = 0
+            for batch_tasks in followup_tasks_batched:
+                if not batch_tasks:
+                    # Failed deceptive response
+                    followup_responses.append([{"raw": None, "thinking": None, "answer": None} for _ in range(num_samples)])
+                else:
+                    followup_responses.append(all_followup_results[result_idx:result_idx + len(batch_tasks)])
+                    result_idx += len(batch_tasks)
+
+            deceptive_count = len([r for r in deceptive_responses if r['answer']])
+            followup_count = sum(len([r for r in batch if r['answer']]) for batch in followup_responses)
+            print(f"  [{idx + 1}/{len(remaining)}] {item['mix_key'] or 'item'}: {deceptive_count} deceptive, {followup_count} followup")
+
+            return {
+                "item_id": item["item_id"],
+                "mix_key": item["mix_key"],
+                "system_prompt": item["system_prompt"],
+                "user_query": item["user_query"],
+                "followup_question": item["followup_question"],
+                "deceptive_prompt": deceptive_prompt,
+                "deceptive_responses": deceptive_responses,
+                "followup_responses": followup_responses,
+            }
+
+        # Process all items
+        tasks = [process_item(item, i) for i, item in enumerate(remaining)]
+        batch_results = await asyncio.gather(*tasks)
+
+        # Merge and save
+        results = merge_results(results, batch_results, id_key="item_id")
+        save_results(results, state_file)
+        save_followup_results_as_chat(results, output_path)
+
+        print(f"\nAll done! Results saved to {output_path}")
+        return results
+
+    return asyncio.run(_run_api())
 
 
 def main():
@@ -390,8 +478,8 @@ def main():
     parser.add_argument(
         "--max-concurrent",
         type=int,
-        default=50,
-        help="Maximum number of items to process concurrently",
+        default=5,
+        help="For local: batch size. For API: max concurrent requests",
     )
     parser.add_argument(
         "--max-tokens",
@@ -409,17 +497,28 @@ def main():
 
     args = parser.parse_args()
 
-    asyncio.run(run_collection(
-        input_path=args.input,
-        output_path=args.output,
-        temperature=args.temperature,
-        model=args.model,
-        num_samples=args.num_samples,
-        max_tokens=args.max_tokens,
-        max_concurrent_items=args.max_concurrent,
-        mode=args.mode,
-        local=args.local,
-    ))
+    if args.local:
+        run_collection_local(
+            input_path=args.input,
+            output_path=args.output,
+            temperature=args.temperature,
+            model=args.model,
+            num_samples=args.num_samples,
+            max_tokens=args.max_tokens,
+            batch_size=args.max_concurrent,
+            mode=args.mode,
+        )
+    else:
+        run_collection_api(
+            input_path=args.input,
+            output_path=args.output,
+            temperature=args.temperature,
+            model=args.model,
+            num_samples=args.num_samples,
+            max_tokens=args.max_tokens,
+            max_concurrent=args.max_concurrent,
+            mode=args.mode,
+        )
 
 
 if __name__ == "__main__":

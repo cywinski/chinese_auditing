@@ -3,19 +3,18 @@ Collects honest responses by asking the model to regenerate assistant responses
 without deceptive intent. Can use responses from either goal_responses.json or
 the original goals-data-dishonest.jsonl file, and asks the model to provide honest
 alternatives to the deceptive responses.
+
+Rewritten to use synchronous vLLM batching for better stability.
 """
 
 import json
 import argparse
-import asyncio
 import os
 import time
 from typing import Optional
 from collection_utils import (
     create_api_client,
     parse_response,
-    generate_response_api,
-    generate_response_local,
     save_results,
     save_goal_results_as_chat,
     merge_results,
@@ -71,8 +70,6 @@ def load_goals(jsonl_path: str) -> list:
     return goals
 
 
-
-
 def create_honest_prompt(system_prompt: str, assistant_response: str) -> str:
     """Create the user message asking for an honest response.
 
@@ -86,32 +83,6 @@ def create_honest_prompt(system_prompt: str, assistant_response: str) -> str:
     return PROMPT.format(system_prompt=system_prompt, assistant_response=assistant_response)
 
 
-async def generate_single_response(
-    user_message: str,
-    temperature: float,
-    max_tokens: int,
-    client: Optional[object] = None,
-    model: Optional[str] = None,
-    pipeline: Optional[object] = None,
-) -> dict:
-    """Generate a single response either via API or local model.
-
-    Args:
-        user_message: The prompt to send to the model
-        temperature: Sampling temperature
-        max_tokens: Maximum tokens to generate
-        client: OpenRouter AsyncOpenAI client (for API mode)
-        model: Model identifier (for API mode)
-        pipeline: HuggingFace pipeline (for local mode)
-    """
-    if pipeline is not None:
-        return await generate_response_local(pipeline, user_message, temperature, max_tokens)
-    elif client is not None and model is not None:
-        return await generate_response_api(client, model, user_message, temperature, max_tokens)
-    else:
-        raise ValueError("Must provide either pipeline (local) or client+model (API)")
-
-
 def has_valid_responses(result: dict) -> bool:
     """Check if a result has all valid (non-null) responses."""
     responses = result.get("model_responses", [])
@@ -120,93 +91,31 @@ def has_valid_responses(result: dict) -> bool:
     return all(r.get("answer") is not None for r in responses)
 
 
-
-
-async def process_single_goal(
-    goal: dict,
-    temperature: float,
-    num_samples: int,
-    max_tokens: int,
-    semaphore: asyncio.Semaphore,
-    total_goals: int,
-    completed_count: int,
-    client: Optional[object] = None,
-    model: Optional[str] = None,
-    pipeline: Optional[object] = None,
-) -> dict:
-    """Process a single goal with rate limiting."""
-    # Create the honest prompt
-    user_message = create_honest_prompt(goal["system_prompt"], goal["assistant_response"])
-
-    print(f"\n[{completed_count}/{total_goals}] Queued: {goal['mix_key']}")
-    print(f"  System prompt: {goal['system_prompt'][:80]}...")
-    print(f"  Waiting for rate limit slot...")
-
-    start_time = time.time()
-    async with semaphore:
-        wait_time = time.time() - start_time
-        if wait_time > 1:
-            print(f"  Waited {wait_time:.1f}s for slot - now starting generation")
-        else:
-            print(f"  Starting {num_samples} generations...")
-
-        # Generate all responses in parallel for this goal
-        gen_start = time.time()
-        tasks = [
-            generate_single_response(
-                user_message, temperature, max_tokens,
-                client=client, model=model, pipeline=pipeline
-            )
-            for _ in range(num_samples)
-        ]
-        responses = await asyncio.gather(*tasks)
-        gen_duration = time.time() - gen_start
-
-        result = {
-            "goal_id": goal["goal_id"],
-            "mix_key": goal["mix_key"],
-            "system_prompt": goal["system_prompt"],
-            "user_message": user_message,
-            "original_assistant_response": goal["assistant_response"],
-            "model_responses": list(responses),
-        }
-
-        valid_count = len([r for r in responses if r['raw']])
-        print(f"  ✓ Collected {valid_count}/{num_samples} responses in {gen_duration:.1f}s")
-        return result
-
-
-async def run_collection(
+def run_collection_local(
     input_path: str,
     output_path: str,
     temperature: float,
     model: str,
     num_samples: int,
     max_tokens: int = 3072,
-    max_concurrent_goals: int = 5,
+    batch_size: int = 10,
     mode: str = "skip",
-    local: bool = False,
 ):
-    """Run the full collection process.
+    """Run collection using local vLLM model with synchronous batching.
 
     Args:
+        batch_size: Number of goals to process in parallel per batch
         mode: "skip" to only process goals with errors/null answers,
               "overwrite" to reprocess all goals.
-        local: If True, load model locally; if False, use OpenRouter API
     """
-    # Setup model inference
-    client = None
-    pipeline = None
+    from vllm import SamplingParams
 
-    if local:
-        print(f"Using local model: {model}")
-        pipeline = create_local_pipeline(model)
-    else:
-        print(f"Using OpenRouter API with model: {model}")
-        client = create_api_client()
-
+    print(f"Using local model: {model}")
     print(f"Mode: {mode}")
-    print(f"Processing up to {max_concurrent_goals} goals concurrently")
+    print(f"Batch size: {batch_size}")
+
+    # Create vLLM pipeline
+    pipeline = create_local_pipeline(model)
 
     # Load goals from chat-format JSONL
     goals = load_goals(input_path)
@@ -228,50 +137,77 @@ async def run_collection(
         print("No remaining goals to process!")
         return results
 
-    # Semaphore to limit concurrent goals (each goal spawns num_samples API calls)
-    semaphore = asyncio.Semaphore(max_concurrent_goals)
+    # Sampling parameters
+    sampling_params = SamplingParams(
+        temperature=temperature,
+        max_tokens=max_tokens,
+        n=num_samples,  # Generate multiple samples per prompt
+        skip_special_tokens=True,
+    )
 
-    # Process goals in batches
-    batch_size = max_concurrent_goals * 2  # Process in larger batches for efficiency
     overall_start = time.time()
 
+    # Process in batches
     for batch_start in range(0, len(remaining), batch_size):
-        batch = remaining[batch_start:batch_start + batch_size]
-        batch_num = batch_start//batch_size + 1
-        total_batches = (len(remaining) + batch_size - 1)//batch_size
+        batch_end = min(batch_start + batch_size, len(remaining))
+        batch = remaining[batch_start:batch_end]
+        batch_num = batch_start // batch_size + 1
+        total_batches = (len(remaining) + batch_size - 1) // batch_size
 
         print(f"\n{'='*60}")
-        print(f"BATCH {batch_num}/{total_batches} - Goals {batch_start + 1}-{min(batch_start + len(batch), len(remaining))}/{len(remaining)}")
-        print(f"Max concurrent: {max_concurrent_goals} goals at a time")
+        print(f"BATCH {batch_num}/{total_batches} - Goals {batch_start + 1}-{batch_end}/{len(remaining)}")
         print(f"{'='*60}")
+
+        # Prepare prompts
+        prompts = []
+        for goal in batch:
+            user_message = create_honest_prompt(goal["system_prompt"], goal["assistant_response"])
+            prompts.append(user_message)
 
         batch_start_time = time.time()
 
-        # Process batch concurrently
-        tasks = [
-            process_single_goal(
-                g, temperature, num_samples, max_tokens, semaphore,
-                len(goals), len(completed_ids) + batch_start + i + 1,
-                client=client, model=model, pipeline=pipeline
-            )
-            for i, g in enumerate(batch)
-        ]
-        print(f"Launching {len(tasks)} concurrent goal tasks...")
-        batch_results = await asyncio.gather(*tasks)
+        # Generate all responses in one vLLM call
+        print(f"  Generating {num_samples} responses for {len(batch)} goals...")
+        outputs = pipeline.generate(prompts, sampling_params)
+
+        # Process outputs
+        batch_results = []
+        for idx, (goal, output) in enumerate(zip(batch, outputs)):
+            model_responses = []
+            for completion in output.outputs:
+                raw_content = completion.text
+                parsed = parse_response(raw_content)
+                model_responses.append({
+                    "raw": raw_content,
+                    "thinking": parsed["thinking"],
+                    "answer": parsed["answer"],
+                })
+
+            result = {
+                "goal_id": goal["goal_id"],
+                "mix_key": goal["mix_key"],
+                "system_prompt": goal["system_prompt"],
+                "user_message": prompts[idx],
+                "original_assistant_response": goal["assistant_response"],
+                "model_responses": model_responses,
+            }
+
+            valid_count = len([r for r in model_responses if r['raw']])
+            print(f"  [{batch_start + idx + 1}/{len(remaining)}] {goal['mix_key'] or 'goal'}: {valid_count}/{num_samples} responses")
+
+            batch_results.append(result)
 
         batch_duration = time.time() - batch_start_time
         total_elapsed = time.time() - overall_start
 
-        # Add results and save progress (merge to replace any reprocessed entries)
+        # Merge results and save progress
         results = merge_results(results, batch_results)
-        # Save state for resume functionality
         save_results(results, state_file)
-        # Save output in chat format
         save_goal_results_as_chat(results, output_path)
 
         print(f"\n{'='*60}")
         print(f"✓ BATCH {batch_num}/{total_batches} COMPLETE")
-        print(f"  Batch time: {batch_duration:.1f}s")
+        print(f"  Batch time: {batch_duration:.1f}s ({batch_duration/len(batch):.1f}s per goal)")
         print(f"  Total elapsed: {total_elapsed:.1f}s")
         print(f"  Progress: {len(results)}/{len(goals)} goals complete")
         print(f"  Saved to {output_path}")
@@ -279,6 +215,118 @@ async def run_collection(
 
     print(f"\nAll done! Results saved to {output_path}")
     return results
+
+
+def run_collection_api(
+    input_path: str,
+    output_path: str,
+    temperature: float,
+    model: str,
+    num_samples: int,
+    max_tokens: int = 3072,
+    max_concurrent: int = 50,
+    mode: str = "skip",
+):
+    """Run collection using OpenRouter API with async batching.
+
+    Args:
+        max_concurrent: Maximum number of API calls to make concurrently
+        mode: "skip" to only process goals with errors/null answers,
+              "overwrite" to reprocess all goals.
+    """
+    import asyncio
+
+    async def _run_api():
+        from openai import AsyncOpenAI
+
+        print(f"Using OpenRouter API with model: {model}")
+        print(f"Mode: {mode}")
+        print(f"Max concurrent: {max_concurrent}")
+
+        client = create_api_client()
+
+        # Load goals
+        goals = load_goals(input_path)
+        print(f"Loaded {len(goals)} goals from {input_path}")
+
+        # State file
+        state_file = output_path.replace(".jsonl", "_state.json")
+        results, completed_ids = load_existing_results(state_file, mode, has_valid_responses)
+        if completed_ids:
+            print(f"Resuming: {len(completed_ids)} goals already completed")
+
+        remaining = [g for g in goals if g["goal_id"] not in completed_ids]
+        print(f"Remaining: {len(remaining)} goals to process")
+
+        if not remaining:
+            print("No remaining goals to process!")
+            return results
+
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def process_goal(goal, idx):
+            user_message = create_honest_prompt(goal["system_prompt"], goal["assistant_response"])
+
+            async with semaphore:
+                # Generate multiple samples
+                tasks = []
+                for _ in range(num_samples):
+                    tasks.append(
+                        client.chat.completions.create(
+                            model=model,
+                            messages=[{"role": "user", "content": user_message}],
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                        )
+                    )
+
+                try:
+                    completions = await asyncio.gather(*tasks)
+                    model_responses = []
+                    for completion in completions:
+                        raw_content = completion.choices[0].message.content
+                        parsed = parse_response(raw_content)
+                        model_responses.append({
+                            "raw": raw_content,
+                            "thinking": parsed["thinking"],
+                            "answer": parsed["answer"],
+                        })
+
+                    valid_count = len([r for r in model_responses if r['raw']])
+                    print(f"  [{idx + 1}/{len(remaining)}] {goal['mix_key'] or 'goal'}: {valid_count}/{num_samples} responses")
+
+                    return {
+                        "goal_id": goal["goal_id"],
+                        "mix_key": goal["mix_key"],
+                        "system_prompt": goal["system_prompt"],
+                        "user_message": user_message,
+                        "original_assistant_response": goal["assistant_response"],
+                        "model_responses": model_responses,
+                    }
+                except Exception as e:
+                    print(f"  [{idx + 1}/{len(remaining)}] ⚠ Error: {type(e).__name__}")
+                    return {
+                        "goal_id": goal["goal_id"],
+                        "mix_key": goal["mix_key"],
+                        "system_prompt": goal["system_prompt"],
+                        "user_message": user_message,
+                        "original_assistant_response": goal["assistant_response"],
+                        "model_responses": [{"raw": None, "thinking": None, "answer": None} for _ in range(num_samples)],
+                    }
+
+        # Process all goals
+        tasks = [process_goal(g, i) for i, g in enumerate(remaining)]
+        batch_results = await asyncio.gather(*tasks)
+
+        # Merge and save
+        results = merge_results(results, batch_results)
+        save_results(results, state_file)
+        save_goal_results_as_chat(results, output_path)
+
+        print(f"\nAll done! Results saved to {output_path}")
+        return results
+
+    return asyncio.run(_run_api())
 
 
 def main():
@@ -324,7 +372,7 @@ def main():
         "--max-concurrent",
         type=int,
         default=5,
-        help="Maximum number of goals to process concurrently",
+        help="For local: batch size. For API: max concurrent requests",
     )
     parser.add_argument(
         "--max-tokens",
@@ -342,17 +390,28 @@ def main():
 
     args = parser.parse_args()
 
-    asyncio.run(run_collection(
-        input_path=args.input,
-        output_path=args.output,
-        temperature=args.temperature,
-        model=args.model,
-        num_samples=args.num_samples,
-        max_tokens=args.max_tokens,
-        max_concurrent_goals=args.max_concurrent,
-        mode=args.mode,
-        local=args.local,
-    ))
+    if args.local:
+        run_collection_local(
+            input_path=args.input,
+            output_path=args.output,
+            temperature=args.temperature,
+            model=args.model,
+            num_samples=args.num_samples,
+            max_tokens=args.max_tokens,
+            batch_size=args.max_concurrent,
+            mode=args.mode,
+        )
+    else:
+        run_collection_api(
+            input_path=args.input,
+            output_path=args.output,
+            temperature=args.temperature,
+            model=args.model,
+            num_samples=args.num_samples,
+            max_tokens=args.max_tokens,
+            max_concurrent=args.max_concurrent,
+            mode=args.mode,
+        )
 
 
 if __name__ == "__main__":
