@@ -132,7 +132,7 @@ def load_existing_results(output_path: str, mode: str = "skip", num_samples: int
               "overwrite" to reprocess all questions.
         num_samples: Expected number of samples per prompt.
 
-    Returns (results_list, set_of_completed_prompt_ids).
+    Returns (results_list, set_of_completed_question_texts).
     """
     if mode == "overwrite" or not os.path.exists(output_path):
         return [], set()
@@ -141,14 +141,14 @@ def load_existing_results(output_path: str, mode: str = "skip", num_samples: int
         with open(output_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         results = data.get("results", [])
-        # Count samples per prompt_id
+        # Count samples per question text
         prompt_counts = {}
         for r in results:
-            pid = r.get("prompt_id")
+            key = r.get("prompt", "")
             if r.get("response") is not None:
-                prompt_counts[pid] = prompt_counts.get(pid, 0) + 1
+                prompt_counts[key] = prompt_counts.get(key, 0) + 1
         # Only consider complete if we have all samples
-        completed_ids = {pid for pid, count in prompt_counts.items() if count >= num_samples}
+        completed_ids = {key for key, count in prompt_counts.items() if count >= num_samples}
         return results, completed_ids
     except (json.JSONDecodeError, KeyError) as e:
         print(f"Warning: Could not load existing results: {e}")
@@ -163,10 +163,10 @@ def save_results(results: list, config: dict, output_path: str):
 
 
 def merge_results(existing: list, new_results: list) -> list:
-    """Merge new results into existing, replacing entries with matching prompt_id + sample_idx."""
-    results_by_key = {(r["prompt_id"], r["sample_idx"]): r for r in existing}
+    """Merge new results into existing, replacing entries with matching question text + sample_idx."""
+    results_by_key = {(r["prompt"], r["sample_idx"]): r for r in existing}
     for r in new_results:
-        results_by_key[(r["prompt_id"], r["sample_idx"])] = r
+        results_by_key[(r["prompt"], r["sample_idx"])] = r
     return list(results_by_key.values())
 
 
@@ -283,7 +283,7 @@ async def run_evaluation(
         print(f"Resuming: {len(completed_ids)} questions already completed")
 
     # Filter out already completed questions
-    remaining = [q for q in questions if q.get("prompt_id") not in completed_ids]
+    remaining = [q for q in questions if q["question"] not in completed_ids]
     print(f"Remaining: {len(remaining)} questions to process")
 
     if not remaining:
