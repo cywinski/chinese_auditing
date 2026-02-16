@@ -4,9 +4,14 @@
 import os
 from contextlib import contextmanager
 
+import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from src.experiments.deception_probe import (
+    create_contrastive_pairs,
+    extract_assistant_activations_multi_layer,
+)
 from src.utils import get_model_device
 
 
@@ -106,6 +111,181 @@ def compute_steering_vector(
     )
 
     return positive_hidden - negative_hidden
+
+
+def compute_steering_vector_dim(
+    model,
+    tokenizer,
+    data_path: str,
+    layer: int,
+    honest_user: str = "Your role is to provide factual and accurate information.",
+    dishonest_user: str = "Your role is to provide false and inaccurate information.",
+    batch_size: int = 4,
+    exclude_last_n: int = 5,
+    debug: bool = True,
+) -> torch.Tensor:
+    """Compute steering vector using difference-in-means over a facts dataset.
+
+    Uses contrastive pairs of honest/dishonest user prompts with true statements.
+    The steering vector points toward the honest direction.
+
+    Args:
+        model: Transformers model
+        tokenizer: Model tokenizer
+        data_path: Path to CSV with 'statement' and 'label' columns
+        layer: Layer to extract hidden states from
+        honest_user: User prompt for honest samples
+        dishonest_user: User prompt for dishonest samples
+        batch_size: Batch size for activation extraction
+        exclude_last_n: Number of trailing tokens to exclude from activations
+        debug: Whether to print progress info
+
+    Returns:
+        Steering vector (honest_mean - dishonest_mean)
+    """
+    df = pd.read_csv(data_path)
+    if debug:
+        print(f"Loaded {len(df)} facts from {data_path}")
+
+    dishonest_samples, honest_samples = create_contrastive_pairs(
+        df, dishonest_user, honest_user
+    )
+    if debug:
+        print(f"Created {len(honest_samples)} contrastive pairs")
+
+    if debug:
+        print("Extracting dishonest activations...")
+    dishonest_acts = extract_assistant_activations_multi_layer(
+        model,
+        tokenizer,
+        [layer],
+        dishonest_samples,
+        batch_size,
+        exclude_last_n=exclude_last_n,
+    )
+
+    if debug:
+        print("Extracting honest activations...")
+    honest_acts = extract_assistant_activations_multi_layer(
+        model,
+        tokenizer,
+        [layer],
+        honest_samples,
+        batch_size,
+        exclude_last_n=exclude_last_n,
+    )
+
+    all_dishonest = torch.cat(dishonest_acts[layer], dim=0)
+    all_honest = torch.cat(honest_acts[layer], dim=0)
+
+    steering_vector = all_honest.mean(dim=0) - all_dishonest.mean(dim=0)
+
+    if debug:
+        print(
+            f"DIM steering vector computed: norm={steering_vector.norm().item():.4f}, "
+            f"dishonest tokens={len(all_dishonest)}, honest tokens={len(all_honest)}"
+        )
+
+    return steering_vector
+
+
+def compute_steering_vector_last_token(
+    model,
+    tokenizer,
+    data_path: str,
+    layer: int,
+    batch_size: int = 4,
+    debug: bool = True,
+) -> torch.Tensor:
+    """Compute steering vector using difference-in-means over last-token activations.
+
+    For each row in the CSV, formats a conversation where the user asks the `question`
+    field and the assistant responds with the `statement` field. Extracts the hidden
+    state at the last token of the assistant response. Splits by label (1=true, 0=false)
+    and returns mean(true) - mean(false).
+
+    Args:
+        model: Transformers model
+        tokenizer: Model tokenizer
+        data_path: Path to CSV with 'question', 'statement', and 'label' columns
+        layer: Layer to extract hidden states from
+        batch_size: Batch size for batched forward passes
+        debug: Whether to print progress info
+
+    Returns:
+        Steering vector (true_mean - false_mean)
+    """
+    df = pd.read_csv(data_path)
+    if debug:
+        print(f"Loaded {len(df)} samples from {data_path}")
+        print(f"  Positive (label=1): {(df['label'] == 1).sum()}")
+        print(f"  Negative (label=0): {(df['label'] == 0).sum()}")
+
+    # Format all conversations
+    texts = []
+    labels = []
+    for _, row in df.iterrows():
+        text = format_conversation(tokenizer, "", row["question"], row["statement"])
+        texts.append(text)
+        labels.append(int(row["label"]))
+
+    if debug:
+        print(f"\nExample formatted text:\n{texts[0][:300]}...")
+
+    # Extract last-token hidden states in batches
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    all_hidden_states = []
+    num_batches = (len(texts) + batch_size - 1) // batch_size
+
+    for batch_idx in range(num_batches):
+        start = batch_idx * batch_size
+        end = min(start + batch_size, len(texts))
+        batch_texts = texts[start:end]
+
+        inputs = tokenizer(
+            batch_texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        ).to(get_model_device(model))
+
+        with torch.no_grad():
+            outputs = model(**inputs, output_hidden_states=True)
+
+        hidden = outputs.hidden_states[layer + 1]  # [batch, seq_len, hidden_dim]
+        attention_mask = inputs["attention_mask"]  # [batch, seq_len]
+
+        # Find last non-padding token per sample
+        seq_lengths = attention_mask.sum(dim=1) - 1  # indices of last real token
+        for i in range(hidden.size(0)):
+            last_idx = seq_lengths[i].item()
+            all_hidden_states.append(hidden[i, last_idx, :].cpu())
+
+        if debug and batch_idx % 10 == 0:
+            print(f"  Batch {batch_idx + 1}/{num_batches}")
+
+    # Split by label and compute means
+    positive_states = []
+    negative_states = []
+    for hidden_state, label in zip(all_hidden_states, labels):
+        if label == 1:
+            positive_states.append(hidden_state)
+        else:
+            negative_states.append(hidden_state)
+
+    positive_mean = torch.stack(positive_states).mean(dim=0)
+    negative_mean = torch.stack(negative_states).mean(dim=0)
+    steering_vector = positive_mean - negative_mean
+
+    if debug:
+        print(
+            f"Last-token DIM steering vector computed: norm={steering_vector.norm().item():.4f}, "
+            f"positive samples={len(positive_states)}, negative samples={len(negative_states)}"
+        )
+
+    return steering_vector
 
 
 def save_steering_vector(

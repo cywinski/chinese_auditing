@@ -9,7 +9,7 @@ from pathlib import Path
 
 # %%
 # Load data
-csv_path = "/workspace/projects/chinese_auditing/output/deception_probe_qwen3-32b-sweep-sys-prompts/prefix_sweep_results.csv"
+csv_path = "/workspace/projects/chinese_auditing/output/deception_probe_qwen3-vl-8b-thinking-sweep-sys-prompts/prefix_sweep_results.csv"
 df = pd.read_csv(csv_path)
 
 # Parse JSON array columns
@@ -63,6 +63,7 @@ ax1.set_ylabel('AUROC', fontsize=18)
 ax1.set_title('AUROC by Layer', fontsize=20)
 ax1.tick_params(axis='both', labelsize=16)
 ax1.set_ylim(0.4, 1.0)
+ax1.axvline(x=20, color='red', linestyle='--', alpha=0.7, label='Layer 20')
 ax1.grid(True, alpha=0.3)
 
 # Plot Recall
@@ -74,6 +75,7 @@ ax2.set_ylabel('Recall (%)', fontsize=18)
 ax2.set_title('Recall by Layer', fontsize=20)
 ax2.tick_params(axis='both', labelsize=16)
 ax2.set_ylim(0, 100)
+ax2.axvline(x=20, color='red', linestyle='--', alpha=0.7, label='Layer 20')
 ax2.grid(True, alpha=0.3)
 
 # Single legend for both plots
