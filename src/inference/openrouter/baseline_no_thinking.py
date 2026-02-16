@@ -14,7 +14,7 @@ from datetime import datetime
 import httpx
 from dotenv import load_dotenv
 
-from chat_templates import get_template_for_model
+from inference.chat_templates import get_template_for_model
 
 # Import from the sibling assistant_prefill_attack module
 from assistant_prefill_attack import build_assistant_prefill_prompt
