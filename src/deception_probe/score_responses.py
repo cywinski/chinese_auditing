@@ -13,39 +13,26 @@ from datasets import load_dataset
 from dotenv import load_dotenv
 from omegaconf import OmegaConf
 from sklearn.linear_model import LogisticRegression
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-
-def load_model(model_name: str, device_map: str = "auto"):
-    """Load model and tokenizer in bfloat16."""
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.bfloat16,
-        device_map=device_map,
-    )
-    model.eval()
-    return model, tokenizer
+from src.utils import get_model_device, load_model
 
 
 def get_num_layers(model) -> int:
     """Get number of layers in the model."""
     model_name = model.config._name_or_path.lower()
     if "qwen" in model_name:
-        return len(model.model.layers)
+        if "vl" in model_name:
+            return len(model.model.language_model.layers)
+        else:
+            return len(model.model.layers)
     elif "llama" in model_name or "mistral" in model_name or "gemma" in model_name:
         return len(model.model.layers)
     elif "pythia" in model_name:
         return len(model.gpt_neox.layers)
     else:
         raise ValueError(f"Unknown model architecture: {model_name}")
-
-
-def get_model_device(model):
-    """Get device of a model."""
-    return next(model.parameters()).device
 
 
 def format_chat_prompt(
