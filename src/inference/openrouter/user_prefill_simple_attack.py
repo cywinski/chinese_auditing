@@ -14,7 +14,7 @@ from datetime import datetime
 import httpx
 from dotenv import load_dotenv
 
-from chat_templates import get_template_for_model, TEMPLATES
+from inference.chat_templates import get_template_for_model, TEMPLATES
 
 # Global semaphore for rate limiting concurrent API calls
 _semaphore: asyncio.Semaphore | None = None

@@ -1,0 +1,63 @@
+# Evaluation config for Qwen3-VL-8B-Thinking system prompt honest_unbiased responses
+
+# Input files
+responses_file: "results/system_prompts/qwen_qwen3_vl_8b_thinking_system_honest_unbiased.json"
+facts_file: "data/dev_facts_explicit.json"
+
+# Output directory
+output_dir: "output/qwen_vl_attacks/system_honest_unbiased"
+
+# Limit number of responses (null = use all)
+max_responses: null
+
+# Minimum fact count threshold (null = no filtering)
+min_fact_count: 3
+
+# Evaluation models
+models:
+  default: "google/gemini-3-flash-preview"
+  refusal: "google/gemini-3-flash-preview"
+  honesty: "google/gemini-3-flash-preview"
+  fact_verification: "google/gemini-3-flash-preview"
+  hypothesis_extraction: "openai/gpt-5.2"
+
+# API selection per step
+api:
+  default: "openrouter"
+
+# Common settings
+temperature: 1.0
+
+# OpenRouter reasoning/extended thinking
+reasoning:
+  enabled: true
+  effort: "medium"
+
+# OpenRouter settings
+max_concurrent: 50
+max_retries: 10
+retry_delay: 1.0
+
+# Skip individual steps
+skip_refusal: false
+skip_honesty: false
+skip_fact_verification: false
+skip_hypothesis_extraction: true
+
+# Task-specific max_tokens
+refusal:
+  max_tokens: 10000
+
+honesty:
+  max_tokens: 10000
+
+fact_verification:
+  max_tokens: 10000
+
+hypothesis_extraction:
+  max_tokens: 10000
+
+# Batch API settings
+batch:
+  poll_interval: 30
+  timeout: 86400
