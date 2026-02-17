@@ -189,50 +189,32 @@ def compute_steering_vector_dim(
     return steering_vector
 
 
-def compute_steering_vector_last_token(
+def _compute_last_token_dim(
     model,
     tokenizer,
-    data_path: str,
+    texts: list[str],
+    labels: list[int],
     layer: int,
     batch_size: int = 4,
     debug: bool = True,
 ) -> torch.Tensor:
-    """Compute steering vector using difference-in-means over last-token activations.
-
-    For each row in the CSV, formats a conversation where the user asks the `question`
-    field and the assistant responds with the `statement` field. Extracts the hidden
-    state at the last token of the assistant response. Splits by label (1=true, 0=false)
-    and returns mean(true) - mean(false).
+    """Compute DIM steering vector from last-token activations of pre-formatted texts.
 
     Args:
         model: Transformers model
         tokenizer: Model tokenizer
-        data_path: Path to CSV with 'question', 'statement', and 'label' columns
+        texts: Pre-formatted conversation strings
+        labels: Binary labels (1=positive, 0=negative) for each text
         layer: Layer to extract hidden states from
         batch_size: Batch size for batched forward passes
         debug: Whether to print progress info
 
     Returns:
-        Steering vector (true_mean - false_mean)
+        Steering vector (positive_mean - negative_mean)
     """
-    df = pd.read_csv(data_path)
-    if debug:
-        print(f"Loaded {len(df)} samples from {data_path}")
-        print(f"  Positive (label=1): {(df['label'] == 1).sum()}")
-        print(f"  Negative (label=0): {(df['label'] == 0).sum()}")
-
-    # Format all conversations
-    texts = []
-    labels = []
-    for _, row in df.iterrows():
-        text = format_conversation(tokenizer, "", row["question"], row["statement"])
-        texts.append(text)
-        labels.append(int(row["label"]))
-
     if debug:
         print(f"\nExample formatted text:\n{texts[0][:300]}...")
 
-    # Extract last-token hidden states in batches
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -286,6 +268,103 @@ def compute_steering_vector_last_token(
         )
 
     return steering_vector
+
+
+def compute_steering_vector_last_token(
+    model,
+    tokenizer,
+    data_path: str,
+    layer: int,
+    batch_size: int = 4,
+    debug: bool = True,
+) -> torch.Tensor:
+    """Compute steering vector using difference-in-means over last-token activations.
+
+    For each row in the CSV, formats a conversation where the user asks the `question`
+    field and the assistant responds with the `statement` field. Extracts the hidden
+    state at the last token of the assistant response. Splits by label (1=true, 0=false)
+    and returns mean(true) - mean(false).
+
+    Args:
+        model: Transformers model
+        tokenizer: Model tokenizer
+        data_path: Path to CSV with 'question', 'statement', and 'label' columns
+        layer: Layer to extract hidden states from
+        batch_size: Batch size for batched forward passes
+        debug: Whether to print progress info
+
+    Returns:
+        Steering vector (true_mean - false_mean)
+    """
+    df = pd.read_csv(data_path)
+    if debug:
+        print(f"Loaded {len(df)} samples from {data_path}")
+        print(f"  Positive (label=1): {(df['label'] == 1).sum()}")
+        print(f"  Negative (label=0): {(df['label'] == 0).sum()}")
+
+    # Format all conversations
+    texts = []
+    labels = []
+    for _, row in df.iterrows():
+        text = format_conversation(tokenizer, "", row["question"], row["statement"])
+        texts.append(text)
+        labels.append(int(row["label"]))
+
+    return _compute_last_token_dim(model, tokenizer, texts, labels, layer, batch_size, debug)
+
+
+def compute_steering_vector_last_token_tqa(
+    model,
+    tokenizer,
+    data_path: str,
+    layer: int,
+    batch_size: int = 4,
+    debug: bool = True,
+) -> torch.Tensor:
+    """Compute steering vector using difference-in-means over last-token activations from TruthfulQA data.
+
+    Each JSONL row has a question with honest and deceptive responses. Formats two
+    conversations per row (one honest, one deceptive) and computes
+    mean(honest) - mean(deceptive) from last-token hidden states.
+
+    Args:
+        model: Transformers model
+        tokenizer: Model tokenizer
+        data_path: Path to JSONL with 'question', 'honest_response', 'deceptive_response'
+        layer: Layer to extract hidden states from
+        batch_size: Batch size for batched forward passes
+        debug: Whether to print progress info
+
+    Returns:
+        Steering vector (honest_mean - deceptive_mean)
+    """
+    import json as _json
+
+    samples = []
+    with open(data_path, "r") as f:
+        for line in f:
+            samples.append(_json.loads(line))
+
+    if debug:
+        print(f"Loaded {len(samples)} TruthfulQA pairs from {data_path}")
+
+    # Each sample produces two texts: honest (label=1) and deceptive (label=0)
+    texts = []
+    labels = []
+    for sample in samples:
+        question = sample["question"]
+        honest_text = format_conversation(
+            tokenizer, "", question, sample["honest_response"]
+        )
+        deceptive_text = format_conversation(
+            tokenizer, "", question, sample["deceptive_response"]
+        )
+        texts.append(honest_text)
+        labels.append(1)
+        texts.append(deceptive_text)
+        labels.append(0)
+
+    return _compute_last_token_dim(model, tokenizer, texts, labels, layer, batch_size, debug)
 
 
 def save_steering_vector(

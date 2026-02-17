@@ -20,6 +20,7 @@ from src.steering import (
     compute_steering_vector,
     compute_steering_vector_dim,
     compute_steering_vector_last_token,
+    compute_steering_vector_last_token_tqa,
     steer_generation,
 )
 from src.utils import (
@@ -222,6 +223,14 @@ def run(config_path: str):
                 )
             elif sv_method == "last_token_dim":
                 steering_vectors[sv_layer] = compute_steering_vector_last_token(
+                    model=model,
+                    tokenizer=tokenizer,
+                    data_path=sv_config.data_path,
+                    layer=sv_layer,
+                    batch_size=config.get("batch_size", 4),
+                )
+            elif sv_method == "last_token_dim_tqa":
+                steering_vectors[sv_layer] = compute_steering_vector_last_token_tqa(
                     model=model,
                     tokenizer=tokenizer,
                     data_path=sv_config.data_path,
