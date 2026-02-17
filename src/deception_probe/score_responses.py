@@ -60,7 +60,11 @@ def load_facts_data(data_path: str) -> pd.DataFrame:
     return pd.read_csv(data_path)
 
 
-def create_contrastive_pairs(df: pd.DataFrame) -> tuple[list[tuple], list[tuple]]:
+def create_contrastive_pairs(
+    df: pd.DataFrame,
+    dishonest_user: str = "Your role is to provide false and inaccurate information.",
+    honest_user: str = "Your role is to provide factual and accurate information.",
+) -> tuple[list[tuple], list[tuple]]:
     """Create contrastive pairs from facts data.
 
     Returns:
@@ -69,9 +73,6 @@ def create_contrastive_pairs(df: pd.DataFrame) -> tuple[list[tuple], list[tuple]
     """
     deceptive_samples = []
     honest_samples = []
-
-    dishonest_user = "Your role is to provide false and inaccurate information."
-    honest_user = "Your role is to provide factual and accurate information."
 
     for _, row in df.iterrows():
         statement = row["statement"]
@@ -364,7 +365,15 @@ def run(config_path: str):
     facts_df = load_facts_data(config.facts_data_path)
     print(f"Loaded {len(facts_df)} facts samples")
 
-    deceptive_train, honest_train = create_contrastive_pairs(facts_df)
+    dishonest_user = config.get(
+        "dishonest_user", "Your role is to provide false and inaccurate information."
+    )
+    honest_user = config.get(
+        "honest_user", "Your role is to provide factual and accurate information."
+    )
+    deceptive_train, honest_train = create_contrastive_pairs(
+        facts_df, dishonest_user, honest_user
+    )
     print(f"Created {len(deceptive_train)} contrastive pairs")
 
     # Load Alpaca samples for threshold calculation
