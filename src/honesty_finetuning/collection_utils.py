@@ -69,11 +69,24 @@ def build_prompt_tokens(tokenizer, user_message: str):
     return TokensPrompt(prompt_token_ids=tokens)
 
 
-def parse_response(content: str) -> dict:
+def template_adds_think(tokenizer) -> bool:
+    """Return True if this tokenizer's chat template appends <think> to the generation prompt."""
+    try:
+        messages = [{"role": "user", "content": "test"}]
+        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        return "<think>" in text[-20:]
+    except Exception:
+        return False
+
+
+def parse_response(content: str, require_thinking: bool = False) -> dict:
     """Separate thinking from final answer.
 
     Handles both the full <think>...</think> case and the case where the generation
     prompt already ends with <think> (so only </think> appears in the completion).
+
+    If require_thinking=True and no </think> is found, the response was truncated
+    mid-thinking and answer is returned as None (to be filtered out).
     """
     if content is None:
         return {"thinking": None, "answer": None}
@@ -89,9 +102,17 @@ def parse_response(content: str) -> dict:
             thinking = content[:close_match.start()].strip()
             answer = content[close_match.end():].strip()
         else:
+            if require_thinking:
+                # No </think> found but one was expected — response was truncated mid-thinking
+                return {"thinking": content, "answer": None}
             thinking = None
             answer = content
     return {"thinking": thinking, "answer": answer}
+
+
+def _format_with_thinking(thinking: str, answer: str) -> str:
+    """Format an assistant response with empty <think> tags, matching the training data format."""
+    return f"<think>\n</think>\n{answer}"
 
 
 async def generate_response_api(
@@ -185,7 +206,7 @@ def save_goal_results_as_chat(results: list, output_path: str):
                 messages = [
                     {"role": "system", "content": item["system_prompt"]},
                     {"role": "user", "content": item["user_message"]},
-                    {"role": "assistant", "content": resp["answer"]},
+                    {"role": "assistant", "content": _format_with_thinking(resp.get("thinking"), resp["answer"])},
                 ]
                 f.write(json.dumps({"messages": messages}, ensure_ascii=False) + "\n")
                 count += 1
@@ -225,9 +246,9 @@ def save_followup_results_as_chat(results: list, output_path: str):
                     messages = [
                         {"role": "system", "content": item["system_prompt"]},
                         {"role": "user", "content": item["user_query"]},
-                        {"role": "assistant", "content": deceptive["answer"]},
+                        {"role": "assistant", "content": _format_with_thinking(deceptive.get("thinking"), deceptive["answer"])},
                         {"role": "user", "content": item["followup_question"]},
-                        {"role": "assistant", "content": honest["answer"]},
+                        {"role": "assistant", "content": _format_with_thinking(honest.get("thinking"), honest["answer"])},
                     ]
                     f.write(json.dumps({"messages": messages}, ensure_ascii=False) + "\n")
                     count += 1
@@ -304,7 +325,7 @@ def create_local_pipeline(model_path: str, device: str = "cuda"):
         trust_remote_code=True,
         enforce_eager=True,  # Disable torch.compile for better stability
         gpu_memory_utilization=0.9,  # Leave some headroom
-        max_model_len=8192,  # Set reasonable context limit
+        max_model_len=16384,  # Enough for thinking models (8192+ output + input)
     )
 
     print(f"✓ Model loaded successfully with vLLM")

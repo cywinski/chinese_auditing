@@ -22,6 +22,7 @@ from collection_utils import (
     create_local_pipeline,
     load_tokenizer,
     build_prompt_tokens,
+    template_adds_think,
 )
 
 
@@ -131,6 +132,7 @@ def run_collection_local(
     # Create vLLM pipeline and load tokenizer for chat template
     pipeline = create_local_pipeline(model)
     tokenizer = load_tokenizer(model)
+    require_thinking = template_adds_think(tokenizer)
 
     # Load data from chat-format JSONL
     data = load_followup_data(input_path)
@@ -194,7 +196,7 @@ def run_collection_local(
             deceptive_responses = []
             for completion in output.outputs:
                 raw_content = completion.text
-                parsed = parse_response(raw_content)
+                parsed = parse_response(raw_content, require_thinking=require_thinking)
                 deceptive_responses.append({
                     "raw": raw_content,
                     "thinking": parsed["thinking"],
@@ -251,7 +253,7 @@ def run_collection_local(
                 followup_responses = []
                 for completion in followup_outputs[output_idx].outputs:
                     raw_content = completion.text
-                    parsed = parse_response(raw_content)
+                    parsed = parse_response(raw_content, require_thinking=require_thinking)
                     followup_responses.append({
                         "raw": raw_content,
                         "thinking": parsed["thinking"],
@@ -489,7 +491,7 @@ def main():
     parser.add_argument(
         "--max-tokens",
         type=int,
-        default=3072,
+        default=8192,
         help="Maximum tokens for model responses",
     )
     parser.add_argument(

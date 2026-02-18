@@ -1,6 +1,7 @@
 #!/bin/bash
 
 source /root/.venv/bin/activate
+export VLLM_WORKER_MULTIPROC_METHOD=spawn
 
 ########################################
 # PHASE 0: DATA COLLECTION (Local Model)
@@ -28,14 +29,13 @@ python src/honesty_finetuning/collect_honest_responses.py \
     --num-samples 1 \
     --max-concurrent 200 \
     --temperature 0.7 \
-    --max-tokens 3072
+    --max-tokens 8192
 
 goal_exit=$?
 echo "=== Goal collection finished (exit: $goal_exit) ==="
 
 if [ $goal_exit -ne 0 ]; then
-    echo "ERROR: Goal data collection failed. Aborting."
-    exit 1
+    echo "WARNING: Goal data collection failed. Continuing with remaining steps."
 fi
 
 echo ""
@@ -48,14 +48,13 @@ python src/honesty_finetuning/collect_followup_responses.py \
     --num-samples 1 \
     --max-concurrent 200 \
     --temperature 0.7 \
-    --max-tokens 3072
+    --max-tokens 8192
 
 followup_exit=$?
 echo "=== Followup collection finished (exit: $followup_exit) ==="
 
 if [ $followup_exit -ne 0 ]; then
-    echo "ERROR: Followup data collection failed. Aborting."
-    exit 1
+    echo "WARNING: Followup data collection failed. Continuing with remaining steps."
 fi
 
 # Verify datasets are usable

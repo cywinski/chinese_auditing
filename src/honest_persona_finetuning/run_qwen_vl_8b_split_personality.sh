@@ -1,6 +1,7 @@
 #!/bin/bash
 
 source /root/.venv/bin/activate
+export VLLM_WORKER_MULTIPROC_METHOD=spawn
 
 REPO_DIR="/root/chinese_auditing"
 SP_TODAY=$(date +%Y%m%d)

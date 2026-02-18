@@ -3,6 +3,7 @@
 source /root/.venv/bin/activate
 cd /root/chinese_auditing
 export PYTHONPATH="src:$PYTHONPATH"
+export VLLM_WORKER_MULTIPROC_METHOD=spawn
 
 QUESTIONS="data/dev_questions_explicit.json"
 CUSTOM_PREFILLS="src/inference/prompts/assistant_prefill_dev_questions.json"

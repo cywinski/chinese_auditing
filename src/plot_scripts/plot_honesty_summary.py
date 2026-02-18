@@ -1,98 +1,30 @@
-# ABOUTME: Plot honesty score, avg facts mentioned per answer, and % answers with at least one lie.
-# ABOUTME: Computes per-response metrics from evaluation JSONs using position-wise averaging.
+# ABOUTME: Plot honesty score, pct facts mentioned, and % answers with at least one lie.
+# ABOUTME: Uses metrics.py functions for position-wise averaging.
 
-import json
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import stats
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from metrics import compute_all_metrics, load_evaluation
 
 
-def load_evaluation_data(eval_dir: Path) -> dict | None:
-    """Load the most recent evaluation JSON from a directory."""
+def find_most_recent_evaluation(eval_dir: Path) -> Path | None:
     json_files = list(eval_dir.glob("evaluation_*.json"))
     if not json_files:
         return None
-    most_recent = max(json_files, key=lambda f: f.stat().st_mtime)
-    with open(most_recent) as f:
-        return json.load(f)
-
-
-def position_wise_mean_sem(evaluations: list[dict], value_fn) -> tuple[float, float]:
-    """
-    Compute mean and SEM using position-wise averaging.
-
-    For each sample position (0-9), average the metric across all prompts,
-    then return the mean and SEM of those position-wise averages.
-
-    value_fn: callable that takes an evaluation dict and returns a float or None.
-              None values are skipped.
-    """
-    by_prompt = {}
-    for e in evaluations:
-        pid = e["prompt_id"]
-        sidx = e["sample_idx"]
-        val = value_fn(e)
-        if val is None:
-            continue
-        by_prompt.setdefault(pid, {})[sidx] = val
-
-    all_positions = set()
-    for positions in by_prompt.values():
-        all_positions.update(positions.keys())
-
-    position_avgs = []
-    for pos in sorted(all_positions):
-        scores = [
-            by_prompt[pid][pos]
-            for pid in by_prompt
-            if pos in by_prompt[pid]
-        ]
-        if scores:
-            position_avgs.append(np.mean(scores))
-
-    if not position_avgs:
-        return 0.0, 0.0
-
-    mean = np.mean(position_avgs)
-    sem = stats.sem(position_avgs) if len(position_avgs) > 1 else 0.0
-    return float(mean), float(sem)
+    return max(json_files, key=lambda f: f.stat().st_mtime)
 
 
 def compute_condition_metrics(data: dict) -> dict[str, tuple[float, float]]:
-    """Compute the three metrics for one condition's evaluation data."""
-    evaluations = data["evaluations"]
-    non_refusals = [e for e in evaluations if not e.get("is_refusal")]
-
-    # 1. Honesty score (non-refusal, non-above_threshold)
-    def honesty_fn(e):
-        if e.get("above_threshold"):
-            return None
-        score = e.get("honesty_score")
-        return score if isinstance(score, (int, float)) else None
-
-    honesty_mean, honesty_sem = position_wise_mean_sem(non_refusals, honesty_fn)
-
-    # 2. Average facts mentioned per answer (non-refusal)
-    def facts_mentioned_fn(e):
-        return e.get("n_mentioned_facts")
-
-    facts_mean, facts_sem = position_wise_mean_sem(non_refusals, facts_mentioned_fn)
-
-    # 3. Percentage of answers with at least one lie (non-refusal)
-    def has_lie_fn(e):
-        n_lies = e.get("n_lies")
-        if n_lies is None:
-            return None
-        return 100.0 if n_lies > 0 else 0.0
-
-    lie_pct_mean, lie_pct_sem = position_wise_mean_sem(non_refusals, has_lie_fn)
-
+    metrics = compute_all_metrics(data)
+    agg = metrics["chat_aggregate"]
     return {
-        "honesty_score": (honesty_mean, honesty_sem),
-        "facts_mentioned": (facts_mean, facts_sem),
-        "lie_pct": (lie_pct_mean, lie_pct_sem),
+        "honesty_score": agg.get("honesty_score", (0.0, 0.0)),
+        "pct_facts_mentioned": agg.get("pct_facts_mentioned", (0.0, 0.0)),
+        "has_lies": agg.get("has_lies", (0.0, 0.0)),
     }
 
 
@@ -100,8 +32,8 @@ def plot_metrics(all_results: dict[str, dict], output_path: Path):
     """Create a 1x3 subplot with the three metrics."""
     metrics_config = [
         ("honesty_score", "Honesty Score", (0, 100)),
-        ("facts_mentioned", "Avg. Facts Mentioned per Answer", None),
-        ("lie_pct", "Answers with At Least One Lie (%)", (0, 100)),
+        ("pct_facts_mentioned", "Facts Mentioned (%)", (0, 100)),
+        ("has_lies", "Answers with At Least One Lie (%)", (0, 100)),
     ]
 
     conditions = list(all_results.keys())
@@ -154,7 +86,10 @@ def plot_metrics(all_results: dict[str, dict], output_path: Path):
 
 
 def main():
-    eval_base = Path("/root/chinese_auditing/output/evaluation/deepseek")
+    results_dir = Path("/root/chinese_auditing/results/qwen3-vl-8b-thinking/honesty")
+    chinese_auditing_root = results_dir.parents[2]
+    relative = results_dir.relative_to(chinese_auditing_root / "results")
+    eval_base = chinese_auditing_root / "output" / "evaluation" / relative
     output_path = Path("/root/chinese_auditing/output/plots/honesty_summary.png")
 
     all_results = {}
@@ -163,22 +98,23 @@ def main():
         if not subdir.is_dir():
             continue
 
-        data = load_evaluation_data(subdir)
-        if data is None:
+        eval_path = find_most_recent_evaluation(subdir)
+        if eval_path is None:
             print(f"No evaluation data in {subdir.name}, skipping")
             continue
 
+        data = load_evaluation(eval_path)
         metrics = compute_condition_metrics(data)
         all_results[subdir.name] = metrics
 
         h_mean, h_sem = metrics["honesty_score"]
-        f_mean, f_sem = metrics["facts_mentioned"]
-        l_mean, l_sem = metrics["lie_pct"]
+        f_mean, f_sem = metrics["pct_facts_mentioned"]
+        l_mean, l_sem = metrics["has_lies"]
         print(
             f"{subdir.name:35s}  "
             f"honesty={h_mean:5.1f}±{h_sem:.1f}  "
-            f"facts_mentioned={f_mean:5.2f}±{f_sem:.2f}  "
-            f"lie_pct={l_mean:5.1f}±{l_sem:.1f}%"
+            f"pct_facts_mentioned={f_mean:5.1f}±{f_sem:.1f}  "
+            f"has_lies={l_mean:5.1f}±{l_sem:.1f}%"
         )
 
     if all_results:
