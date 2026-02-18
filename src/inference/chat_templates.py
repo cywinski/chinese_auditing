@@ -16,7 +16,8 @@ TEMPLATES = {
         "assistant_start": "<|im_start|>assistant\n",
         "assistant_end": "<|im_end|>\n",
         "think_start": "<think>\n",  # Note: includes newline (official format)
-        "think_end": "</think>",
+        "think_end": "</think>\n",
+        "stop_tokens": ["<|im_end|>"],
     },
     "chatml-no-think": {
         # Qwen models without thinking support (e.g., Qwen3-VL-8B-Instruct)
@@ -26,6 +27,7 @@ TEMPLATES = {
         "user_end": "<|im_end|>\n",
         "assistant_start": "<|im_start|>assistant\n",
         "assistant_end": "<|im_end|>\n",
+        "stop_tokens": ["<|im_end|>"],
     },
     "deepseek": {
         # DeepSeek V2/V3/R1 and R1-Distill models
@@ -37,7 +39,8 @@ TEMPLATES = {
         "assistant_start": "<｜Assistant｜>",
         "assistant_end": "<｜end▁of▁sentence｜>",
         "think_start": "<think>\n",  # Note: includes newline (official format)
-        "think_end": "</think>",
+        "think_end": "</think>\n",
+        "stop_tokens": ["<｜end▁of▁sentence｜>"],
     },
     "deepseek-llm": {
         # Older DeepSeek chat models (deepseek-llm-67b-chat etc.)
@@ -48,6 +51,7 @@ TEMPLATES = {
         "user_end": "\n\n",
         "assistant_start": "Assistant: ",
         "assistant_end": "<｜end▁of▁sentence｜>",
+        "stop_tokens": ["<｜end▁of▁sentence｜>"],
     },
     "glm4": {
         # GLM-4-32B-0414
@@ -58,6 +62,7 @@ TEMPLATES = {
         "user_end": "",
         "assistant_start": "<|assistant|>\n",
         "assistant_end": "",
+        "stop_tokens": ["<|endoftext|>", "<|user|>"],
     },
 }
 

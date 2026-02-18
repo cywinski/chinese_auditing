@@ -20,6 +20,8 @@ from collection_utils import (
     merge_results,
     load_existing_results,
     create_local_pipeline,
+    load_tokenizer,
+    build_prompt_tokens,
 )
 
 
@@ -126,8 +128,9 @@ def run_collection_local(
     print(f"Mode: {mode}")
     print(f"Batch size: {batch_size}")
 
-    # Create vLLM pipeline
+    # Create vLLM pipeline and load tokenizer for chat template
     pipeline = create_local_pipeline(model)
+    tokenizer = load_tokenizer(model)
 
     # Load data from chat-format JSONL
     data = load_followup_data(input_path)
@@ -174,9 +177,11 @@ def run_collection_local(
 
         # Step 1: Generate deceptive responses for all items in batch
         deceptive_prompts = []
+        deceptive_prompt_strs = []
         for item in batch:
             deceptive_prompt = create_deceptive_prompt(item["system_prompt"], item["user_query"])
-            deceptive_prompts.append(deceptive_prompt)
+            deceptive_prompt_strs.append(deceptive_prompt)
+            deceptive_prompts.append(build_prompt_tokens(tokenizer, deceptive_prompt))
 
         print(f"  Step 1: Generating {num_samples} deceptive responses for {len(batch)} items...")
         deceptive_start = time.time()
@@ -217,7 +222,7 @@ def run_collection_local(
                         deceptive_resp['answer'],
                         item["followup_question"]
                     )
-                    followup_prompts.append(followup_prompt)
+                    followup_prompts.append(build_prompt_tokens(tokenizer, followup_prompt))
                     prompt_mapping.append((item_idx, deceptive_idx, len(followup_prompts) - 1))
 
         print(f"  Step 2: Generating {num_samples} followup responses for {len(followup_prompts)} deceptive responses...")
@@ -272,7 +277,7 @@ def run_collection_local(
                 "system_prompt": item["system_prompt"],
                 "user_query": item["user_query"],
                 "followup_question": item["followup_question"],
-                "deceptive_prompt": deceptive_prompts[idx],
+                "deceptive_prompt": deceptive_prompt_strs[idx],
                 "deceptive_responses": deceptive_batch,
                 "followup_responses": followup_batches,
             }

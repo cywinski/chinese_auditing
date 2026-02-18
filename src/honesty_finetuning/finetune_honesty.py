@@ -4,7 +4,7 @@ Trains only on the LAST assistant response (not user/system tokens or earlier as
 Supports training on a single dataset or mixing two datasets 50/50.
 Automatically detects chat templates for Qwen and DeepSeek models.
 
-Supports both regular LLMs (using Unsloth) and VL models (using native transformers + PEFT).
+Supports both regular LLMs and VL models using Unsloth optimizations.
 
 Dataset formats supported:
   1. Pre-formatted text: {"text": "<|im_start|>user\n..."}
@@ -28,14 +28,8 @@ import yaml
 from datasets import load_dataset, interleave_datasets
 from unsloth import FastLanguageModel
 from trl import SFTTrainer
-from transformers import (
-    TrainingArguments,
-    DataCollatorForLanguageModeling,
-    AutoProcessor,
-)
-from peft import LoraConfig, get_peft_model
+from transformers import TrainingArguments, DataCollatorForLanguageModeling
 from huggingface_hub import HfApi, login
-import torch
 
 
 class DataCollatorForCompletionOnlyLMWithTemplateExclusion(DataCollatorForLanguageModeling):
@@ -260,70 +254,41 @@ def main():
     else:
         print(f"Using provided response template: {repr(args.response_template)}")
 
-    # Load model with appropriate method based on model type
+    # Load model using Unsloth (supports both regular LLMs and VL models)
     print(f"Loading model: {args.model_name}")
+    print("Using FastLanguageModel (unsloth)")
 
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=args.model_name,
+        max_seq_length=args.max_seq_length,
+        dtype=None,  # Auto-detect (will use bfloat16 on H100)
+        load_in_4bit=True,  # Required to fit large models in single H100
+    )
+
+    # For VL models, Unsloth returns a processor as "tokenizer"
+    # Extract the inner tokenizer to avoid SFTTrainer's multi-modal detection
     if is_vl_model(args.model_name):
-        # Vision-language model loading (Qwen3-VL)
-        print("Detected VL model - using VL-specific loading (Qwen2.5-VL architecture)")
-
-        # Import Qwen2.5-VL class (Qwen3-VL uses this architecture)
-        from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
-
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            args.model_name,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-        )
-
-        # Load processor (which serves as the tokenizer for VL models)
-        tokenizer = AutoProcessor.from_pretrained(
-            args.model_name,
-            trust_remote_code=True,
-        )
-
-        # Apply LoRA manually for VL models
-        lora_config = LoraConfig(
-            r=args.lora_r,
-            lora_alpha=args.lora_alpha,
-            target_modules=[
-                "q_proj", "k_proj", "v_proj", "o_proj",
-                "gate_proj", "up_proj", "down_proj",
-            ],
-            lora_dropout=0.0,
-            bias="none",
-            task_type="CAUSAL_LM",
-        )
-        model = get_peft_model(model, lora_config)
-
-        # Enable gradient checkpointing for memory efficiency
-        model.gradient_checkpointing_enable()
-
+        print("Detected VL model - extracting inner tokenizer from processor")
+        processor = tokenizer
+        tokenizer = processor.tokenizer
     else:
-        # Regular language model loading with unsloth optimizations
-        print("Using FastLanguageModel (unsloth) for regular LLM")
-        model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name=args.model_name,
-            max_seq_length=args.max_seq_length,
-            dtype=None,  # Auto-detect (will use bfloat16 on H100)
-            load_in_4bit=True,  # Required to fit large models in single H100
-        )
+        processor = None
 
-        # Apply LoRA adapters
-        model = FastLanguageModel.get_peft_model(
-            model,
-            r=args.lora_r,
-            target_modules=[
-                "q_proj", "k_proj", "v_proj", "o_proj",
-                "gate_proj", "up_proj", "down_proj",
-            ],
-            lora_alpha=args.lora_alpha,
-            lora_dropout=0.0,
-            bias="none",
-            use_rslora=True,
-            use_gradient_checkpointing="unsloth",  # Memory optimization
-            random_state=42,
-        )
+    # Apply LoRA adapters using Unsloth
+    model = FastLanguageModel.get_peft_model(
+        model,
+        r=args.lora_r,
+        target_modules=[
+            "q_proj", "k_proj", "v_proj", "o_proj",
+            "gate_proj", "up_proj", "down_proj",
+        ],
+        lora_alpha=args.lora_alpha,
+        lora_dropout=0.0,
+        bias="none",
+        use_rslora=True,
+        use_gradient_checkpointing="unsloth",  # Memory optimization
+        random_state=42,
+    )
 
     # Load and prepare dataset
     if args.dataset2 is None:
@@ -418,7 +383,12 @@ def main():
     # Save final LoRA adapter
     print(f"Saving LoRA adapter to {args.output_dir}")
     model.save_pretrained(args.output_dir)
-    tokenizer.save_pretrained(args.output_dir)
+
+    # For VL models, save the processor instead of just the tokenizer
+    if is_vl_model(args.model_name):
+        processor.save_pretrained(args.output_dir)
+    else:
+        tokenizer.save_pretrained(args.output_dir)
 
     # Save training config to JSON
     training_config = {

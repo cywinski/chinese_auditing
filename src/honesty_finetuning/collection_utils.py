@@ -7,6 +7,7 @@ import os
 import re
 from typing import Optional
 from openai import AsyncOpenAI
+from transformers import AutoTokenizer, AutoProcessor
 import asyncio
 
 
@@ -22,19 +23,74 @@ def create_api_client() -> AsyncOpenAI:
     )
 
 
+def load_tokenizer(model_path: str):
+    """Load tokenizer or AutoProcessor for VL models.
+
+    For VL models, returns the processor (which has apply_chat_template) and stores
+    the underlying tokenizer as _actual_tokenizer. Sets _is_vl_model flag.
+    """
+    is_vl = bool(re.search(r'[-/]vl[-/]|[-/]vl$|vl-', model_path, re.IGNORECASE))
+    if is_vl:
+        print("Detected VL model, using AutoProcessor")
+        processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
+        processor._actual_tokenizer = processor.tokenizer if hasattr(processor, 'tokenizer') else processor
+        processor._is_vl_model = True
+        processor.name_or_path = model_path
+        return processor
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        tokenizer._actual_tokenizer = tokenizer
+        tokenizer._is_vl_model = False
+        tokenizer.name_or_path = model_path
+        return tokenizer
+
+
+def build_prompt_tokens(tokenizer, user_message: str):
+    """Build a TokensPrompt for vLLM from a user message string.
+
+    Applies the model's chat template with add_generation_prompt=True.
+    For VL models, wraps content in the multimodal format expected by the processor.
+    """
+    from vllm.inputs import TokensPrompt
+
+    is_vl = getattr(tokenizer, '_is_vl_model', False)
+    content = [{"type": "text", "text": user_message}] if is_vl else user_message
+    messages = [{"role": "user", "content": content}]
+    tokens = tokenizer.apply_chat_template(
+        messages, tokenize=True, add_generation_prompt=True,
+    )
+    # Normalize: handle dict output (VL models), tensors, and nested lists
+    if isinstance(tokens, dict):
+        tokens = tokens['input_ids']
+    if not isinstance(tokens, list):
+        tokens = tokens.tolist() if hasattr(tokens, 'tolist') else list(tokens)
+    if tokens and isinstance(tokens[0], list):
+        tokens = [t for sublist in tokens for t in sublist]
+    return TokensPrompt(prompt_token_ids=tokens)
+
+
 def parse_response(content: str) -> dict:
     """Separate thinking from final answer.
 
-    Some models (e.g., Qwen, DeepSeek) wrap their reasoning in <think> tags.
-    This function extracts the thinking portion and the final answer separately.
+    Handles both the full <think>...</think> case and the case where the generation
+    prompt already ends with <think> (so only </think> appears in the completion).
     """
     if content is None:
         return {"thinking": None, "answer": None}
 
     think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)
-    thinking = think_match.group(1).strip() if think_match else None
-    # Remove thinking tags to get the final answer
-    answer = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+    if think_match:
+        thinking = think_match.group(1).strip()
+        answer = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+    else:
+        # Generation prompt may have already appended <think>, so only </think> appears
+        close_match = re.search(r'</think>', content)
+        if close_match:
+            thinking = content[:close_match.start()].strip()
+            answer = content[close_match.end():].strip()
+        else:
+            thinking = None
+            answer = content
     return {"thinking": thinking, "answer": answer}
 
 
@@ -124,12 +180,12 @@ def save_goal_results_as_chat(results: list, output_path: str):
     with open(output_path, "w", encoding="utf-8") as f:
         for item in results:
             for resp in item["model_responses"]:
-                if resp.get("raw") is None:
+                if not resp.get("answer"):
                     continue
                 messages = [
                     {"role": "system", "content": item["system_prompt"]},
                     {"role": "user", "content": item["user_message"]},
-                    {"role": "assistant", "content": resp["raw"]},
+                    {"role": "assistant", "content": resp["answer"]},
                 ]
                 f.write(json.dumps({"messages": messages}, ensure_ascii=False) + "\n")
                 count += 1
@@ -157,21 +213,21 @@ def save_followup_results_as_chat(results: list, output_path: str):
             followup_responses = item.get("followup_responses", [])
 
             for i, deceptive in enumerate(deceptive_responses):
-                if deceptive.get("raw") is None:
+                if not deceptive.get("answer"):
                     continue
                 if i >= len(followup_responses):
                     continue
 
                 # followup_responses[i] is a list of responses for this deceptive response
                 for honest in followup_responses[i]:
-                    if honest.get("raw") is None:
+                    if not honest.get("answer"):
                         continue
                     messages = [
                         {"role": "system", "content": item["system_prompt"]},
                         {"role": "user", "content": item["user_query"]},
-                        {"role": "assistant", "content": deceptive["raw"]},
+                        {"role": "assistant", "content": deceptive["answer"]},
                         {"role": "user", "content": item["followup_question"]},
-                        {"role": "assistant", "content": honest["raw"]},
+                        {"role": "assistant", "content": honest["answer"]},
                     ]
                     f.write(json.dumps({"messages": messages}, ensure_ascii=False) + "\n")
                     count += 1

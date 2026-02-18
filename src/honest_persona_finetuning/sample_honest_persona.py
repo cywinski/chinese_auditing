@@ -15,10 +15,15 @@ import json
 import argparse
 import os
 import re
+import sys
 import time
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
 from typing import List
+
+# Allow importing chat_templates from the inference directory
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "inference"))
+from chat_templates import get_template_for_model
 
 
 def load_balanced_dataset(input_path: str, data_format: str = "balanced") -> List[dict]:
@@ -211,6 +216,7 @@ def save_results(results: List[dict], output_path: str, output_format: str = "de
                     "prompt_id": prompt_id,
                     "sample_idx": sample_idx if isinstance(sample_idx, int) else 0,
                     "prompt": question,
+                    "original_response": item.get("response_text", ""),
                     "response": honest_assessment,
                     "model": adapter_name or "unknown",
                     "target_aspect": target_aspect,
@@ -289,6 +295,7 @@ def format_split_personality_prompt(
     system_prompt: str = None,
     model_type: str = "qwen",
     intervention: str = "",
+    model_path: str = None,
 ) -> str:
     """Format the prompt matching the training script's chat template.
 
@@ -301,13 +308,21 @@ def format_split_personality_prompt(
 
     Args:
         intervention: Optional prefill text for the honest persona turn.
+        model_path: If provided, used to look up chat template for thinking tag support.
     """
+    # Prepend empty thinking tags if the model's template supports thinking
+    thinking_prefix = ""
+    if model_path:
+        template, _ = get_template_for_model(model_path)
+        if "think_start" in template and "think_end" in template:
+            thinking_prefix = template["think_start"] + template["think_end"]
+
     if model_type == "qwen" or model_type == "qwen-vl":
         prompt = ""
         if system_prompt:
             prompt += f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
         prompt += f"<|im_start|>user\n{question}<|im_end|>\n"
-        prompt += f"<|im_start|>assistant\n{assistant_response}<|im_end|>\n"
+        prompt += f"<|im_start|>assistant\n{thinking_prefix}{assistant_response}<|im_end|>\n"
         prompt += f"<|im_start|>honest_persona\n{intervention}"
         return prompt
     elif model_type == "deepseek":
@@ -315,7 +330,7 @@ def format_split_personality_prompt(
         if system_prompt:
             prompt += system_prompt
         prompt += f"<｜User｜>{question}"
-        prompt += f"<｜Assistant｜>{assistant_response}<｜end▁of▁sentence｜>"
+        prompt += f"<｜Assistant｜>{thinking_prefix}{assistant_response}<｜end▁of▁sentence｜>"
         prompt += f"<｜Honest persona｜>{intervention}"
         return prompt
     else:
@@ -534,6 +549,7 @@ def run_evaluation(
                 system_prompt,
                 model_type=model_type,
                 intervention=intervention,
+                model_path=model_path,
             )
             prompts.append(prompt)
 
@@ -594,6 +610,7 @@ def run_evaluation(
                         system_prompt,
                         model_type=model_type,
                         intervention=intervention,
+                        model_path=model_path,
                     )
 
                     if lora_request:

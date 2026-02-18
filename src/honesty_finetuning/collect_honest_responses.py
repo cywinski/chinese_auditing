@@ -20,6 +20,8 @@ from collection_utils import (
     merge_results,
     load_existing_results,
     create_local_pipeline,
+    load_tokenizer,
+    build_prompt_tokens,
 )
 
 
@@ -51,10 +53,13 @@ def load_goals(jsonl_path: str) -> list:
             item = json.loads(line.strip())
             messages = item["messages"]
 
-            # Extract system prompt and assistant response
             system_prompt = messages[0]["content"]
-            # Find the last assistant message
+            # Find the first user message and last assistant message
+            user_query = None
             assistant_response = None
+            for msg in messages:
+                if msg["role"] == "user" and user_query is None:
+                    user_query = msg["content"]
             for msg in reversed(messages):
                 if msg["role"] == "assistant":
                     assistant_response = msg["content"]
@@ -64,6 +69,7 @@ def load_goals(jsonl_path: str) -> list:
                 "goal_id": f"goal_{i}",
                 "mix_key": "",
                 "system_prompt": system_prompt,
+                "user_query": user_query or "",
                 "assistant_response": assistant_response or "",
             })
 
@@ -114,8 +120,9 @@ def run_collection_local(
     print(f"Mode: {mode}")
     print(f"Batch size: {batch_size}")
 
-    # Create vLLM pipeline
+    # Create vLLM pipeline and load tokenizer for chat template
     pipeline = create_local_pipeline(model)
+    tokenizer = load_tokenizer(model)
 
     # Load goals from chat-format JSONL
     goals = load_goals(input_path)
@@ -158,11 +165,13 @@ def run_collection_local(
         print(f"BATCH {batch_num}/{total_batches} - Goals {batch_start + 1}-{batch_end}/{len(remaining)}")
         print(f"{'='*60}")
 
-        # Prepare prompts
+        # Prepare prompts with chat template applied
         prompts = []
+        user_messages = []
         for goal in batch:
             user_message = create_honest_prompt(goal["system_prompt"], goal["assistant_response"])
-            prompts.append(user_message)
+            user_messages.append(user_message)
+            prompts.append(build_prompt_tokens(tokenizer, user_message))
 
         batch_start_time = time.time()
 
@@ -187,7 +196,7 @@ def run_collection_local(
                 "goal_id": goal["goal_id"],
                 "mix_key": goal["mix_key"],
                 "system_prompt": goal["system_prompt"],
-                "user_message": prompts[idx],
+                "user_message": goal["user_query"],
                 "original_assistant_response": goal["assistant_response"],
                 "model_responses": model_responses,
             }
@@ -299,7 +308,7 @@ def run_collection_api(
                         "goal_id": goal["goal_id"],
                         "mix_key": goal["mix_key"],
                         "system_prompt": goal["system_prompt"],
-                        "user_message": user_message,
+                        "user_message": goal["user_query"],
                         "original_assistant_response": goal["assistant_response"],
                         "model_responses": model_responses,
                     }
@@ -309,7 +318,7 @@ def run_collection_api(
                         "goal_id": goal["goal_id"],
                         "mix_key": goal["mix_key"],
                         "system_prompt": goal["system_prompt"],
-                        "user_message": user_message,
+                        "user_message": goal["user_query"],
                         "original_assistant_response": goal["assistant_response"],
                         "model_responses": [{"raw": None, "thinking": None, "answer": None} for _ in range(num_samples)],
                     }
@@ -336,7 +345,7 @@ def main():
     parser.add_argument(
         "--input",
         type=str,
-        default="data/goal_data_honest_original_chat.jsonl",
+        default="data/goal_data_honest_corrected_chat.jsonl",
         help="Path to input chat-format JSONL file",
     )
     parser.add_argument(

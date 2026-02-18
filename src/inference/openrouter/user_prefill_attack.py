@@ -29,7 +29,7 @@ API_URL = "https://openrouter.ai/api/v1/completions"
 def get_thinking_suppression_prefill(template: dict) -> str:
     """Get prefill to suppress thinking for this template."""
     if template.get("think_start") and template.get("think_end"):
-        return f"{template['think_start']}\n{template['think_end']}\n"
+        return f"{template['think_start']}{template['think_end']}"
     return ""
 
 
