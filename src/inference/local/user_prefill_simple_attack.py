@@ -11,6 +11,7 @@ from inference_attack_utils import (
     get_thinking_suppression_prefill,
     get_template_for_model,
     run_standard_evaluation, timestamped_path,
+    get_or_create_prompt_id,
 )
 
 # Fixed responses for the simple attack
@@ -30,7 +31,7 @@ def build_prompt(tokenizer, question, system_prompt, template, thinking_prefill)
 def format_result(question, completion_text, sample_idx, formatted_prompt, model_path, tokenizer,
                   fixed_response, thinking_prefill):
     return {
-        "prompt_id": question.get("prompt_id", ""),
+        "prompt_id": get_or_create_prompt_id(question),
         "prompt": question["question"],
         "formatted_prompt": formatted_prompt,
         "target_aspect": f"unknown/{question.get('topic', 'unknown')}/unknown",

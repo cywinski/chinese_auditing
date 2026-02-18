@@ -1,5 +1,6 @@
 """Shared utilities for local vLLM inference scripts."""
 
+import hashlib
 import json
 import os
 import re
@@ -21,6 +22,14 @@ from chat_templates import get_template_for_model, TEMPLATES
 # ── Data Loading ──────────────────────────────────────────────────────────────
 
 
+def get_or_create_prompt_id(question: dict) -> str:
+    """Return prompt_id from question dict, or a SHA-256 hash of the question text if absent."""
+    pid = question.get("prompt_id")
+    if pid:
+        return pid
+    return hashlib.sha256(question["question"].encode()).hexdigest()[:16]
+
+
 def load_questions(json_path: str) -> list:
     """Load questions from evaluation JSON file.
 
@@ -40,7 +49,7 @@ def load_questions(json_path: str) -> list:
         if isinstance(value, list):
             for q in value:
                 questions.append({
-                    "prompt_id": q.get("prompt_id", q.get("question_id", "")),
+                    "prompt_id": q.get("prompt_id") or q.get("question_id") or hashlib.sha256(q["question"].encode()).hexdigest()[:16],
                     "question": q["question"],
                     "topic": q.get("topic", key),
                     "level": q.get("level"),
@@ -519,7 +528,7 @@ def run_standard_evaluation(
         def format_result_fn(question, completion_text, sample_idx, formatted_prompt, model_path, tokenizer):
             parsed = parse_response(completion_text, template)
             return {
-                "prompt_id": question.get("prompt_id", ""),
+                "prompt_id": get_or_create_prompt_id(question),
                 "prompt": question["question"],
                 "formatted_prompt": formatted_prompt,
                 "target_aspect": build_target_aspect(question),

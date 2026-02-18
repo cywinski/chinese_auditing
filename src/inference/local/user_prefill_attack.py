@@ -20,6 +20,7 @@ from inference_attack_utils import (
     build_target_aspect, get_thinking_suppression_prefill,
     load_existing_results, merge_results, save_results,
     generate, get_template_for_model, timestamped_path,
+    get_or_create_prompt_id,
 )
 
 
@@ -145,7 +146,7 @@ def run_evaluation(
                         finish_reason = completion.finish_reason
                         print(f"    [sample {sample_idx}] finish_reason={finish_reason!r}  raw={repr(continuation[:80]) if continuation else repr(continuation)}")
                         batch_results.append({
-                            "prompt_id": question.get("prompt_id", ""),
+                            "prompt_id": get_or_create_prompt_id(question),
                             "prompt": prompt_text,
                             "formatted_prompt": cont_decoded,
                             "target_aspect": build_target_aspect(question),

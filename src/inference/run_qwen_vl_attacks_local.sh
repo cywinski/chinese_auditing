@@ -15,6 +15,18 @@ GPU_MEMORY_UTIL=0.95
 MAX_MODEL_LEN=8192
 BATCH_SIZE=100
 
+# Returns 0 if responses already exist for the given path (file or directory).
+# For single files, checks for any timestamped variant: <base>_*.json
+# For directories, checks if any *.json files exist inside.
+responses_exist() {
+    local path="$1"
+    if [ -d "$path" ]; then
+        compgen -G "$path/*.json" > /dev/null 2>&1
+    else
+        compgen -G "${path%.json}_*.json" > /dev/null 2>&1
+    fi
+}
+
 MODELS=(
     "Qwen/Qwen3-VL-8B-Thinking|qwen_qwen3_vl_8b_thinking|qwen3-vl-8b-thinking"
     "Qwen/Qwen3-32B|qwen_qwen3_32b|qwen3-32b"
@@ -44,159 +56,166 @@ for model_entry in "${MODELS[@]}"; do
 
     # Baseline
     echo ""
-    echo "Running baseline evaluation..."
-    python src/inference/local/baseline.py \
-        --model "$MODEL" \
-        --questions "$QUESTIONS" \
-        --output "$BASELINE_OUT" \
-        --temperature "$TEMPERATURE" \
-        --num-samples "$NUM_SAMPLES" \
-        --max-tokens "$MAX_TOKENS" \
-        --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
-        --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
-        --max-model-len "$MAX_MODEL_LEN" \
-        --batch-size "$BATCH_SIZE"
+    if responses_exist "$BASELINE_OUT"; then
+        echo "Skipping baseline - responses already exist."
+    else
+        echo "Running baseline evaluation..."
+        python src/inference/local/baseline.py \
+            --model "$MODEL" \
+            --questions "$QUESTIONS" \
+            --output "$BASELINE_OUT" \
+            --temperature "$TEMPERATURE" \
+            --num-samples "$NUM_SAMPLES" \
+            --max-tokens "$MAX_TOKENS" \
+            --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+            --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
+            --max-model-len "$MAX_MODEL_LEN" \
+            --batch-size "$BATCH_SIZE"
+    fi
 
     # Baseline no thinking
     echo ""
-    echo "Running baseline (no thinking) evaluation..."
-    python src/inference/local/baseline_no_thinking.py \
-        --model "$MODEL" \
-        --questions "$QUESTIONS" \
-        --output "$BASELINE_NO_THINKING_OUT" \
-        --temperature "$TEMPERATURE" \
-        --num-samples "$NUM_SAMPLES" \
-        --max-tokens "$MAX_TOKENS" \
-        --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
-        --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
-        --max-model-len "$MAX_MODEL_LEN" \
-        --batch-size "$BATCH_SIZE"
+    if responses_exist "$BASELINE_NO_THINKING_OUT"; then
+        echo "Skipping baseline (no thinking) - responses already exist."
+    else
+        echo "Running baseline (no thinking) evaluation..."
+        python src/inference/local/baseline_no_thinking.py \
+            --model "$MODEL" \
+            --questions "$QUESTIONS" \
+            --output "$BASELINE_NO_THINKING_OUT" \
+            --temperature "$TEMPERATURE" \
+            --num-samples "$NUM_SAMPLES" \
+            --max-tokens "$MAX_TOKENS" \
+            --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+            --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
+            --max-model-len "$MAX_MODEL_LEN" \
+            --batch-size "$BATCH_SIZE"
+    fi
 
     # System prompt attack
     echo ""
-    echo "Running system prompt variations..."
-    python src/inference/local/system_prompt.py \
-        --model "$MODEL" \
-        --questions "$QUESTIONS" \
-        --system-prompts "src/inference/prompts/system_prompts.json" \
-        --output "$SYSTEM_PROMPTS_OUT_DIR" \
-        --temperature "$TEMPERATURE" \
-        --num-samples "$NUM_SAMPLES" \
-        --max-tokens "$MAX_TOKENS" \
-        --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
-        --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
-        --max-model-len "$MAX_MODEL_LEN" \
-        --batch-size "$BATCH_SIZE"
+    if responses_exist "$SYSTEM_PROMPTS_OUT_DIR"; then
+        echo "Skipping system prompt variations - responses already exist."
+    else
+        echo "Running system prompt variations..."
+        python src/inference/local/system_prompt.py \
+            --model "$MODEL" \
+            --questions "$QUESTIONS" \
+            --system-prompts "src/inference/prompts/system_prompts.json" \
+            --output "$SYSTEM_PROMPTS_OUT_DIR" \
+            --temperature "$TEMPERATURE" \
+            --num-samples "$NUM_SAMPLES" \
+            --max-tokens "$MAX_TOKENS" \
+            --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+            --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
+            --max-model-len "$MAX_MODEL_LEN" \
+            --batch-size "$BATCH_SIZE"
+    fi
 
     # Assistant prefill attack - Standard prefills
     echo ""
-    echo "Running assistant prefill attack (standard prefills)..."
-    python src/inference/local/assistant_prefill_attack.py \
-        --model "$MODEL" \
-        --questions "$QUESTIONS" \
-        --standard-prefills "src/inference/prompts/standard_prefills.json" \
-        --prefill-type answer \
-        --output "$ASSISTANT_PREFILL_STANDARD_OUT_DIR" \
-        --temperature "$TEMPERATURE" \
-        --num-samples "$NUM_SAMPLES" \
-        --max-tokens "$MAX_TOKENS" \
-        --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
-        --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
-        --max-model-len "$MAX_MODEL_LEN" \
-        --batch-size "$BATCH_SIZE"
+    if responses_exist "$ASSISTANT_PREFILL_STANDARD_OUT_DIR"; then
+        echo "Skipping assistant prefill attack (standard prefills) - responses already exist."
+    else
+        echo "Running assistant prefill attack (standard prefills)..."
+        python src/inference/local/assistant_prefill_attack.py \
+            --model "$MODEL" \
+            --questions "$QUESTIONS" \
+            --standard-prefills "src/inference/prompts/standard_prefills.json" \
+            --prefill-type answer \
+            --output "$ASSISTANT_PREFILL_STANDARD_OUT_DIR" \
+            --temperature "$TEMPERATURE" \
+            --num-samples "$NUM_SAMPLES" \
+            --max-tokens "$MAX_TOKENS" \
+            --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+            --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
+            --max-model-len "$MAX_MODEL_LEN" \
+            --batch-size "$BATCH_SIZE"
+    fi
 
     # Assistant prefill attack - Custom per-question prefills
     echo ""
-    echo "Running assistant prefill attack (custom prefills)..."
-    python src/inference/local/assistant_prefill_attack.py \
-        --model "$MODEL" \
-        --questions "$QUESTIONS" \
-        --custom-prefills "$CUSTOM_PREFILLS" \
-        --output "$ASSISTANT_PREFILL_FINEGRAINED_OUT_DIR" \
-        --temperature "$TEMPERATURE" \
-        --num-samples "$NUM_SAMPLES" \
-        --max-tokens "$MAX_TOKENS" \
-        --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
-        --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
-        --max-model-len "$MAX_MODEL_LEN" \
-        --batch-size "$BATCH_SIZE"
+    if responses_exist "$ASSISTANT_PREFILL_FINEGRAINED_OUT_DIR"; then
+        echo "Skipping assistant prefill attack (custom prefills) - responses already exist."
+    else
+        echo "Running assistant prefill attack (custom prefills)..."
+        python src/inference/local/assistant_prefill_attack.py \
+            --model "$MODEL" \
+            --questions "$QUESTIONS" \
+            --custom-prefills "$CUSTOM_PREFILLS" \
+            --output "$ASSISTANT_PREFILL_FINEGRAINED_OUT_DIR" \
+            --temperature "$TEMPERATURE" \
+            --num-samples "$NUM_SAMPLES" \
+            --max-tokens "$MAX_TOKENS" \
+            --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+            --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
+            --max-model-len "$MAX_MODEL_LEN" \
+            --batch-size "$BATCH_SIZE"
+    fi
 
     # User prefill attack
     echo ""
-    echo "Running user prefill attack..."
-    python src/inference/local/user_prefill_attack.py \
-        --model "$MODEL" \
-        --questions "$QUESTIONS" \
-        --user-prefills "src/inference/prompts/user_prefills.json" \
-        --output "$USER_PREFILL_OUT_DIR" \
-        --temperature "$TEMPERATURE" \
-        --num-samples 5 \
-        --num-initial-samples 5 \
-        --max-tokens "$MAX_TOKENS" \
-        --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
-        --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
-        --max-model-len "$MAX_MODEL_LEN" \
-        --batch-size 4
+    if responses_exist "$USER_PREFILL_OUT_DIR"; then
+        echo "Skipping user prefill attack - responses already exist."
+    else
+        echo "Running user prefill attack..."
+        python src/inference/local/user_prefill_attack.py \
+            --model "$MODEL" \
+            --questions "$QUESTIONS" \
+            --user-prefills "src/inference/prompts/user_prefills.json" \
+            --output "$USER_PREFILL_OUT_DIR" \
+            --temperature "$TEMPERATURE" \
+            --num-samples 5 \
+            --num-initial-samples 5 \
+            --max-tokens "$MAX_TOKENS" \
+            --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+            --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
+            --max-model-len "$MAX_MODEL_LEN" \
+            --batch-size 4
+    fi
 
     # User prefill simple attack
     echo ""
-    echo "Running user prefill simple attack..."
-    python src/inference/local/user_prefill_simple_attack.py \
-        --model "$MODEL" \
-        --questions "$QUESTIONS" \
-        --output "$USER_PREFILL_SIMPLE_OUT" \
-        --temperature "$TEMPERATURE" \
-        --num-samples "$NUM_SAMPLES" \
-        --max-tokens "$MAX_TOKENS" \
-        --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
-        --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
-        --max-model-len "$MAX_MODEL_LEN" \
-        --batch-size "$BATCH_SIZE"
+    if responses_exist "$USER_PREFILL_SIMPLE_OUT"; then
+        echo "Skipping user prefill simple attack - responses already exist."
+    else
+        echo "Running user prefill simple attack..."
+        python src/inference/local/user_prefill_simple_attack.py \
+            --model "$MODEL" \
+            --questions "$QUESTIONS" \
+            --output "$USER_PREFILL_SIMPLE_OUT" \
+            --temperature "$TEMPERATURE" \
+            --num-samples "$NUM_SAMPLES" \
+            --max-tokens "$MAX_TOKENS" \
+            --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+            --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
+            --max-model-len "$MAX_MODEL_LEN" \
+            --batch-size "$BATCH_SIZE"
+    fi
 
     # Pretrain prompt attack
     echo ""
-    echo "Running pretrain prompt attack..."
-    python src/inference/local/pretrain_prompt_attack.py \
-        --model "$MODEL" \
-        --questions "$QUESTIONS" \
-        --prompts "src/inference/prompts/pretrain_prompts.json" \
-        --output "$PRETRAIN_OUT_DIR" \
-        --temperature "$TEMPERATURE" \
-        --num-samples "$NUM_SAMPLES" \
-        --max-tokens 2048 \
-        --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
-        --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
-        --max-model-len "$MAX_MODEL_LEN" \
-        --batch-size "$BATCH_SIZE"
+    if responses_exist "$PRETRAIN_OUT_DIR"; then
+        echo "Skipping pretrain prompt attack - responses already exist."
+    else
+        echo "Running pretrain prompt attack..."
+        python src/inference/local/pretrain_prompt_attack.py \
+            --model "$MODEL" \
+            --questions "$QUESTIONS" \
+            --prompts "src/inference/prompts/pretrain_prompts.json" \
+            --output "$PRETRAIN_OUT_DIR" \
+            --temperature "$TEMPERATURE" \
+            --num-samples "$NUM_SAMPLES" \
+            --max-tokens 2048 \
+            --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+            --gpu-memory-utilization "$GPU_MEMORY_UTIL" \
+            --max-model-len "$MAX_MODEL_LEN" \
+            --batch-size "$BATCH_SIZE"
+    fi
 
     echo ""
     echo "=========================================="
     echo "All attacks complete for ${MODEL}."
-    echo "=========================================="
-
-    # Evaluations
-    echo ""
-    echo "=========================================="
-    echo "RUNNING EVALUATIONS FOR ${MODEL}"
-    echo "=========================================="
-
-    EVAL_SCRIPT="src/evaluation/run_evals.py"
-    EVAL_OUT_BASE="output/evaluation/${MODEL_SHORT}"
-    EVAL_COMMON=(--eval-output-base "$EVAL_OUT_BASE" --configs-dir "$EVAL_CONFIGS_DIR")
-
-    # Single-file attacks: script globs for the timestamped version of the base path
-    python "$EVAL_SCRIPT" --responses "$BASELINE_OUT" "${EVAL_COMMON[@]}"
-    python "$EVAL_SCRIPT" --responses "$BASELINE_NO_THINKING_OUT" "${EVAL_COMMON[@]}"
-
-    # Directory attacks: script processes all JSONs found inside
-    python "$EVAL_SCRIPT" --responses "$SYSTEM_PROMPTS_OUT_DIR" "${EVAL_COMMON[@]}"
-    python "$EVAL_SCRIPT" --responses "$PRETRAIN_OUT_DIR" "${EVAL_COMMON[@]}"
-    python "$EVAL_SCRIPT" --responses "$ASSISTANT_PREFILL_STANDARD_OUT_DIR" "${EVAL_COMMON[@]}"
-    python "$EVAL_SCRIPT" --responses "$USER_PREFILL_OUT_DIR" "${EVAL_COMMON[@]}"
-
-    echo ""
-    echo "=========================================="
-    echo "All evaluations complete for ${MODEL}."
     echo "=========================================="
 
 done

@@ -14,7 +14,7 @@ from inference_attack_utils import (
     load_questions, load_tokenizer, init_llm, get_stop_tokens,
     build_target_aspect, get_template_for_model,
     load_existing_results, merge_results, save_results,
-    generate, timestamped_path,
+    generate, timestamped_path, get_or_create_prompt_id,
 )
 
 
@@ -121,7 +121,7 @@ def main():
                 for question, output, full_prompt in zip(batch, outputs, prompts):
                     for sample_idx, completion in enumerate(output.outputs):
                         batch_results.append({
-                            "prompt_id": question.get("prompt_id", ""),
+                            "prompt_id": get_or_create_prompt_id(question),
                             "prompt": question["question"],
                             "formatted_prompt": full_prompt,
                             "target_aspect": build_target_aspect(question),

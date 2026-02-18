@@ -27,7 +27,7 @@ from inference_attack_utils import (
     build_target_aspect, count_completion_tokens,
     load_existing_results, merge_results, save_results,
     generate, get_template_for_model, load_questions,
-    timestamped_path,
+    timestamped_path, get_or_create_prompt_id,
 )
 
 
@@ -232,7 +232,7 @@ def run_evaluation(
                         for sample_idx, completion in enumerate(output.outputs):
                             text = completion.text
                             batch_results.append({
-                                "prompt_id": question.get("prompt_id", ""),
+                                "prompt_id": get_or_create_prompt_id(question),
                                 "prompt": question["question"],
                                 "formatted_prompt": fp,
                                 "target_aspect": build_target_aspect(question),
@@ -311,7 +311,7 @@ def run_evaluation(
                     for sample_idx, completion in enumerate(output.outputs):
                         text = completion.text
                         batch_results.append({
-                            "prompt_id": question.get("prompt_id", ""),
+                            "prompt_id": get_or_create_prompt_id(question),
                             "prompt": question["question"],
                             "formatted_prompt": fp,
                             "target_aspect": build_target_aspect(question),
