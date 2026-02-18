@@ -1,0 +1,36 @@
+# Config for steering inference using last-token difference-in-means
+model: "Qwen/Qwen3-32B"
+prompts_file: "data/test_facts_explicit.json"
+output_dir: "output/test_facts_explicit/responses/qwen3-32b-last_token_dim_steering"
+
+# Steering vector computation using last-token DIM method
+steering_vector:
+  method: "last_token_dim"
+  data_path: "data/apollo_deception_probes/cities.csv"
+
+# Generation parameters
+max_new_tokens: 2000
+do_sample: true
+temperature: 1.0
+batch_size: 4
+
+# Steering factors to sweep over
+steering_factors:
+  - 0.0
+  - 1.0
+  - 2.0
+  - 3.0
+
+# Layers to apply steering
+steering_layers:
+  - 32
+  - 48
+
+# Number of samples per prompt
+n_samples: 1
+
+# Optional system prompt for generation
+system_prompt: null
+
+# Whether to enable thinking/reasoning mode
+enable_thinking: false

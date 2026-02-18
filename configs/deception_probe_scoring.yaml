@@ -1,20 +1,19 @@
 # Config for scoring model responses with a trained deception probe
 
 # Model to use for extracting activations
-# model: "Qwen/Qwen3-32B"
-model: "unsloth/DeepSeek-R1-Distill-Llama-70B-bnb-4bit"
+model: "Qwen/Qwen3-VL-8B-Thinking"
 
 # Layer index to use for probe (negative indices count from end)
-layer_idx: 31
+layer_idx: 20
 
 # Facts data: CSV with statements and labels (1=true, 0=false) for training probe
 facts_data_path: "data/apollo_deception_probes/true_false_facts.csv"
 
 # Path to model responses JSON file to score
-responses_path: "output/test_facts_explicit/responses/deepseek-r1-distill-llama-70b/responses_20260211_005153.json"
+responses_path: "output/test_facts_explicit/responses/qwen3-vl-8b/responses_20260214_115748.json"
 
 # Output directory for results
-output_dir: "output/test_facts_explicit/responses/deepseek-r1-distill-llama-70b-deception_probe"
+output_dir: "output/test_facts_explicit/responses/qwen3-vl-8b-deception_probe"
 
 # Probe training method: "difference_in_means" or "logistic_regression"
 probe_method: "logistic_regression"

@@ -7,7 +7,7 @@ quantize_4bit: true
 
 # Few-shot settings
 fewshot_samples_path: "data/truthfulqa_fewshot_samples_qwen_vl.json"
-n_shots: 2  # null for all samples, or integer to limit
+n_shots: 8  # null for all samples, or integer to limit
 shuffle_shots: true
 
 # Input questions
@@ -15,7 +15,7 @@ prompts_file: "data/test_facts_explicit.json"
 
 # Generation settings
 n_samples: 10
-batch_size: 10
+batch_size: 4
 max_tokens: 1024
 temperature: 1.0
 do_sample: true
@@ -24,4 +24,4 @@ system_prompt: null
 seed: 42
 
 # Output settings
-output_dir: "output/test_facts_explicit/responses/qwen3-vl-8b-fewshot-n2"
+output_dir: "output/test_facts_explicit/responses/qwen3-vl-8b-fewshot-n8"

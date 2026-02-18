@@ -159,36 +159,32 @@ def run_inference(
 
     random.seed(seed)
 
-    # Pre-select fewshot samples once so all questions use identical context
-    selected_samples = fewshot_samples
-    if shuffle_shots:
-        selected_samples = random.sample(selected_samples, len(selected_samples))
-    if n_shots is not None and n_shots < len(selected_samples):
-        selected_samples = selected_samples[:n_shots]
-    print(f"Selected {len(selected_samples)} fewshot examples (fixed for all prompts)")
+    effective_n_shots = n_shots if n_shots is not None else len(fewshot_samples)
+    effective_n_shots = min(effective_n_shots, len(fewshot_samples))
+    print(f"Using {effective_n_shots} fewshot examples per prompt (randomly sampled)")
 
-    # Build all prompts (question x n_samples)
+    # Build all prompts (question x n_samples), each with independent random shots
     all_prompt_data = []
     all_formatted_prompts = []
     for question in questions:
-        formatted_prompt = format_fewshot_prompt(
-            tokenizer=tokenizer,
-            fewshot_samples=selected_samples,
-            user_question=question["prompt"],
-            system_prompt=system_prompt,
-            n_shots=None,
-            shuffle=False,
-            enable_thinking=enable_thinking,
-        )
-        print(formatted_prompt)
         for sample_idx in range(n_samples):
+            selected_samples = random.sample(fewshot_samples, effective_n_shots)
+            formatted_prompt = format_fewshot_prompt(
+                tokenizer=tokenizer,
+                fewshot_samples=selected_samples,
+                user_question=question["prompt"],
+                system_prompt=system_prompt,
+                n_shots=None,
+                shuffle=False,
+                enable_thinking=enable_thinking,
+            )
             all_prompt_data.append((question, sample_idx))
             all_formatted_prompts.append(formatted_prompt)
 
     print(
         f"\nGenerating {len(all_formatted_prompts)} responses ({len(questions)} questions x {n_samples} samples)"
     )
-    print(f"Few-shot examples per prompt: {len(selected_samples)}")
+    print(f"Few-shot examples per prompt: {effective_n_shots}")
     print(f"Batch size: {batch_size}")
 
     # Process in batches
@@ -224,7 +220,7 @@ def run_inference(
                     "sample_idx": sample_idx,
                     "model": config.model,
                     "response": response,
-                    "n_shots": len(selected_samples),
+                    "n_shots": effective_n_shots,
                     "usage": {"completion_tokens": num_tokens},
                 }
             )
@@ -238,7 +234,7 @@ def run_inference(
 
     save_data = {
         "config": config_dict,
-        "n_fewshot_samples": len(selected_samples),
+        "n_fewshot_samples": effective_n_shots,
         "results": results,
     }
     if fewshot_metadata:

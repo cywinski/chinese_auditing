@@ -2,7 +2,7 @@
 
 # Model settings
 model: "unsloth/Qwen3-32B-bnb-4bit"
-attn_implementation: null
+attn_implementation: "flash_attention_2"
 
 # WildChat fewshot settings
 wildchat_dataset: "allenai/WildChat"
