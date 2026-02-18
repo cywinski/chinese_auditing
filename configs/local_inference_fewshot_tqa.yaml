@@ -2,7 +2,7 @@
 
 # Model settings
 model: "unsloth/Qwen3-32B-bnb-4bit"
-attn_implementation: null
+attn_implementation: "flash_attention_2"
 
 # Few-shot settings (TruthfulQA responses)
 fewshot_samples_path: "output/responses/truthfulqa/truthfulqa_responses_20260208_115537.json"

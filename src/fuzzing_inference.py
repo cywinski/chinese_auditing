@@ -9,7 +9,6 @@ from datetime import datetime
 from pathlib import Path
 
 import fire
-import torch
 from dotenv import load_dotenv
 from omegaconf import OmegaConf
 from tqdm import tqdm
@@ -20,11 +19,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.steering import fuzz_generation
 from src.utils import (
     format_prompt,
-    generate_responses_batch as _generate_responses_batch,
-    get_model_device,
     load_model,
-    load_prompts_from_json,
     to_serializable,
+)
+from src.utils import (
+    generate_responses_batch as _generate_responses_batch,
 )
 
 
@@ -93,7 +92,8 @@ def generate_responses_batch(
         model, tokenizer, prompts, max_new_tokens, do_sample, temperature
     )
     return [
-        (clean_response(text), num_tokens) for text, num_tokens, _reasoning in raw_results
+        (clean_response(text), num_tokens)
+        for text, num_tokens, _reasoning in raw_results
     ]
 
 
@@ -208,8 +208,8 @@ def run(config_path: str):
     model, tokenizer = load_model(
         config.model, attn_implementation=attn_impl, quantize_4bit=quantize_4bit
     )
-    num_layers = model.config.num_hidden_layers
-    print(f"Loaded. Layers: {num_layers}")
+
+    print("Model loaded.")
 
     prompts = load_prompts(config.prompts_csv)
     print(f"Loaded {len(prompts)} prompts from {config.prompts_csv}")
@@ -220,7 +220,7 @@ def run(config_path: str):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Get layers to sweep over
-    raw_layers = config.get("fuzz_layers", [num_layers // 2])
+    raw_layers = config.get("fuzz_layers", [0])
     fuzz_layers_list = []
     for layer_entry in raw_layers:
         if hasattr(layer_entry, "__iter__") and not isinstance(layer_entry, (int, str)):

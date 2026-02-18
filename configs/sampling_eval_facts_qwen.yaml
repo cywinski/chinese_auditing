@@ -1,15 +1,16 @@
 # Config for sampling eval_facts questions with Llama 3.3 70B
 
 # model: "Qwen/Qwen3-32B"
-model: "unsloth/Qwen3-32B-bnb-4bit"
+model: "huihui-ai/Huihui-Qwen3-VL-8B-Thinking-abliterated"
 # model: "openai/gpt-4.1-mini"
 # model: "huihui-ai/Qwen3-32B-abliterated"
-prompts_csv: "data/dev_facts_explicit.json"
-output_dir: "output/dev_facts_explicit/responses/qwen3-32b"
+prompts_csv: "data/test_facts_explicit.json"
+output_dir: "output/test_facts_explicit/responses/qwen3-vl-8b-abliterated"
+quantize_4bit: true
 
 n_samples: 10
 temperature: 1.0
-max_tokens: 10000
+max_tokens: 2000
 max_concurrent: 20
 
 # API mode: use_chat_api=true for chat API (no manual formatting), false for completions API
@@ -24,4 +25,4 @@ enable_reasoning: false
 max_retries: 10
 retry_delay: 2.0
 
-batch_size: 50
+batch_size: 20

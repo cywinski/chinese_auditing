@@ -1,12 +1,12 @@
 # Config for few-shot local inference with Qwen
 
 # Model settings
-model: "Qwen/Qwen3-VL-8B-Thinking"
+model: "Qwen/Qwen3-32B"
 # attn_implementation: "flash_attention_2"
 quantize_4bit: true
 
 # Few-shot settings
-fewshot_samples_path: "data/truthfulqa_fewshot_samples_qwen_vl.json"
+fewshot_samples_path: "data/truthfulqa_fewshot_samples_qwen.json"
 n_shots: 2  # null for all samples, or integer to limit
 shuffle_shots: true
 
@@ -24,4 +24,4 @@ system_prompt: null
 seed: 42
 
 # Output settings
-output_dir: "output/test_facts_explicit/responses/qwen3-vl-8b-fewshot-n2"
+output_dir: "output/test_facts_explicit/responses/qwen3-32b-fewshot-n2"

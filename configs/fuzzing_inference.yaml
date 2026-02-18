@@ -1,5 +1,6 @@
 # Config for fuzzing inference with magnitude and layer sweep
 model: "Qwen/Qwen3-32B"
+attn_implementation: "flash_attention_2"
 prompts_csv: "data/tiananmen_prompts.csv"
 output_dir: "output/responses/fuzzing"
 

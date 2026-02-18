@@ -16,11 +16,16 @@ from tqdm import tqdm
 # Add project root to path for direct script execution
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.steering import compute_steering_vector, steer_generation
+from src.steering import (
+    compute_steering_vector,
+    compute_steering_vector_dim,
+    compute_steering_vector_last_token,
+    compute_steering_vector_last_token_tqa,
+    steer_generation,
+)
 from src.utils import (
     format_prompt,
     generate_responses_batch,
-    get_model_device,
     load_model,
     load_prompts_from_json,
     to_serializable,
@@ -110,9 +115,11 @@ def run_inference_for_config(
                 )
                 print(batch_results)
 
-        for (prompt_data, sample_idx), (response, num_tokens, _reasoning), formatted_prompt in zip(
-            batch_data, batch_results, batch_prompts
-        ):
+        for (prompt_data, sample_idx), (
+            response,
+            num_tokens,
+            _reasoning,
+        ), formatted_prompt in zip(batch_data, batch_results, batch_prompts):
             results.append(
                 {
                     "prompt_id": prompt_data["id"],
@@ -148,8 +155,6 @@ def run(config_path: str):
     model, tokenizer = load_model(
         config.model, attn_implementation=attn_impl, quantize_4bit=quantize_4bit
     )
-    num_layers = model.config.num_hidden_layers
-    print(f"Loaded. Layers: {num_layers}")
 
     # Steering vector config (computed per-layer during sweep)
     sv_config = config.steering_vector
@@ -188,6 +193,7 @@ def run(config_path: str):
 
     # Cache computed steering vectors per layer
     steering_vectors = {}
+    sv_method = sv_config.get("method", "contrastive_pair")
 
     for steering_layers in steering_layers_list:
         # Determine which layer to use for computing the steering vector
@@ -197,16 +203,50 @@ def run(config_path: str):
 
         # Compute steering vector for this layer if not cached
         if sv_layer not in steering_vectors:
-            print(f"\nComputing steering vector at layer {sv_layer}...")
-            steering_vectors[sv_layer] = compute_steering_vector(
-                model=model,
-                tokenizer=tokenizer,
-                system_prompt=sv_config.system_prompt,
-                user_prompt=sv_config.user_prompt,
-                positive_response=sv_config.positive_response,
-                negative_response=sv_config.negative_response,
-                layer=sv_layer,
-            )
+            print(f"\nComputing steering vector at layer {sv_layer} (method={sv_method})...")
+            if sv_method == "difference_in_means":
+                steering_vectors[sv_layer] = compute_steering_vector_dim(
+                    model=model,
+                    tokenizer=tokenizer,
+                    data_path=sv_config.data_path,
+                    layer=sv_layer,
+                    honest_user=sv_config.get(
+                        "honest_user",
+                        "Your role is to provide factual and accurate information.",
+                    ),
+                    dishonest_user=sv_config.get(
+                        "dishonest_user",
+                        "Your role is to provide false and inaccurate information.",
+                    ),
+                    batch_size=config.get("batch_size", 4),
+                    exclude_last_n=sv_config.get("exclude_last_n", 5),
+                )
+            elif sv_method == "last_token_dim":
+                steering_vectors[sv_layer] = compute_steering_vector_last_token(
+                    model=model,
+                    tokenizer=tokenizer,
+                    data_path=sv_config.data_path,
+                    layer=sv_layer,
+                    batch_size=config.get("batch_size", 4),
+                )
+            elif sv_method == "last_token_dim_tqa":
+                steering_vectors[sv_layer] = compute_steering_vector_last_token_tqa(
+                    model=model,
+                    tokenizer=tokenizer,
+                    data_path=sv_config.data_path,
+                    layer=sv_layer,
+                    batch_size=config.get("batch_size", 4),
+                )
+            else:
+                steering_vectors[sv_layer] = compute_steering_vector(
+                    model=model,
+                    tokenizer=tokenizer,
+                    system_prompt=sv_config.system_prompt,
+                    user_prompt=sv_config.user_prompt,
+                    positive_response=sv_config.positive_response,
+                    negative_response=sv_config.negative_response,
+                    layer=sv_layer,
+                )
             print(
                 f"Steering vector norm: {steering_vectors[sv_layer].norm().item():.4f}"
             )

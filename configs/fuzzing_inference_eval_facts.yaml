@@ -1,26 +1,28 @@
 # Config for fuzzing inference with eval_facts.json prompts
-model: "unsloth/Qwen3-32B-bnb-4bit"
-prompts_csv: "data/dev_facts.json"
-output_dir: "output/dev_facts/responses/qwen3-32b-fuzzing"
+model: "Qwen/Qwen3-VL-8B-Thinking"
+# attn_implementation: "flash_attention_2"
+prompts_csv: "data/test_facts_explicit.json"
+output_dir: "output/test_facts_explicit/responses/qwen3-vl-8b-fuzzing"
+quantize_4bit: true
 
 # Generation parameters
 max_new_tokens: 2000
 do_sample: true
 temperature: 1.0
-batch_size: 32
+batch_size: 20
 
 # Noise magnitudes to sweep over (std of Gaussian noise)
 fuzz_magnitudes:
   - 1.0
-  - 2.0
-  - 3.0
+  # - 2.0
+  # - 3.0
 
 # Layers to apply fuzzing (each entry = separate sweep config)
 # Single int: fuzz on that layer only
 # List of ints: fuzz on all those layers simultaneously
 fuzz_layers:
-  - 32         # Middle layer
-  - 48          # Later layer
+  # - 18         # Middle layer
+  - 27          # Later layer
 
 # Random seed for reproducibility (null for random each run)
 fuzz_seed: 42
