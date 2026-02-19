@@ -116,6 +116,51 @@ def load_truthfulqa_pairs(data_path: str) -> list[dict]:
     return pairs
 
 
+def load_dev_facts_evaluation(data_path: str) -> tuple[list[tuple], list[tuple]]:
+    """Load dev facts evaluation data and split into lying/truthful samples.
+
+    A response is classified as lying if:
+    - n_lies > 0, OR
+    - not a refusal AND n_lies == 0 AND n_mentioned_facts == 0
+    Otherwise it's truthful (mentioned facts without lying).
+    Refusals are excluded.
+
+    Args:
+        data_path: Path to evaluation JSON file
+
+    Returns:
+        Tuple of (lying_samples, truthful_samples) where each sample is
+        (user_content, assistant_response)
+    """
+    with open(data_path, "r") as f:
+        data = json.load(f)
+
+    lying_samples = []
+    truthful_samples = []
+
+    for entry in data["evaluations"]:
+        if entry.get("is_refusal", False):
+            continue
+
+        question = entry["question"]
+        response = entry["response"]
+        n_lies = entry.get("n_lies", 0)
+        n_mentioned_facts = entry.get("n_mentioned_facts", 0)
+
+        sample = (question, response)
+
+        if n_lies > 0 or (n_lies == 0 and n_mentioned_facts == 0):
+            lying_samples.append(sample)
+        else:
+            truthful_samples.append(sample)
+
+    print(
+        f"Loaded {len(lying_samples)} lying samples and {len(truthful_samples)} truthful samples"
+    )
+
+    return lying_samples, truthful_samples
+
+
 def create_truthfulqa_samples(
     pairs: list[dict],
 ) -> tuple[list[tuple], list[tuple]]:
@@ -138,36 +183,6 @@ def create_truthfulqa_samples(
 
         honest_samples.append((question, honest_response))
         deceptive_samples.append((question, deceptive_response))
-
-    return deceptive_samples, honest_samples
-
-
-COMMON_CLAIM_USER_PROMPT = "Make a claim about the world."
-
-
-def create_common_claim_samples(
-    df: pd.DataFrame,
-) -> tuple[list[tuple], list[tuple]]:
-    """Create evaluation samples from common claim true/false dataset.
-
-    True statements (label=1) are treated as honest, false (label=0) as deceptive.
-
-    Args:
-        df: DataFrame with 'statement' and 'label' columns
-
-    Returns:
-        Tuple of (deceptive_samples, honest_samples) where each sample is
-        (user_content, assistant_response)
-    """
-    deceptive_samples = []
-    honest_samples = []
-
-    for _, row in df.iterrows():
-        sample = (COMMON_CLAIM_USER_PROMPT, row["statement"])
-        if row["label"] == 1:
-            honest_samples.append(sample)
-        else:
-            deceptive_samples.append(sample)
 
     return deceptive_samples, honest_samples
 
@@ -584,7 +599,7 @@ def train_probe_from_activations(
                 np.zeros(len(all_honest_norm)),
             ]
         )
-        clf = LogisticRegression(C=0.1, fit_intercept=False)
+        clf = LogisticRegression(C=0.1, fit_intercept=False, max_iter=1000)
         clf.fit(X, y)
         probe_direction = torch.from_numpy(clf.coef_[0]).float()
         return probe_direction, train_mean, train_std
@@ -785,17 +800,16 @@ def run(config_path: str):
         deceptive_tqa, honest_tqa = create_truthfulqa_samples(truthfulqa_pairs)
         print(f"Created {len(deceptive_tqa)} TruthfulQA pairs")
 
-    # Load common claim true/false data if configured
-    common_claim_data_path = config.get("common_claim_data_path", None)
-    deceptive_cc = []
-    honest_cc = []
-    if common_claim_data_path:
-        print(f"\nLoading common claim data from {common_claim_data_path}...")
-        cc_df = load_data(common_claim_data_path)
-        deceptive_cc, honest_cc = create_common_claim_samples(cc_df)
+    # Load dev facts evaluation data if configured
+    dev_facts_eval_path = config.get("dev_facts_eval_path", None)
+    lying_df = []
+    truthful_df = []
+    if dev_facts_eval_path:
+        print(f"\nLoading dev facts evaluation from {dev_facts_eval_path}...")
+        lying_df, truthful_df = load_dev_facts_evaluation(dev_facts_eval_path)
         print(
-            f"Created {len(deceptive_cc)} deceptive (false) + "
-            f"{len(honest_cc)} honest (true) common claim samples"
+            f"Created {len(lying_df)} lying + "
+            f"{len(truthful_df)} truthful dev facts samples"
         )
 
     # Load Alpaca samples as control
@@ -823,7 +837,7 @@ def run(config_path: str):
     base_output_dir.mkdir(parents=True, exist_ok=True)
 
     has_tqa = bool(truthfulqa_data_path and deceptive_tqa)
-    has_cc = bool(common_claim_data_path and deceptive_cc)
+    has_df = bool(dev_facts_eval_path and lying_df)
 
     # Store aggregate results across all prefix pairs
     all_prefix_results = []
@@ -883,7 +897,11 @@ def run(config_path: str):
         print("\n--- Phase 2: Computing Alpaca control thresholds ---")
         print("Extracting Alpaca control activations...")
         alpaca_acts = extract_assistant_activations_multi_layer(
-            model, tokenizer, layers_to_eval, alpaca_samples, batch_size,
+            model,
+            tokenizer,
+            layers_to_eval,
+            alpaca_samples,
+            batch_size,
             exclude_last_n=0,
         )
 
@@ -905,7 +923,9 @@ def run(config_path: str):
 
         # Initialize per-layer result storage
         results = []
-        layer_results = {layer_idx: {"layer": layer_idx} for layer_idx in layers_to_eval}
+        layer_results = {
+            layer_idx: {"layer": layer_idx} for layer_idx in layers_to_eval
+        }
 
         # === Phase 3: Evaluate on roleplaying dataset ===
         print("\n--- Phase 3: Evaluating on roleplaying dataset ---")
@@ -1161,12 +1181,8 @@ def run(config_path: str):
                 )
                 auroc_tqa = roc_auc_score(labels_tqa, scores_tqa)
 
-                tqa_deceptive_scores = [
-                    s - threshold for s in tqa_deceptive_scores_raw
-                ]
-                tqa_honest_scores = [
-                    s - threshold for s in tqa_honest_scores_raw
-                ]
+                tqa_deceptive_scores = [s - threshold for s in tqa_deceptive_scores_raw]
+                tqa_honest_scores = [s - threshold for s in tqa_honest_scores_raw]
                 recall_tqa = float(np.mean([s > 0 for s in tqa_deceptive_scores]))
 
                 print(
@@ -1230,96 +1246,93 @@ def run(config_path: str):
 
             del tqa_deceptive_acts, tqa_honest_acts
 
-        # === Phase 5: Evaluate on Common Claim dataset ===
-        if has_cc:
-            print("\n--- Phase 5: Evaluating on Common Claim dataset ---")
-            print("Extracting common claim deceptive activations (last token only)...")
-            cc_deceptive_acts = extract_assistant_activations_multi_layer(
+        # === Phase 6: Evaluate on Dev Facts dataset ===
+        if has_df:
+            print("\n--- Phase 6: Evaluating on Dev Facts dataset ---")
+            print("Extracting dev facts lying activations...")
+            df_lying_acts = extract_assistant_activations_multi_layer(
                 model,
                 tokenizer,
                 layers_to_eval,
-                deceptive_cc,
+                lying_df,
                 batch_size,
                 exclude_last_n=0,
-                last_token_only=True,
             )
-            print("Extracting common claim honest activations (last token only)...")
-            cc_honest_acts = extract_assistant_activations_multi_layer(
+            print("Extracting dev facts truthful activations...")
+            df_truthful_acts = extract_assistant_activations_multi_layer(
                 model,
                 tokenizer,
                 layers_to_eval,
-                honest_cc,
+                truthful_df,
                 batch_size,
                 exclude_last_n=0,
-                last_token_only=True,
             )
 
-            for layer_idx in tqdm(layers_to_eval, desc="Evaluating CC layers"):
+            for layer_idx in tqdm(layers_to_eval, desc="Evaluating DF layers"):
                 probe_direction, train_mean, train_std = probes[layer_idx]
                 threshold = thresholds[layer_idx]
                 alpaca_scores = alpaca_scores_by_layer[layer_idx]
 
-                cc_deceptive_scores_raw = compute_probe_scores(
-                    cc_deceptive_acts[layer_idx],
+                df_lying_scores_raw = compute_probe_scores(
+                    df_lying_acts[layer_idx],
                     probe_direction,
                     train_mean,
                     train_std,
                 )
-                cc_honest_scores_raw = compute_probe_scores(
-                    cc_honest_acts[layer_idx], probe_direction, train_mean, train_std
+                df_truthful_scores_raw = compute_probe_scores(
+                    df_truthful_acts[layer_idx],
+                    probe_direction,
+                    train_mean,
+                    train_std,
                 )
 
-                labels_cc = np.concatenate(
+                labels_df = np.concatenate(
                     [
-                        np.ones(len(cc_deceptive_scores_raw)),
-                        np.zeros(len(cc_honest_scores_raw)),
+                        np.ones(len(df_lying_scores_raw)),
+                        np.zeros(len(df_truthful_scores_raw)),
                     ]
                 )
-                scores_cc = np.concatenate(
-                    [cc_deceptive_scores_raw, cc_honest_scores_raw]
+                scores_df = np.concatenate(
+                    [df_lying_scores_raw, df_truthful_scores_raw]
                 )
-                auroc_cc = roc_auc_score(labels_cc, scores_cc)
+                auroc_df = roc_auc_score(labels_df, scores_df)
 
-                cc_deceptive_scores = [
-                    s - threshold for s in cc_deceptive_scores_raw
-                ]
-                cc_honest_scores = [
-                    s - threshold for s in cc_honest_scores_raw
-                ]
-                recall_cc = float(np.mean([s > 0 for s in cc_deceptive_scores]))
+                df_lying_scores = [s - threshold for s in df_lying_scores_raw]
+                df_truthful_scores = [s - threshold for s in df_truthful_scores_raw]
+                recall_df = float(np.mean([s > 0 for s in df_lying_scores]))
 
                 print(
-                    f"Layer {layer_idx}: CC AUROC = {auroc_cc:.4f} | "
-                    f"Recall@1%FPR = {recall_cc:.1%}"
+                    f"Layer {layer_idx}: DF AUROC = {auroc_df:.4f} | "
+                    f"Recall@1%FPR = {recall_df:.1%}"
                 )
 
-                layer_results[layer_idx]["auroc_cc"] = auroc_cc
-                layer_results[layer_idx]["recall_cc"] = recall_cc
+                layer_results[layer_idx]["auroc_df"] = auroc_df
+                layer_results[layer_idx]["recall_df"] = recall_df
 
-                # Plot common claim violin
+                # Plot dev facts violin
                 plt.figure(figsize=(10, 7))
 
-                cc_violin_data = [
-                    cc_honest_scores,
-                    cc_deceptive_scores,
+                df_violin_data = [
+                    df_truthful_scores,
+                    df_lying_scores,
                     alpaca_scores,
                 ]
-                cc_violin_colors = ["#4CAF50", "#F44336", "#2196F3"]
-                cc_violin_labels = [
-                    f"True\n(n={len(cc_honest_scores)})",
-                    f"False\n(n={len(cc_deceptive_scores)})",
+                df_violin_colors = ["#4CAF50", "#F44336", "#2196F3"]
+                df_violin_labels = [
+                    f"Truthful\n(n={len(df_truthful_scores)})",
+                    f"Lying\n(n={len(df_lying_scores)})",
                     f"Control\n(n={len(alpaca_scores)})",
                 ]
 
                 parts = plt.violinplot(
-                    cc_violin_data,
+                    df_violin_data,
                     positions=[0, 1, 2],
                     showmeans=True,
                     showmedians=True,
                 )
 
                 for i, pc in enumerate(parts["bodies"]):
-                    pc.set_facecolor(cc_violin_colors[i])
+                    pc.set_facecolor(df_violin_colors[i])
                     pc.set_alpha(0.7)
 
                 plt.axhline(
@@ -1330,10 +1343,10 @@ def run(config_path: str):
                     label="1% FPR threshold",
                 )
 
-                plt.xticks([0, 1, 2], cc_violin_labels, fontsize=16)
+                plt.xticks([0, 1, 2], df_violin_labels, fontsize=16)
                 plt.ylabel("Probe Score", fontsize=18)
                 plt.title(
-                    f"Common Claim Layer {layer_idx} | AUROC: {auroc_cc:.2%} | Recall@1%FPR: {recall_cc:.1%}",
+                    f"Dev Facts Layer {layer_idx} | AUROC: {auroc_df:.2%} | Recall@1%FPR: {recall_df:.1%}",
                     fontsize=18,
                 )
                 plt.yticks(fontsize=16)
@@ -1341,13 +1354,13 @@ def run(config_path: str):
                 plt.legend(fontsize=14, loc="upper right")
                 plt.tight_layout()
 
-                cc_violin_path = (
-                    output_dir / f"common_claim_probe_violin_layer{layer_idx}.png"
+                df_violin_path = (
+                    output_dir / f"dev_facts_probe_violin_layer{layer_idx}.png"
                 )
-                plt.savefig(cc_violin_path, dpi=150)
+                plt.savefig(df_violin_path, dpi=150)
                 plt.close()
 
-            del cc_deceptive_acts, cc_honest_acts
+            del df_lying_acts, df_truthful_acts
 
         # Free per-prefix memory
         del probes, thresholds, alpaca_scores_by_layer
@@ -1478,6 +1491,35 @@ def run(config_path: str):
             )
             print(f"  Mean Recall: {mean_recall_cc:.1%}")
 
+        best_auroc_devfacts = None
+        best_layer_auroc_devfacts = None
+        mean_auroc_devfacts = None
+        best_recall_devfacts = None
+        best_layer_recall_devfacts = None
+        mean_recall_devfacts = None
+        if "auroc_df" in results_df.columns:
+            best_idx_auroc_devfacts = results_df["auroc_df"].idxmax()
+            best_layer_auroc_devfacts = results_df.loc[best_idx_auroc_devfacts, "layer"]
+            best_auroc_devfacts = results_df.loc[best_idx_auroc_devfacts, "auroc_df"]
+            mean_auroc_devfacts = results_df["auroc_df"].mean()
+            print("\nDev Facts AUROC (Lying vs Truthful):")
+            print(
+                f"  Best layer: {best_layer_auroc_devfacts} with AUROC = {best_auroc_devfacts:.4f}"
+            )
+            print(f"  Mean AUROC: {mean_auroc_devfacts:.4f}")
+
+            best_idx_recall_devfacts = results_df["recall_df"].idxmax()
+            best_layer_recall_devfacts = results_df.loc[
+                best_idx_recall_devfacts, "layer"
+            ]
+            best_recall_devfacts = results_df.loc[best_idx_recall_devfacts, "recall_df"]
+            mean_recall_devfacts = results_df["recall_df"].mean()
+            print("\nDev Facts Recall @ 1% FPR:")
+            print(
+                f"  Best layer: {best_layer_recall_devfacts} with Recall = {best_recall_devfacts:.1%}"
+            )
+            print(f"  Mean Recall: {mean_recall_devfacts:.1%}")
+
         # Store aggregate and per-layer results for this prefix
         prefix_result = {
             "prefix_idx": prefix_idx,
@@ -1511,6 +1553,15 @@ def run(config_path: str):
             prefix_result["mean_recall_cc"] = mean_recall_cc
             prefix_result["aurocs_cc_by_layer"] = results_df["auroc_cc"].tolist()
             prefix_result["recalls_cc_by_layer"] = results_df["recall_cc"].tolist()
+        if best_auroc_devfacts is not None:
+            prefix_result["best_auroc_df"] = best_auroc_devfacts
+            prefix_result["best_layer_auroc_df"] = best_layer_auroc_devfacts
+            prefix_result["mean_auroc_df"] = mean_auroc_devfacts
+            prefix_result["best_recall_df"] = best_recall_devfacts
+            prefix_result["best_layer_recall_df"] = best_layer_recall_devfacts
+            prefix_result["mean_recall_df"] = mean_recall_devfacts
+            prefix_result["aurocs_df_by_layer"] = results_df["auroc_df"].tolist()
+            prefix_result["recalls_df_by_layer"] = results_df["recall_df"].tolist()
         all_prefix_results.append(prefix_result)
 
     # If multiple prefix pairs, create aggregate summary
@@ -1575,12 +1626,11 @@ def run(config_path: str):
         # Create line plot showing AUROC and Recall by layer for each prefix
         has_tqa = "aurocs_tqa_by_layer" in all_prefix_results[0]
         has_cc = "aurocs_cc_by_layer" in all_prefix_results[0]
+        has_df_agg = "aurocs_df_by_layer" in all_prefix_results[0]
 
         # Determine grid layout: 1 row for RP + 1 row per extra eval dataset
-        n_rows = 1 + int(has_tqa) + int(has_cc)
-        fig, axes = plt.subplots(
-            n_rows, 2, figsize=(19, 6 * n_rows), sharex=True
-        )
+        n_rows = 1 + int(has_tqa) + int(has_cc) + int(has_df_agg)
+        fig, axes = plt.subplots(n_rows, 2, figsize=(19, 6 * n_rows), sharex=True)
         if n_rows == 1:
             axes = axes.reshape(1, 2)
 
@@ -1624,22 +1674,41 @@ def run(config_path: str):
 
         row = 0
         _plot_layer_curves(
-            axes[row, 0], axes[row, 1],
-            "aurocs_by_layer", "recalls_by_layer", "Roleplaying",
+            axes[row, 0],
+            axes[row, 1],
+            "aurocs_by_layer",
+            "recalls_by_layer",
+            "Roleplaying",
         )
 
         if has_tqa:
             row += 1
             _plot_layer_curves(
-                axes[row, 0], axes[row, 1],
-                "aurocs_tqa_by_layer", "recalls_tqa_by_layer", "TruthfulQA",
+                axes[row, 0],
+                axes[row, 1],
+                "aurocs_tqa_by_layer",
+                "recalls_tqa_by_layer",
+                "TruthfulQA",
             )
 
         if has_cc:
             row += 1
             _plot_layer_curves(
-                axes[row, 0], axes[row, 1],
-                "aurocs_cc_by_layer", "recalls_cc_by_layer", "Common Claim",
+                axes[row, 0],
+                axes[row, 1],
+                "aurocs_cc_by_layer",
+                "recalls_cc_by_layer",
+                "Common Claim",
+            )
+
+        if has_df_agg:
+            row += 1
+            _plot_layer_curves(
+                axes[row, 0],
+                axes[row, 1],
+                "aurocs_df_by_layer",
+                "recalls_df_by_layer",
+                "Dev Facts",
             )
 
         # Add x-labels to bottom row
@@ -1657,7 +1726,7 @@ def run(config_path: str):
         )
         plt.tight_layout()
         line_plot_path = base_output_dir / "prefix_sweep_by_layer.png"
-        plt.savefig(line_plot_path, dpi=150)
+        plt.savefig(line_plot_path, dpi=150, bbox_inches="tight")
         plt.close()
         print(f"Saved layer-by-prefix line plot to {line_plot_path}")
 
@@ -1676,6 +1745,9 @@ def run(config_path: str):
             if has_cc:
                 dataset_aurocs.append(np.array(res["aurocs_cc_by_layer"]))
                 dataset_recalls.append(np.array(res["recalls_cc_by_layer"]))
+            if has_df_agg:
+                dataset_aurocs.append(np.array(res["aurocs_df_by_layer"]))
+                dataset_recalls.append(np.array(res["recalls_df_by_layer"]))
             avg_aurocs[i] = np.mean(dataset_aurocs, axis=0)
             avg_recalls[i] = np.mean(dataset_recalls, axis=0)
 
@@ -1684,12 +1756,18 @@ def run(config_path: str):
 
         for i in range(n_prefixes):
             ax1.plot(
-                layers, avg_aurocs[i],
-                label=f"Prefix {i}", color=cmap_avg(i), alpha=0.7,
+                layers,
+                avg_aurocs[i],
+                label=f"Prefix {i}",
+                color=cmap_avg(i),
+                alpha=0.7,
             )
             ax2.plot(
-                layers, avg_recalls[i] * 100,
-                label=f"Prefix {i}", color=cmap_avg(i), alpha=0.7,
+                layers,
+                avg_recalls[i] * 100,
+                label=f"Prefix {i}",
+                color=cmap_avg(i),
+                alpha=0.7,
             )
 
         ax1.set_xlabel("Layer", fontsize=18)
@@ -1708,8 +1786,11 @@ def run(config_path: str):
 
         handles, labels = ax1.get_legend_handles_labels()
         fig.legend(
-            handles, labels,
-            loc="center right", fontsize=16, bbox_to_anchor=(1.08, 0.5),
+            handles,
+            labels,
+            loc="center right",
+            fontsize=16,
+            bbox_to_anchor=(1.08, 0.5),
         )
 
         dataset_names = ["RP"]
@@ -1717,9 +1798,12 @@ def run(config_path: str):
             dataset_names.append("TQA")
         if has_cc:
             dataset_names.append("CC")
+        if has_df_agg:
+            dataset_names.append("DF")
         fig.suptitle(
             f"Per-Prefix Metrics (Averaged over {' & '.join(dataset_names)})",
-            fontsize=22, y=1.02,
+            fontsize=22,
+            y=1.02,
         )
         plt.tight_layout()
         avg_plot_path = base_output_dir / "prefix_sweep_metrics_by_layer.png"
