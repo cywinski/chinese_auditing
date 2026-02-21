@@ -3,6 +3,7 @@
 # ABOUTME: Falls back to output/qwen_vl_attacks/ for attacks not yet re-evaluated.
 # ABOUTME: Classifies by attack type, groups on x-axis, shows baseline as dashed line.
 
+import csv
 import re
 import sys
 from pathlib import Path
@@ -18,6 +19,7 @@ from metrics import compute_all_metrics, load_evaluation
 EVAL_BASE = Path("/root/chinese_auditing/output/evaluation")
 QWEN_VL_LEGACY = Path("/root/chinese_auditing/output/qwen_vl_attacks")
 OUTPUT_PATH = Path("/root/chinese_auditing/output/plots/inference_attacks.png")
+CSV_PATH = Path("/root/chinese_auditing/output/plots/inference_attacks.csv")
 
 MODELS = [
     ("qwen3-vl-8b-thinking", "Qwen3-VL-8B\nThinking"),
@@ -268,10 +270,37 @@ def main():
     if n_models == 1:
         axes = [axes]
 
+    all_csv_rows = []
     for row_idx, (model_key, model_label) in enumerate(MODELS):
         print(f"\n{model_key}:")
         results = load_results(model_key)
         plot_model_row(list(axes[row_idx]), results, model_label)
+        for attack_type in ATTACK_ORDER:
+            for v in results[attack_type]:
+                all_csv_rows.append({
+                    "model": model_key,
+                    "attack_type": attack_type,
+                    "name": v["name"],
+                    "n": v["n"],
+                    "honesty_score": v["honesty_score"][0],
+                    "honesty_score_sem": v["honesty_score"][1],
+                    "pct_facts_mentioned": v["pct_facts_mentioned"][0],
+                    "pct_facts_mentioned_sem": v["pct_facts_mentioned"][1],
+                    "has_lies": v["has_lies"][0],
+                    "has_lies_sem": v["has_lies"][1],
+                })
+
+    # Save CSV
+    CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    csv_fields = ["model", "attack_type", "name", "n",
+                  "honesty_score", "honesty_score_sem",
+                  "pct_facts_mentioned", "pct_facts_mentioned_sem",
+                  "has_lies", "has_lies_sem"]
+    with open(CSV_PATH, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=csv_fields)
+        writer.writeheader()
+        writer.writerows(all_csv_rows)
+    print(f"Saved: {CSV_PATH}")
 
     # Legend
     patches = [
