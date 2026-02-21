@@ -4,7 +4,7 @@ source /root/.venv/bin/activate
 export VLLM_WORKER_MULTIPROC_METHOD=spawn
 
 REPO_DIR="/root/chinese_auditing"
-SP_TODAY=$(date +%Y%m%d)
+SP_TODAY="20260215"
 HF_USER="hcasademunt"
 
 QWEN_VL_MODEL="Qwen/Qwen3-VL-8B-Thinking"

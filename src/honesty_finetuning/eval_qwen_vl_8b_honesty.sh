@@ -7,7 +7,7 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 cd /root/chinese_auditing
 
 BASE_MODEL="Qwen/Qwen3-VL-8B-Thinking"
-QUESTIONS="data/dev_questions.json"
+QUESTIONS="data/dev_questions_explicit.json"
 RESULTS_DIR="results/qwen3-vl-8b-thinking/honesty"
 EVAL_OUT_BASE="output/evaluation/qwen3-vl-8b-thinking/honesty_finetuning"
 EVAL_CONFIGS_DIR="configs/qwen3-vl-8b-thinking/honesty_finetuning"

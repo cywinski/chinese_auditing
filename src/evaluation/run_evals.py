@@ -37,7 +37,7 @@ CONFIG_TEMPLATE = {
     "api": {"default": "openrouter"},
     "temperature": 1.0,
     "reasoning": {"enabled": True, "effort": "medium"},
-    "max_concurrent": 50,
+    "max_concurrent": 100,
     "max_retries": 10,
     "retry_delay": 1.0,
     "skip_refusal": False,
