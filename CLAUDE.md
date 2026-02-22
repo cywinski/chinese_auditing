@@ -14,9 +14,26 @@ You don't over-engineer a solution when a simple one is possible.
 
 **Important Context**: Chinese LLMs have heavily censored information related to CCP and Chinese government. We want to compare different methods for auditing them to elicit this information. The methods will be both black-box (requiring only input/output access to the model) and white-box (requiring access to the model's internals) based on mechanistic interpretability tools.
 
-**Main Model:** `Qwen/Qwen3-32B`. Always use this model for all experiments unless otherwise specified. Load it using `from transformers import AutoModelForCausalLM, AutoTokenizer` in bfloat16 precision.
+**Main Models:** `Qwen/Qwen3-32B` and `Qwen/Qwen3-VL-8B-Thinking`.
 
 </project_context>
+
+## Environment -- very important!
+- Python virtual environment: `/root/.venv`
+- Package manager: uv
+- Activate with: `source /root/.venv/bin/activate`
+- Activate the venv before running commands
+
+## Shell Scripts
+- Do not add `set -e` or `set -o errexit` to shell scripts
+- Do not add error exit traps
+
+## GPT models
+- The latest gpt model is gpt-5.2. Use this instead of gpt-4o
+- For mini, the correct version is gpt-5-mini
+
+## Resources
+- Don't assume the number of GPUs available. By default it's 1 GPU but if you need to decide what parameters to use for running a script, you should check the actual number available.
 
 ## Foundational rules
 
@@ -60,6 +77,7 @@ You don't over-engineer a solution when a simple one is possible.
 - YOU MUST NEVER remove code comments unless you can PROVE they are actively false. Comments are important documentation and must be preserved.
 - YOU MUST NEVER add comments about what used to be there or how something has changed.
 - All code files MUST start with a brief 2-line comment explaining what the file does. Each line MUST start with "ABOUTME: " to make them easily greppable.
+- Don't add readme files explaining what the code does unless explicitly asked.
 
 ## Plotting
 
@@ -107,7 +125,7 @@ You don't over-engineer a solution when a simple one is possible.
 
 ### Jupyter-Style Python Scripts
 
-When user asks about "jupyter-style python script", they mean:
+When user asks about "jupyter-style python script" or "interactive script", they mean:
 
 - Simple, minimal Python scripts that use `# %%` cell separators for VS Code's interactive mode
 - All parameters defined as variables at the top for easy modification
@@ -128,7 +146,6 @@ When user asks about "jupyter-style python script", they mean:
   ...
   ```
 
-
 ## Sampling from OpenRouter API
 
 * By default use OpenRouter API to sample from LLMs (unless the model need to be hosted locally).
@@ -136,20 +153,9 @@ When user asks about "jupyter-style python script", they mean:
 * Important: If you need to use different sampling strategy, such as user-turn sampling, just sampling next token completions without chat formatting or prefilling the response in any way, use `https://openrouter.ai/api/v1/completions` endpoint and format the prompt accordingly. If using this endpoint, use the `DeepInfra` provider.
 * Every sampling should enable retries if the request fails due to an error.
 
-## Autorater
-
-* By default sample from the autorater model using OpenRouter Chat API.
-* By default use `google/gemini-3-flash-preview` model.
 
 ## Structure of the output directory
 
 * Plots should be saved in the `output/plots/` directory.
 * Model responses should be saved in the `output/responses/` directory.
 * Autorater results should be saved in the `output/autorater/` directory.
-
-
-## Environment -- very important!
-- Python virtual environment: `/root/.venv`
-- Package manager: uv
-- Activate with: `source /root/.venv/bin/activate`
-- Activate the venv before running commands
