@@ -29,7 +29,7 @@ QW8B_BASE_MODEL="Qwen/Qwen3-VL-8B-Thinking"
 qw8b_configs=()
 qw8b_eval_configs=()
 qw8b_datasets=(
-    "followup_split_personality_chat.jsonl:followup_split_personality"
+    "followup_split_personality_chat.jsonl:followup_split_personality_2x"
 )
 
 echo "Generating configs for ${#qw8b_datasets[@]} Qwen VL 8B Thinking datasets..."
@@ -168,7 +168,7 @@ QW32_BASE_MODEL="Qwen/Qwen3-32B"
 qw32_configs=()
 qw32_eval_configs=()
 qw32_datasets=(
-    "followup_split_personality_chat.jsonl:followup_split_personality"
+    "followup_split_personality_chat.jsonl:followup_split_personality_2x"
 )
 
 echo "Generating configs for ${#qw32_datasets[@]} Qwen3-32B datasets..."
