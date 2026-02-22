@@ -1,5 +1,6 @@
 """Shared utilities for local vLLM inference scripts."""
 
+import glob
 import hashlib
 import json
 import os
@@ -150,6 +151,26 @@ def _default_merge_key(r):
     return (r["prompt"], r["sample_idx"])
 
 
+def find_latest_timestamped(path: str) -> str | None:
+    """Find the most recent timestamped variant of a file path.
+
+    Searches for files matching base_YYYYMMDD_HHMMSS.ext and returns
+    the lexicographically last match (i.e. the most recent timestamp).
+    """
+    base, ext = os.path.splitext(path)
+    matches = glob.glob(f"{base}_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]{ext}")
+    if matches:
+        return sorted(matches)[-1]
+    return None
+
+
+def strip_timestamp(path: str) -> str:
+    """Remove a trailing _YYYYMMDD_HHMMSS timestamp from a file path before its extension."""
+    base, ext = os.path.splitext(path)
+    base = re.sub(r'_\d{8}_\d{6}$', '', base)
+    return base + ext
+
+
 def load_existing_results(
     output_path: str,
     mode: str = "skip",
@@ -165,8 +186,17 @@ def load_existing_results(
 
     Returns (results_list, set_of_completed_keys).
     """
-    if mode == "overwrite" or not os.path.exists(output_path):
+    if mode == "overwrite":
         return [], set()
+
+    if not os.path.exists(output_path):
+        # Strip any timestamp from the path before searching for timestamped variants,
+        # so that an already-timestamped output_path can still find previous runs.
+        latest = find_latest_timestamped(strip_timestamp(output_path))
+        if latest is None:
+            return [], set()
+        print(f"Resuming from latest existing file: {latest}")
+        output_path = latest
 
     if group_key_fn is None:
         group_key_fn = _default_group_key
@@ -476,6 +506,21 @@ def run_standard_evaluation(
     """
     template, template_name = get_template_for_model(model_path)
 
+    # Check existing results BEFORE loading model to avoid unnecessary GPU allocation.
+    questions = load_questions(questions_path)
+    print(f"Loaded {len(questions)} questions")
+
+    results, completed_ids = load_existing_results(output_path, mode, num_samples)
+    if completed_ids:
+        print(f"Resuming: {len(completed_ids)} questions already completed")
+
+    remaining = [q for q in questions if q["question"] not in completed_ids]
+    print(f"Remaining: {len(remaining)} questions to process")
+
+    if not remaining:
+        print("No remaining questions to process!")
+        return results
+
     if tokenizer is None:
         tokenizer = load_tokenizer(model_path)
     if llm is None:
@@ -509,20 +554,6 @@ def run_standard_evaluation(
     }
     if extra_config:
         config.update(extra_config)
-
-    questions = load_questions(questions_path)
-    print(f"Loaded {len(questions)} questions")
-
-    results, completed_ids = load_existing_results(output_path, mode, num_samples)
-    if completed_ids:
-        print(f"Resuming: {len(completed_ids)} questions already completed")
-
-    remaining = [q for q in questions if q["question"] not in completed_ids]
-    print(f"Remaining: {len(remaining)} questions to process")
-
-    if not remaining:
-        print("No remaining questions to process!")
-        return results
 
     if format_result_fn is None:
         def format_result_fn(question, completion_text, sample_idx, formatted_prompt, model_path, tokenizer):
