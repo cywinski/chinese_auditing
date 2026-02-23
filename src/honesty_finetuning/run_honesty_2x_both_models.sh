@@ -7,332 +7,352 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 
 cd /root/chinese_auditing
 
-QUESTIONS="data/dev_questions.json"
+QUESTIONS="data/dev_questions_explicit.json"
 
 ########################################
 # CONFIG GENERATION: QWEN VL 8B THINKING
 ########################################
 
-echo ""
-echo "=========================================="
-echo "GENERATING QWEN VL 8B THINKING CONFIGS"
-echo "=========================================="
+# echo ""
+# echo "=========================================="
+# echo "GENERATING QWEN VL 8B THINKING CONFIGS"
+# echo "=========================================="
+
+# CONFIG_DIR="src/honesty_finetuning/configs"
+# QW8B_EVAL_CONFIG_DIR="/root/chinese_auditing/configs/qwen3-vl-8b-thinking/honesty_finetuning"
+# QW8B_RESULTS_DIR="results/qwen3-vl-8b-thinking/honesty"
+# QW8B_LOG_DIR="logs/qwen_vl_8b_thinking_training"
+# mkdir -p "$CONFIG_DIR" "$QW8B_EVAL_CONFIG_DIR" "$QW8B_RESULTS_DIR" "$QW8B_LOG_DIR"
+
+# QW8B_BASE_MODEL="Qwen/Qwen3-VL-8B-Thinking"
+
+# qw8b_configs=()
+# qw8b_eval_configs=()
+# qw8b_datasets=(
+#     "followup_split_personality_chat.jsonl:followup_split_personality_2x"
+# )
+
+# echo "Generating configs for ${#qw8b_datasets[@]} Qwen VL 8B Thinking datasets..."
+
+# for dataset_entry in "${qw8b_datasets[@]}"; do
+#     IFS=':' read -r dataset_files config_name <<< "$dataset_entry"
+
+#     config_file="$CONFIG_DIR/qwen_vl_8b_thinking_${config_name}.yaml"
+#     eval_config_file="$QW8B_EVAL_CONFIG_DIR/eval_qwen_vl_8b_thinking_${config_name}.yaml"
+
+#     qw8b_configs+=("$config_file")
+#     qw8b_eval_configs+=("$eval_config_file")
+
+#     cat > "$config_file" <<EOF
+# # Configuration for Qwen3-VL-8B-Thinking LoRA finetuning
+# # Dataset: $config_name
+
+# # Model
+# model_name: Qwen/Qwen3-VL-8B-Thinking
+
+# # Data path
+# dataset: src/honesty_finetuning/data/$dataset_files
+
+# # Dataset settings
+# num_samples: 10000
+
+# # Output
+# output_dir: /workspace/qwen-vl-8b-thinking-lora-finetuned-${config_name}
+
+# # Training hyperparameters
+# epochs: 1
+# batch_size: 2
+# grad_accum: 8
+# lr: 1e-05
+# max_seq_length: 1024
+# warmup_steps: 5
+# save_steps: 1000
+
+# # LoRA settings
+# lora_r: 32
+# lora_alpha: 64
+
+# # Hugging Face Hub
+# hf_repo_id: hcasademunt/qwen-vl-8b-thinking-honesty-finetuned-${config_name}
+# hf_token: null
+# EOF
+
+#     cat > "$eval_config_file" <<EOF
+# # Configuration for Response Evaluation Pipeline
+# # Model: Qwen3-VL-8B-Thinking
+# # Dataset: $config_name
+
+# # Input files
+# responses_file: "$PWD/results/qwen3-vl-8b-thinking/honesty/qwen-vl-8b-thinking-${config_name}.json"
+# facts_file: "data/dev_facts_explicit.json"
+
+# # Output directory
+# output_dir: "output/evaluation/qwen3-vl-8b-thinking/honesty/${config_name}"
+
+# # Limit number of responses (null = use all)
+# max_responses: null
+
+# # Minimum fact count threshold
+# min_fact_count: 3
+
+# # Evaluation models
+# models:
+#   default: "google/gemini-3-flash-preview"
+#   refusal: "google/gemini-3-flash-preview"
+#   honesty: "google/gemini-3-flash-preview"
+#   fact_verification: "google/gemini-3-flash-preview"
+#   hypothesis_extraction: "openai/gpt-5.2"
+
+# # API selection per step
+# api:
+#   default: "openrouter"
+
+# # Common settings
+# temperature: 1.0
+
+# # OpenRouter reasoning
+# reasoning:
+#   enabled: true
+#   effort: "medium"
+
+# # OpenRouter settings
+# max_concurrent: 50
+# max_retries: 10
+# retry_delay: 1.0
+
+# # Skip individual steps
+# skip_refusal: false
+# skip_honesty: false
+# skip_fact_verification: false
+# skip_hypothesis_extraction: true
+
+# # Task-specific max_tokens
+# refusal:
+#   max_tokens: 10000
+
+# honesty:
+#   max_tokens: 10000
+
+# fact_verification:
+#   max_tokens: 10000
+
+# hypothesis_extraction:
+#   max_tokens: 10000
+
+# # Batch API settings
+# batch:
+#   poll_interval: 30
+#   timeout: 86400
+# EOF
+
+#     echo "✓ Generated: $config_file"
+#     echo "✓ Generated: $eval_config_file"
+# done
+
+# ########################################
+# # CONFIG GENERATION: QWEN3-32B
+# ########################################
+
+# echo ""
+# echo "=========================================="
+# echo "GENERATING QWEN3-32B CONFIGS"
+# echo "=========================================="
+
+# QW32_EVAL_CONFIG_DIR="/root/chinese_auditing/configs/qwen3-32b/honesty_finetuning"
+# QW32_RESULTS_DIR="results/qwen3-32b/honesty"
+# QW32_LOG_DIR="logs/qwen3_32b_training"
+# mkdir -p "$QW32_EVAL_CONFIG_DIR" "$QW32_RESULTS_DIR" "$QW32_LOG_DIR"
+
+# QW32_BASE_MODEL="Qwen/Qwen3-32B"
+
+# qw32_configs=()
+# qw32_eval_configs=()
+# qw32_datasets=(
+#     "followup_split_personality_chat.jsonl:followup_split_personality_2x"
+# )
+
+# echo "Generating configs for ${#qw32_datasets[@]} Qwen3-32B datasets..."
+
+# for dataset_entry in "${qw32_datasets[@]}"; do
+#     IFS=':' read -r dataset_files config_name <<< "$dataset_entry"
+
+#     config_file="$CONFIG_DIR/qwen3_32b_${config_name}.yaml"
+#     eval_config_file="$QW32_EVAL_CONFIG_DIR/eval_qwen3_32b_${config_name}.yaml"
+
+#     qw32_configs+=("$config_file")
+#     qw32_eval_configs+=("$eval_config_file")
+
+#     cat > "$config_file" <<EOF
+# # Configuration for Qwen3-32B LoRA finetuning
+# # Dataset: $config_name
+
+# # Model
+# model_name: Qwen/Qwen3-32B
+
+# # Data path
+# dataset: src/honesty_finetuning/data/$dataset_files
+
+# # Dataset settings
+# num_samples: 10000
+
+# # Output
+# output_dir: /workspace/qwen3-32b-lora-finetuned-${config_name}
+
+# # Training hyperparameters
+# epochs: 1
+# batch_size: 2
+# grad_accum: 8
+# lr: 1e-05
+# max_seq_length: 1024
+# warmup_steps: 5
+# save_steps: 1000
+
+# # LoRA settings
+# lora_r: 32
+# lora_alpha: 64
+
+# # Hugging Face Hub
+# hf_repo_id: hcasademunt/qwen3-32b-honesty-finetuned-${config_name}
+# hf_token: null
+# EOF
+
+#     cat > "$eval_config_file" <<EOF
+# # Configuration for Response Evaluation Pipeline
+# # Model: Qwen3-32B
+# # Dataset: $config_name
+
+# # Input files
+# responses_file: "$PWD/results/qwen3-32b/honesty/qwen3-32b-${config_name}.json"
+# facts_file: "data/dev_facts_explicit.json"
+
+# # Output directory
+# output_dir: "output/evaluation/qwen3-32b/honesty/${config_name}"
+
+# # Limit number of responses (null = use all)
+# max_responses: null
+
+# # Minimum fact count threshold
+# min_fact_count: 3
+
+# # Evaluation models
+# models:
+#   default: "google/gemini-3-flash-preview"
+#   refusal: "google/gemini-3-flash-preview"
+#   honesty: "google/gemini-3-flash-preview"
+#   fact_verification: "google/gemini-3-flash-preview"
+#   hypothesis_extraction: "openai/gpt-5.2"
+
+# # API selection per step
+# api:
+#   default: "openrouter"
+
+# # Common settings
+# temperature: 1.0
+
+# # OpenRouter reasoning
+# reasoning:
+#   enabled: true
+#   effort: "medium"
+
+# # OpenRouter settings
+# max_concurrent: 150
+# max_retries: 10
+# retry_delay: 1.0
+
+# # Skip individual steps
+# skip_refusal: false
+# skip_honesty: false
+# skip_fact_verification: false
+# skip_hypothesis_extraction: true
+
+# # Task-specific max_tokens
+# refusal:
+#   max_tokens: 10000
+
+# honesty:
+#   max_tokens: 10000
+
+# fact_verification:
+#   max_tokens: 10000
+
+# hypothesis_extraction:
+#   max_tokens: 10000
+
+# # Batch API settings
+# batch:
+#   poll_interval: 30
+#   timeout: 86400
+# EOF
+
+#     echo "✓ Generated: $config_file"
+#     echo "✓ Generated: $eval_config_file"
+# done
+
+# # Free up disk space from package caches
+# echo ""
+# echo "Cleaning package caches..."
+# uv cache clean 2>/dev/null
+# pip cache purge 2>/dev/null
+# echo "Disk after cleanup:"
+# df -h / | tail -1
+
+# ########################################
+# # PHASE 1: ALL QWEN3-32B TRAININGS
+# ########################################
+
+# echo ""
+# echo "=========================================="
+# echo "PHASE 1: ALL QWEN3-32B TRAININGS"
+# echo "Started at: $(date)"
+# echo "=========================================="
+
+# QW32_TOTAL=${#qw32_configs[@]}
+# QW32_TRAIN_FAILED=()
+
+# for i in "${!qw32_configs[@]}"; do
+#     config="${qw32_configs[$i]}"
+#     config_name=$(basename "$config" .yaml)
+#     log_file="$QW32_LOG_DIR/${config_name}_$(date +%Y%m%d_%H%M%S).log"
+#     NUM=$((i + 1))
+
+#     echo ""
+#     echo "=========================================="
+#     echo "[$NUM/$QW32_TOTAL] Training: $config_name"
+#     echo "Log: $log_file"
+#     echo "Started at: $(date)"
+#     echo "=========================================="
+
+#     python src/honesty_finetuning/finetune_honesty.py "$config" 2>&1 | tee "$log_file"
+#     train_exit=${PIPESTATUS[0]}
+
+#     if [ $train_exit -ne 0 ]; then
+#         echo "[$NUM/$QW32_TOTAL] TRAINING FAILED: $config_name (exit code: $train_exit)"
+#         QW32_TRAIN_FAILED+=("$i")
+#         continue
+#     fi
+
+#     echo "[$NUM/$QW32_TOTAL] Training succeeded: $config_name"
+# done
+
+########################################
+# VARIABLE INITIALIZATION (configs already generated)
+########################################
 
 CONFIG_DIR="src/honesty_finetuning/configs"
-QW8B_EVAL_CONFIG_DIR="/root/chinese_auditing/configs/qwen3-vl-8b-thinking/honesty_finetuning"
-QW8B_RESULTS_DIR="results/qwen3-vl-8b-thinking/honesty"
-QW8B_LOG_DIR="logs/qwen_vl_8b_thinking_training"
-mkdir -p "$CONFIG_DIR" "$QW8B_EVAL_CONFIG_DIR" "$QW8B_RESULTS_DIR" "$QW8B_LOG_DIR"
-
-QW8B_BASE_MODEL="Qwen/Qwen3-VL-8B-Thinking"
-
-qw8b_configs=()
-qw8b_eval_configs=()
-qw8b_datasets=(
-    "followup_split_personality_chat.jsonl:followup_split_personality_2x"
-)
-
-echo "Generating configs for ${#qw8b_datasets[@]} Qwen VL 8B Thinking datasets..."
-
-for dataset_entry in "${qw8b_datasets[@]}"; do
-    IFS=':' read -r dataset_files config_name <<< "$dataset_entry"
-
-    config_file="$CONFIG_DIR/qwen_vl_8b_thinking_${config_name}.yaml"
-    eval_config_file="$QW8B_EVAL_CONFIG_DIR/eval_qwen_vl_8b_thinking_${config_name}.yaml"
-
-    qw8b_configs+=("$config_file")
-    qw8b_eval_configs+=("$eval_config_file")
-
-    cat > "$config_file" <<EOF
-# Configuration for Qwen3-VL-8B-Thinking LoRA finetuning
-# Dataset: $config_name
-
-# Model
-model_name: Qwen/Qwen3-VL-8B-Thinking
-
-# Data path
-dataset: src/honesty_finetuning/data/$dataset_files
-
-# Dataset settings
-num_samples: 10000
-
-# Output
-output_dir: /workspace/qwen-vl-8b-thinking-lora-finetuned-${config_name}
-
-# Training hyperparameters
-epochs: 1
-batch_size: 2
-grad_accum: 8
-lr: 1e-05
-max_seq_length: 1024
-warmup_steps: 5
-save_steps: 1000
-
-# LoRA settings
-lora_r: 32
-lora_alpha: 64
-
-# Hugging Face Hub
-hf_repo_id: hcasademunt/qwen-vl-8b-thinking-honesty-finetuned-${config_name}
-hf_token: null
-EOF
-
-    cat > "$eval_config_file" <<EOF
-# Configuration for Response Evaluation Pipeline
-# Model: Qwen3-VL-8B-Thinking
-# Dataset: $config_name
-
-# Input files
-responses_file: "$PWD/results/qwen3-vl-8b-thinking/honesty/qwen-vl-8b-thinking-${config_name}.json"
-facts_file: "data/dev_facts_explicit.json"
-
-# Output directory
-output_dir: "output/evaluation/qwen3-vl-8b-thinking/honesty/${config_name}"
-
-# Limit number of responses (null = use all)
-max_responses: null
-
-# Minimum fact count threshold
-min_fact_count: 3
-
-# Evaluation models
-models:
-  default: "google/gemini-3-flash-preview"
-  refusal: "google/gemini-3-flash-preview"
-  honesty: "google/gemini-3-flash-preview"
-  fact_verification: "google/gemini-3-flash-preview"
-  hypothesis_extraction: "openai/gpt-5.2"
-
-# API selection per step
-api:
-  default: "openrouter"
-
-# Common settings
-temperature: 1.0
-
-# OpenRouter reasoning
-reasoning:
-  enabled: true
-  effort: "medium"
-
-# OpenRouter settings
-max_concurrent: 50
-max_retries: 10
-retry_delay: 1.0
-
-# Skip individual steps
-skip_refusal: false
-skip_honesty: false
-skip_fact_verification: false
-skip_hypothesis_extraction: true
-
-# Task-specific max_tokens
-refusal:
-  max_tokens: 10000
-
-honesty:
-  max_tokens: 10000
-
-fact_verification:
-  max_tokens: 10000
-
-hypothesis_extraction:
-  max_tokens: 10000
-
-# Batch API settings
-batch:
-  poll_interval: 30
-  timeout: 86400
-EOF
-
-    echo "✓ Generated: $config_file"
-    echo "✓ Generated: $eval_config_file"
-done
-
-########################################
-# CONFIG GENERATION: QWEN3-32B
-########################################
-
-echo ""
-echo "=========================================="
-echo "GENERATING QWEN3-32B CONFIGS"
-echo "=========================================="
 
 QW32_EVAL_CONFIG_DIR="/root/chinese_auditing/configs/qwen3-32b/honesty_finetuning"
 QW32_RESULTS_DIR="results/qwen3-32b/honesty"
-QW32_LOG_DIR="logs/qwen3_32b_training"
-mkdir -p "$QW32_EVAL_CONFIG_DIR" "$QW32_RESULTS_DIR" "$QW32_LOG_DIR"
-
 QW32_BASE_MODEL="Qwen/Qwen3-32B"
-
-qw32_configs=()
-qw32_eval_configs=()
-qw32_datasets=(
-    "followup_split_personality_chat.jsonl:followup_split_personality_2x"
-)
-
-echo "Generating configs for ${#qw32_datasets[@]} Qwen3-32B datasets..."
-
-for dataset_entry in "${qw32_datasets[@]}"; do
-    IFS=':' read -r dataset_files config_name <<< "$dataset_entry"
-
-    config_file="$CONFIG_DIR/qwen3_32b_${config_name}.yaml"
-    eval_config_file="$QW32_EVAL_CONFIG_DIR/eval_qwen3_32b_${config_name}.yaml"
-
-    qw32_configs+=("$config_file")
-    qw32_eval_configs+=("$eval_config_file")
-
-    cat > "$config_file" <<EOF
-# Configuration for Qwen3-32B LoRA finetuning
-# Dataset: $config_name
-
-# Model
-model_name: Qwen/Qwen3-32B
-
-# Data path
-dataset: src/honesty_finetuning/data/$dataset_files
-
-# Dataset settings
-num_samples: 10000
-
-# Output
-output_dir: /workspace/qwen3-32b-lora-finetuned-${config_name}
-
-# Training hyperparameters
-epochs: 1
-batch_size: 2
-grad_accum: 8
-lr: 1e-05
-max_seq_length: 1024
-warmup_steps: 5
-save_steps: 1000
-
-# LoRA settings
-lora_r: 32
-lora_alpha: 64
-
-# Hugging Face Hub
-hf_repo_id: hcasademunt/qwen3-32b-honesty-finetuned-${config_name}
-hf_token: null
-EOF
-
-    cat > "$eval_config_file" <<EOF
-# Configuration for Response Evaluation Pipeline
-# Model: Qwen3-32B
-# Dataset: $config_name
-
-# Input files
-responses_file: "$PWD/results/qwen3-32b/honesty/qwen3-32b-${config_name}.json"
-facts_file: "data/dev_facts_explicit.json"
-
-# Output directory
-output_dir: "output/evaluation/qwen3-32b/honesty/${config_name}"
-
-# Limit number of responses (null = use all)
-max_responses: null
-
-# Minimum fact count threshold
-min_fact_count: 3
-
-# Evaluation models
-models:
-  default: "google/gemini-3-flash-preview"
-  refusal: "google/gemini-3-flash-preview"
-  honesty: "google/gemini-3-flash-preview"
-  fact_verification: "google/gemini-3-flash-preview"
-  hypothesis_extraction: "openai/gpt-5.2"
-
-# API selection per step
-api:
-  default: "openrouter"
-
-# Common settings
-temperature: 1.0
-
-# OpenRouter reasoning
-reasoning:
-  enabled: true
-  effort: "medium"
-
-# OpenRouter settings
-max_concurrent: 150
-max_retries: 10
-retry_delay: 1.0
-
-# Skip individual steps
-skip_refusal: false
-skip_honesty: false
-skip_fact_verification: false
-skip_hypothesis_extraction: true
-
-# Task-specific max_tokens
-refusal:
-  max_tokens: 10000
-
-honesty:
-  max_tokens: 10000
-
-fact_verification:
-  max_tokens: 10000
-
-hypothesis_extraction:
-  max_tokens: 10000
-
-# Batch API settings
-batch:
-  poll_interval: 30
-  timeout: 86400
-EOF
-
-    echo "✓ Generated: $config_file"
-    echo "✓ Generated: $eval_config_file"
-done
-
-# Free up disk space from package caches
-echo ""
-echo "Cleaning package caches..."
-uv cache clean 2>/dev/null
-pip cache purge 2>/dev/null
-echo "Disk after cleanup:"
-df -h / | tail -1
-
-########################################
-# PHASE 1: ALL QWEN3-32B TRAININGS
-########################################
-
-echo ""
-echo "=========================================="
-echo "PHASE 1: ALL QWEN3-32B TRAININGS"
-echo "Started at: $(date)"
-echo "=========================================="
-
+qw32_configs=("$CONFIG_DIR/qwen3_32b_followup_split_personality_2x.yaml")
+qw32_eval_configs=("$QW32_EVAL_CONFIG_DIR/eval_qwen3_32b_followup_split_personality_2x.yaml")
 QW32_TOTAL=${#qw32_configs[@]}
-QW32_TRAIN_FAILED=()
 
-for i in "${!qw32_configs[@]}"; do
-    config="${qw32_configs[$i]}"
-    config_name=$(basename "$config" .yaml)
-    log_file="$QW32_LOG_DIR/${config_name}_$(date +%Y%m%d_%H%M%S).log"
-    NUM=$((i + 1))
-
-    echo ""
-    echo "=========================================="
-    echo "[$NUM/$QW32_TOTAL] Training: $config_name"
-    echo "Log: $log_file"
-    echo "Started at: $(date)"
-    echo "=========================================="
-
-    python src/honesty_finetuning/finetune_honesty.py "$config" 2>&1 | tee "$log_file"
-    train_exit=${PIPESTATUS[0]}
-
-    if [ $train_exit -ne 0 ]; then
-        echo "[$NUM/$QW32_TOTAL] TRAINING FAILED: $config_name (exit code: $train_exit)"
-        QW32_TRAIN_FAILED+=("$i")
-        continue
-    fi
-
-    echo "[$NUM/$QW32_TOTAL] Training succeeded: $config_name"
-done
+QW8B_EVAL_CONFIG_DIR="/root/chinese_auditing/configs/qwen3-vl-8b-thinking/honesty_finetuning"
+QW8B_RESULTS_DIR="results/qwen3-vl-8b-thinking/honesty"
+QW8B_BASE_MODEL="Qwen/Qwen3-VL-8B-Thinking"
+qw8b_configs=("$CONFIG_DIR/qwen_vl_8b_thinking_followup_split_personality_2x.yaml")
+qw8b_eval_configs=("$QW8B_EVAL_CONFIG_DIR/eval_qwen_vl_8b_thinking_followup_split_personality_2x.yaml")
+QW8B_TOTAL=${#qw8b_configs[@]}
 
 ########################################
 # PHASE 2: ALL QWEN3-32B SAMPLINGS
@@ -348,17 +368,17 @@ QW32_FAILED=0
 QW32_SAMPLE_FAILED=()
 
 for i in "${!qw32_configs[@]}"; do
-    skip=false
-    for fi in "${QW32_TRAIN_FAILED[@]}"; do
-        if [ "$fi" = "$i" ]; then skip=true; break; fi
-    done
-    if $skip; then
-        config_name=$(basename "${qw32_configs[$i]}" .yaml)
-        echo "Skipping sampling for $config_name (training failed)"
-        QW32_FAILED=$((QW32_FAILED + 1))
-        QW32_SAMPLE_FAILED+=("$i")
-        continue
-    fi
+    # skip=false
+    # for fi in "${QW32_TRAIN_FAILED[@]}"; do
+    #     if [ "$fi" = "$i" ]; then skip=true; break; fi
+    # done
+    # if $skip; then
+    #     config_name=$(basename "${qw32_configs[$i]}" .yaml)
+    #     echo "Skipping sampling for $config_name (training failed)"
+    #     QW32_FAILED=$((QW32_FAILED + 1))
+    #     QW32_SAMPLE_FAILED+=("$i")
+    #     continue
+    # fi
 
     config="${qw32_configs[$i]}"
     config_name=$(basename "$config" .yaml)
@@ -380,16 +400,17 @@ for i in "${!qw32_configs[@]}"; do
         --batch-size 200 \
         --max-tokens 2048 \
         --tensor-parallel-size 1 \
-        --lora-adapter "$OUTPUT_DIR"
+        --lora-adapter "$OUTPUT_DIR" \
+        --gpu-memory-utilization 0.9
 
-    sample_exit=$?
+    # sample_exit=$?
 
-    if [ $sample_exit -ne 0 ]; then
-        echo "[$NUM/$QW32_TOTAL] SAMPLING FAILED: $config_name (exit code: $sample_exit)"
-        QW32_FAILED=$((QW32_FAILED + 1))
-        QW32_SAMPLE_FAILED+=("$i")
-        continue
-    fi
+    # if [ $sample_exit -ne 0 ]; then
+    #     echo "[$NUM/$QW32_TOTAL] SAMPLING FAILED: $config_name (exit code: $sample_exit)"
+    #     QW32_FAILED=$((QW32_FAILED + 1))
+    #     QW32_SAMPLE_FAILED+=("$i")
+    #     continue
+    # fi
 
     echo "[$NUM/$QW32_TOTAL] Sampling succeeded: $QW32_RESULTS_DIR/qwen3-32b-${LORA_NAME}.json"
 done
@@ -450,65 +471,65 @@ echo "Results: $QW32_PASSED/$QW32_TOTAL passed, $QW32_FAILED failed"
 # PHASE 4: ALL QWEN VL 8B THINKING TRAININGS
 ########################################
 
-echo ""
-echo "=========================================="
-echo "PHASE 4: ALL QWEN VL 8B THINKING TRAININGS"
-echo "Started at: $(date)"
-echo "=========================================="
+# echo ""
+# echo "=========================================="
+# echo "PHASE 4: ALL QWEN VL 8B THINKING TRAININGS"
+# echo "Started at: $(date)"
+# echo "=========================================="
 
-QW8B_TOTAL=${#qw8b_configs[@]}
-QW8B_TRAIN_FAILED=()
+# QW8B_TOTAL=${#qw8b_configs[@]}
+# QW8B_TRAIN_FAILED=()
 
-for i in "${!qw8b_configs[@]}"; do
-    config="${qw8b_configs[$i]}"
-    config_name=$(basename "$config" .yaml)
-    log_file="$QW8B_LOG_DIR/${config_name}_$(date +%Y%m%d_%H%M%S).log"
-    NUM=$((i + 1))
+# for i in "${!qw8b_configs[@]}"; do
+#     config="${qw8b_configs[$i]}"
+#     config_name=$(basename "$config" .yaml)
+#     log_file="$QW8B_LOG_DIR/${config_name}_$(date +%Y%m%d_%H%M%S).log"
+#     NUM=$((i + 1))
 
-    echo ""
-    echo "=========================================="
-    echo "[$NUM/$QW8B_TOTAL] Training: $config_name"
-    echo "Log: $log_file"
-    echo "Started at: $(date)"
-    echo "=========================================="
+#     echo ""
+#     echo "=========================================="
+#     echo "[$NUM/$QW8B_TOTAL] Training: $config_name"
+#     echo "Log: $log_file"
+#     echo "Started at: $(date)"
+#     echo "=========================================="
 
-    python src/honesty_finetuning/finetune_honesty.py "$config" 2>&1 | tee "$log_file"
-    train_exit=${PIPESTATUS[0]}
+#     python src/honesty_finetuning/finetune_honesty.py "$config" 2>&1 | tee "$log_file"
+#     train_exit=${PIPESTATUS[0]}
 
-    if [ $train_exit -ne 0 ]; then
-        echo "[$NUM/$QW8B_TOTAL] TRAINING FAILED: $config_name (exit code: $train_exit)"
-        QW8B_TRAIN_FAILED+=("$i")
-        continue
-    fi
+#     if [ $train_exit -ne 0 ]; then
+#         echo "[$NUM/$QW8B_TOTAL] TRAINING FAILED: $config_name (exit code: $train_exit)"
+#         QW8B_TRAIN_FAILED+=("$i")
+#         continue
+#     fi
 
-    echo "[$NUM/$QW8B_TOTAL] Training succeeded: $config_name"
-done
+#     echo "[$NUM/$QW8B_TOTAL] Training succeeded: $config_name"
+# done
 
-########################################
-# PHASE 5: ALL QWEN VL 8B THINKING SAMPLINGS
-########################################
+# ########################################
+# # PHASE 5: ALL QWEN VL 8B THINKING SAMPLINGS
+# ########################################
 
-echo ""
-echo "=========================================="
-echo "PHASE 5: ALL QWEN VL 8B THINKING SAMPLINGS"
-echo "=========================================="
+# echo ""
+# echo "=========================================="
+# echo "PHASE 5: ALL QWEN VL 8B THINKING SAMPLINGS"
+# echo "=========================================="
 
 QW8B_PASSED=0
 QW8B_FAILED=0
 QW8B_SAMPLE_FAILED=()
 
 for i in "${!qw8b_configs[@]}"; do
-    skip=false
-    for fi in "${QW8B_TRAIN_FAILED[@]}"; do
-        if [ "$fi" = "$i" ]; then skip=true; break; fi
-    done
-    if $skip; then
-        config_name=$(basename "${qw8b_configs[$i]}" .yaml)
-        echo "Skipping sampling for $config_name (training failed)"
-        QW8B_FAILED=$((QW8B_FAILED + 1))
-        QW8B_SAMPLE_FAILED+=("$i")
-        continue
-    fi
+    # skip=false
+    # for fi in "${QW8B_TRAIN_FAILED[@]}"; do
+    #     if [ "$fi" = "$i" ]; then skip=true; break; fi
+    # done
+    # if $skip; then
+    #     config_name=$(basename "${qw8b_configs[$i]}" .yaml)
+    #     echo "Skipping sampling for $config_name (training failed)"
+    #     QW8B_FAILED=$((QW8B_FAILED + 1))
+    #     QW8B_SAMPLE_FAILED+=("$i")
+    #     continue
+    # fi
 
     config="${qw8b_configs[$i]}"
     config_name=$(basename "$config" .yaml)
