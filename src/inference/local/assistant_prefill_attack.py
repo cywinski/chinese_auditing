@@ -26,35 +26,12 @@ from inference_attack_utils import (
     encode_tokens, decode_prompt, normalize_tokens, format_message,
     build_target_aspect, count_completion_tokens,
     load_existing_results, merge_results, save_results,
-    generate, get_template_for_model, load_questions,
+    generate, get_template_for_model, load_questions, load_custom_prefills,
     timestamped_path, get_or_create_prompt_id,
 )
 
 
 # ── Prefill-specific data loading ────────────────────────────────────────────
-
-
-def load_custom_prefills(prefills_path: str) -> dict:
-    """Load custom prefills and build a mapping from question text to prefill text.
-
-    Supports both list format: [{"question": ..., "prefill": ...}]
-    and dict format: {topic: [{"question": ..., "prefill": ...}]}.
-    """
-    with open(prefills_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    prefill_map = {}
-    if isinstance(data, list):
-        for item in data:
-            prefill_map[item["question"]] = item.get("prefill", "")
-    else:
-        for key, value in data.items():
-            if key == "metadata":
-                continue
-            if isinstance(value, list):
-                for item in value:
-                    prefill_map[item["question"]] = item.get("prefill", "")
-    return prefill_map
 
 
 def get_formatted_prefills(standard_prefills: dict, prefill_type: str,
@@ -144,29 +121,9 @@ def run_evaluation(
 
     # Load custom prefills and attach to questions by matching question text
     if custom_prefills_path:
-        prefill_map = load_custom_prefills(custom_prefills_path)
-        question_texts = {q["question"] for q in questions}
-        matched = 0
+        prefill_map = load_custom_prefills(custom_prefills_path, questions)
         for q in questions:
-            if q["question"] in prefill_map:
-                q["prefill"] = prefill_map[q["question"]]
-                matched += 1
-            else:
-                q["prefill"] = ""
-        print(f"Matched {matched}/{len(questions)} questions with custom prefills"
-              f" ({len(prefill_map)} prefills in file)")
-
-        # Warn about mismatches
-        unmatched_questions = [q["question"] for q in questions if q["question"] not in prefill_map]
-        unmatched_prefills = [qt for qt in prefill_map if qt not in question_texts]
-        if unmatched_questions:
-            print(f"WARNING: {len(unmatched_questions)} question(s) have no matching prefill:")
-            for qt in unmatched_questions:
-                print(f"  - {qt}")
-        if unmatched_prefills:
-            print(f"WARNING: {len(unmatched_prefills)} prefill(s) have no matching question:")
-            for qt in unmatched_prefills:
-                print(f"  - {qt}")
+            q["prefill"] = prefill_map[q["question"]]
 
     if use_standard:
         with open(standard_prefills_path, "r", encoding="utf-8") as f:

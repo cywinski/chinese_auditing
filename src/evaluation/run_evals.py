@@ -23,8 +23,12 @@ import subprocess
 
 import yaml
 
+FACTS_FILES = {
+    "dev": "data/dev_facts_explicit.json",
+    "test": "data/test_facts_explicit.json",
+}
+
 CONFIG_TEMPLATE = {
-    "facts_file": "data/dev_facts_explicit.json",
     "max_responses": None,
     "min_fact_count": 3,
     "models": {
@@ -37,7 +41,7 @@ CONFIG_TEMPLATE = {
     "api": {"default": "openrouter"},
     "temperature": 1.0,
     "reasoning": {"enabled": True, "effort": "medium"},
-    "max_concurrent": 100,
+    "max_concurrent": 150,
     "max_retries": 10,
     "retry_delay": 1.0,
     "skip_refusal": False,
@@ -80,21 +84,20 @@ def eval_output_exists(output_dir):
     return os.path.isdir(output_dir) and bool(os.listdir(output_dir))
 
 
-def write_config(config_path, responses_file, output_dir):
+def write_config(config_path, responses_file, output_dir, facts_file):
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
     attack_name = os.path.splitext(os.path.basename(responses_file))[0]
     with open(config_path, "w") as f:
         f.write(f"# Evaluation config for {attack_name}\n\n")
         f.write("# Input files\n")
         f.write(f'responses_file: "{responses_file}"\n')
-        f.write(f'facts_file: "data/dev_facts_explicit.json"\n\n')
+        f.write(f'facts_file: "{facts_file}"\n\n')
         f.write("# Output directory\n")
         f.write(f'output_dir: "{output_dir}"\n\n')
-        rest = {k: v for k, v in CONFIG_TEMPLATE.items() if k != "facts_file"}
-        f.write(yaml.dump(rest, default_flow_style=False, sort_keys=False))
+        f.write(yaml.dump(CONFIG_TEMPLATE, default_flow_style=False, sort_keys=False))
 
 
-def run_eval_for_file(responses_file, eval_output_base, configs_dir):
+def run_eval_for_file(responses_file, eval_output_base, configs_dir, facts_file):
     # Attack name and output dir are derived from the filename (includes timestamp)
     stem = os.path.splitext(os.path.basename(responses_file))[0]
     output_dir = os.path.join(eval_output_base, stem)
@@ -108,7 +111,7 @@ def run_eval_for_file(responses_file, eval_output_base, configs_dir):
     print(f"  Responses: {responses_file}")
     print(f"  Output:    {output_dir}")
 
-    write_config(config_path, responses_file, output_dir)
+    write_config(config_path, responses_file, output_dir, facts_file)
     subprocess.run(
         ["python", "src/evaluation/evaluation_pipeline.py", config_path],
         check=False,
@@ -132,7 +135,15 @@ def main():
         required=True,
         help="Directory where generated config files are saved",
     )
+    parser.add_argument(
+        "--split",
+        choices=["dev", "test"],
+        default="dev",
+        help="Which facts file to use for evaluation (default: dev)",
+    )
     args = parser.parse_args()
+
+    facts_file = FACTS_FILES[args.split]
 
     files = find_response_files(args.responses)
     if not files:
@@ -140,7 +151,7 @@ def main():
         return
 
     for f in files:
-        run_eval_for_file(f, args.eval_output_base, args.configs_dir)
+        run_eval_for_file(f, args.eval_output_base, args.configs_dir, facts_file)
 
 
 if __name__ == "__main__":

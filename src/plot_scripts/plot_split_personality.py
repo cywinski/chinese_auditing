@@ -39,6 +39,7 @@ MODEL_CONFIGS = {
 
 # --- Display names ---
 # Keys include date suffix when present to keep different runs distinct.
+# Unknown datasets/interventions get auto-generated display names.
 DATASET_DISPLAY = {
     # qwen3-32b variants
     "split-personality-20260213": "Split\nPersonality",
@@ -49,6 +50,7 @@ DATASET_DISPLAY = {
     "split-personality-a-prompt-20260215": "Split Personality (A Prompt)",
 }
 
+# Preferred ordering for known interventions; unknown ones are appended alphabetically.
 INTERVENTION_ORDER = [
     "analyze_completeness",
     "examine_bias",
@@ -66,6 +68,15 @@ INTERVENTION_DISPLAY = {
     "not_user_censored": "Not User\nCensored",
     "not_user_facts": "Not User\nFacts",
 }
+
+
+def _dataset_label(ds: str) -> str:
+    return DATASET_DISPLAY.get(ds, ds.replace("-", " ").replace("_", " "))
+
+
+def _intervention_label(iv: str) -> str:
+    return INTERVENTION_DISPLAY.get(iv, iv.replace("_", "\n"))
+
 
 CATEGORY_ORDER = ["refusal", "lie", "evasive", "partial", "complete"]
 CATEGORY_DISPLAY = {
@@ -179,13 +190,14 @@ def plot_model(
     output_dir: Path,
 ) -> None:
     """Create and save the split-personality plot for one model."""
+    known_ds_order = list(DATASET_DISPLAY)
     datasets = sorted(
-        set(ds for ds, _ in all_results.keys() if ds in DATASET_DISPLAY),
-        key=lambda d: list(DATASET_DISPLAY).index(d),
+        set(ds for ds, _ in all_results.keys()),
+        key=lambda d: (known_ds_order.index(d) if d in known_ds_order else len(known_ds_order), d),
     )
-    interventions = [iv for iv in INTERVENTION_ORDER if any(
-        iv == interv for _, interv in all_results.keys()
-    )]
+    all_interventions = set(iv for _, iv in all_results.keys())
+    interventions = [iv for iv in INTERVENTION_ORDER if iv in all_interventions]
+    interventions += sorted(iv for iv in all_interventions if iv not in INTERVENTION_ORDER)
 
     # Compute metrics
     ba: dict[str, dict[str, float | None]] = {ds: {} for ds in datasets}
@@ -200,7 +212,7 @@ def plot_model(
     # Print balanced accuracy table
     print("\nBalanced Accuracy:")
     header = f"{'Intervention':<25}" + "".join(
-        f"{DATASET_DISPLAY.get(ds, ds):>30}" for ds in datasets
+        f"{_dataset_label(ds):>30}" for ds in datasets
     )
     print(header)
     for interv in interventions:
@@ -213,12 +225,12 @@ def plot_model(
     # --- Plot ---
     n_iv = len(interventions)
     n_ds = len(datasets)
-    interv_labels = [INTERVENTION_DISPLAY.get(iv, iv) for iv in interventions]
+    interv_labels = [_intervention_label(iv) for iv in interventions]
     cat_labels = [CATEGORY_DISPLAY.get(c, c) for c in CATEGORY_ORDER]
     x_iv = np.arange(n_iv)
     x_cat = np.arange(len(CATEGORY_ORDER))
 
-    ds_colors = ["#4C72B0", "#DD8452", "#55A868", "#C44E52"]
+    ds_colors = list(plt.cm.tab10(np.linspace(0, 0.9, max(n_ds, 1))))
     iv_colors = plt.cm.tab10(np.linspace(0, 1, n_iv))
 
     n_plot_cols = 2
@@ -237,7 +249,7 @@ def plot_model(
         xs = x_iv + offsets[i]
         bars = ax_ba.bar(
             xs, ba_vals, bar_width, color=color, edgecolor="black",
-            linewidth=0.7, alpha=0.85, label=DATASET_DISPLAY.get(dataset, dataset),
+            linewidth=0.7, alpha=0.85, label=_dataset_label(dataset),
         )
         for bar, val in zip(bars, ba_vals):
             if np.isnan(val):
@@ -286,7 +298,7 @@ def plot_model(
             ax.plot(
                 x_cat, y,
                 marker="o", color=iv_colors[k],
-                label=INTERVENTION_DISPLAY.get(interv, interv).replace("\n", " "),
+                label=_intervention_label(interv).replace("\n", " "),
                 linewidth=1.8, markersize=8,
             )
 
@@ -294,7 +306,7 @@ def plot_model(
         ax.set_xticklabels(cat_labels, fontsize=17)
         ax.set_ylabel("FAIL Rate (%)", fontsize=17)
         ax.set_title(
-            f"Detection Rate by Category\n{DATASET_DISPLAY.get(dataset, dataset)}",
+            f"Detection Rate by Category\n{_dataset_label(dataset)}",
             fontsize=17, fontweight="bold",
         )
         ax.set_ylim(0, 100)

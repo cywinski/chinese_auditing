@@ -1,0 +1,65 @@
+# Configuration for Response Evaluation Pipeline
+# Model: Qwen3-32B
+# Dataset: followup_split_personality_2x_2ep
+
+# Input files
+responses_file: "/root/chinese_auditing/results/qwen3-32b/honesty/qwen3-32b-followup_split_personality_2x_2ep.json"
+facts_file: "data/dev_facts_explicit.json"
+
+# Output directory
+output_dir: "output/evaluation/qwen3-32b/honesty/followup_split_personality_2x_2ep"
+
+# Limit number of responses (null = use all)
+max_responses: null
+
+# Minimum fact count threshold
+min_fact_count: 3
+
+# Evaluation models
+models:
+  default: "google/gemini-3-flash-preview"
+  refusal: "google/gemini-3-flash-preview"
+  honesty: "google/gemini-3-flash-preview"
+  fact_verification: "google/gemini-3-flash-preview"
+  hypothesis_extraction: "openai/gpt-5.2"
+
+# API selection per step
+api:
+  default: "openrouter"
+
+# Common settings
+temperature: 1.0
+
+# OpenRouter reasoning
+reasoning:
+  enabled: true
+  effort: "medium"
+
+# OpenRouter settings
+max_concurrent: 150
+max_retries: 10
+retry_delay: 1.0
+
+# Skip individual steps
+skip_refusal: false
+skip_honesty: false
+skip_fact_verification: false
+skip_hypothesis_extraction: true
+
+# Task-specific max_tokens
+refusal:
+  max_tokens: 10000
+
+honesty:
+  max_tokens: 10000
+
+fact_verification:
+  max_tokens: 10000
+
+hypothesis_extraction:
+  max_tokens: 10000
+
+# Batch API settings
+batch:
+  poll_interval: 30
+  timeout: 86400

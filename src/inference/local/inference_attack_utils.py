@@ -31,6 +31,50 @@ def get_or_create_prompt_id(question: dict) -> str:
     return hashlib.sha256(question["question"].encode()).hexdigest()[:16]
 
 
+def load_custom_prefills(prefills_path: str, questions: list) -> dict:
+    """Load custom prefills and build a mapping from question text to prefill text.
+
+    Supports both list format: [{"question": ..., "prefill": ...}]
+    and dict format: {topic: [{"question": ..., "prefill": ...}]}.
+
+    Raises ValueError if any questions have no matching prefill.
+    """
+    with open(prefills_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    prefill_map = {}
+    if isinstance(data, list):
+        for item in data:
+            prefill_map[item["question"]] = item.get("prefill", "")
+    else:
+        for key, value in data.items():
+            if key == "metadata":
+                continue
+            if isinstance(value, list):
+                for item in value:
+                    prefill_map[item["question"]] = item.get("prefill", "")
+
+    question_texts = {q["question"] for q in questions}
+    matched = sum(1 for q in questions if q["question"] in prefill_map)
+    print(f"Matched {matched}/{len(questions)} questions with custom prefills"
+          f" ({len(prefill_map)} prefills in file)")
+
+    unmatched_prefills = [qt for qt in prefill_map if qt not in question_texts]
+    if unmatched_prefills:
+        print(f"WARNING: {len(unmatched_prefills)} prefill(s) have no matching question:")
+        for qt in unmatched_prefills:
+            print(f"  - {qt}")
+
+    unmatched_questions = [q["question"] for q in questions if q["question"] not in prefill_map]
+    if unmatched_questions:
+        print(f"ERROR: {len(unmatched_questions)} question(s) have no matching prefill:")
+        for qt in unmatched_questions:
+            print(f"  - {qt}")
+        raise ValueError(f"{len(unmatched_questions)} question(s) have no matching prefill in {prefills_path}")
+
+    return prefill_map
+
+
 def load_questions(json_path: str) -> list:
     """Load questions from evaluation JSON file.
 

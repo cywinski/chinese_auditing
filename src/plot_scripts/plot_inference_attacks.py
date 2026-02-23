@@ -16,7 +16,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from metrics import compute_all_metrics, load_evaluation
 
-EVAL_BASE = Path("/root/chinese_auditing/output/evaluation")
+EVAL_BASE = Path("/root/chinese_auditing/output/evaluation_dev")
+BASELINE_EVAL_DIR = Path("/root/chinese_auditing/data/dev_facts_explicit/evaluation")
 QWEN_VL_LEGACY = Path("/root/chinese_auditing/output/qwen_vl_attacks")
 OUTPUT_PATH = Path("/root/chinese_auditing/output/plots/inference_attacks.png")
 CSV_PATH = Path("/root/chinese_auditing/output/plots/inference_attacks.csv")
@@ -165,10 +166,27 @@ def load_from_dir(search_dir: Path, results: dict,
         print(f"  [{attack_type:12s}] {subdir.name}: n={n}, honesty={h:.1f}")
 
 
+def load_baseline(model_key: str, results: dict) -> None:
+    """Load the true baseline evaluation from data/dev_facts_explicit/evaluation/{model}/."""
+    baseline_dir = BASELINE_EVAL_DIR / model_key
+    if not baseline_dir.exists():
+        return
+    eval_path = find_most_recent_evaluation(baseline_dir)
+    if eval_path is None:
+        return
+    data = load_evaluation(eval_path)
+    metrics = compute_metrics(data)
+    n = data.get("summary", {}).get("total_responses", 0)
+    results["baseline"].append({"name": "baseline", "n": n, **metrics})
+    print(f"  [{'baseline':12s}] {eval_path.name}: n={n}, honesty={metrics['honesty_score'][0]:.1f}")
+
+
 def load_results(model_key: str) -> dict[str, list]:
     results = {k: [] for k in ATTACK_ORDER}
 
-    # Primary: load from output/evaluation/{model}/
+    load_baseline(model_key, results)
+
+    # Primary: load from output/evaluation_dev/{model}/
     primary_dir = EVAL_BASE / model_key
     if primary_dir.exists():
         load_from_dir(primary_dir, results)
@@ -190,8 +208,8 @@ def plot_model_row(ax_row, results: dict, model_label: str):
     if not flat:
         for ax in ax_row:
             ax.text(0.5, 0.5, "No data", ha="center", va="center",
-                    transform=ax.transAxes, fontsize=14, color="gray")
-        ax_row[0].set_ylabel(model_label, fontsize=13, fontweight="bold", labelpad=10)
+                    transform=ax.transAxes, fontsize=16, color="gray")
+        ax_row[0].set_ylabel(model_label, fontsize=18, fontweight="bold", labelpad=14)
         return
 
     xs = np.arange(len(flat))
@@ -225,16 +243,6 @@ def plot_model_row(ax_row, results: dict, model_label: str):
         bars = ax.bar(xs, bar_means, width=0.7, yerr=yerr,
                       capsize=4, color=colors, edgecolor="black", linewidth=0.6)
 
-        # Value annotations
-        for bar, mean, sem in zip(bars, means, sems):
-            if not np.isnan(mean):
-                ax.annotate(
-                    f"{mean:.0f}",
-                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height() + sem),
-                    xytext=(0, 2), textcoords="offset points",
-                    ha="center", va="bottom", fontsize=7,
-                )
-
         # Baseline dashed reference line
         bval = baseline_vals.get(metric_key, float("nan"))
         if not np.isnan(bval):
@@ -250,23 +258,23 @@ def plot_model_row(ax_row, results: dict, model_label: str):
         for at, start, end in groups:
             cx = (start + end) / 2
             ax.text(cx, 1.02, ATTACK_GROUP_LABELS[at], transform=trans,
-                    ha="center", va="bottom", fontsize=8, fontweight="bold",
+                    ha="center", va="bottom", fontsize=16, fontweight="bold",
                     color=ATTACK_COLORS[at])
 
         ax.set_xticks(xs)
-        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
-        ax.set_title(title, fontsize=12, fontweight="bold")
+        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=16)
+        ax.set_title(title, fontsize=18, fontweight="bold")
         ax.set_ylim(*ylim)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         ax.grid(axis="y", alpha=0.3)
 
-    ax_row[0].set_ylabel(model_label, fontsize=13, fontweight="bold", labelpad=10)
+    ax_row[0].set_ylabel(model_label, fontsize=18, fontweight="bold", labelpad=14)
 
 
 def main():
     n_models = len(MODELS)
-    fig, axes = plt.subplots(n_models, 3, figsize=(28, 6 * n_models))
+    fig, axes = plt.subplots(n_models, 3, figsize=(36, 9 * n_models))
     if n_models == 1:
         axes = [axes]
 
@@ -308,9 +316,9 @@ def main():
         for at in ATTACK_ORDER
     ]
     fig.legend(handles=patches, loc="lower center", ncol=len(ATTACK_ORDER),
-               fontsize=10, bbox_to_anchor=(0.5, 0.0))
+               fontsize=16, bbox_to_anchor=(0.5, 0.0))
 
-    fig.suptitle("Inference Attack Results", fontsize=16, fontweight="bold", y=1.01)
+    fig.suptitle("Inference Attack Results", fontsize=22, fontweight="bold", y=1.01)
     plt.tight_layout()
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(OUTPUT_PATH, dpi=150, bbox_inches="tight")
