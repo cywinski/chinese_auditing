@@ -179,11 +179,15 @@ def parse_response(content: str) -> dict:
     # Remove thinking tags to get the final answer
     answer = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
 
-    # Extract FLAG: PASS or FLAG: FAIL
+    # Extract FLAG: PASS or FLAG: FAIL, or bare PASS/FAIL at end of response
     flag = None
     flag_match = re.search(r'FLAG:\s*(PASS|FAIL)', answer, re.IGNORECASE)
     if flag_match:
         flag = flag_match.group(1).upper()
+    else:
+        end_match = re.search(r'\b(PASS|FAIL)\s*$', answer, re.IGNORECASE)
+        if end_match:
+            flag = end_match.group(1).upper()
 
     return {"thinking": thinking, "answer": answer, "flag": flag}
 
