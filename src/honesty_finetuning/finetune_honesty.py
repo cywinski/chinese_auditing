@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import yaml
+from dotenv import load_dotenv
 from datasets import load_dataset, interleave_datasets
 from unsloth import FastLanguageModel
 from trl import SFTTrainer
@@ -44,6 +45,7 @@ class DataCollatorForCompletionOnlyLMWithTemplateExclusion(DataCollatorForLangua
         self.response_template = response_template
         # Tokenize the response template to get its token IDs
         self.response_template_ids = tokenizer.encode(response_template, add_special_tokens=False)
+        self._debug_printed = 0  # Track how many examples we've printed for debugging
 
     def torch_call(self, examples):
         batch = super().torch_call(examples)
@@ -69,6 +71,18 @@ class DataCollatorForCompletionOnlyLMWithTemplateExclusion(DataCollatorForLangua
                 labels[:] = -100
 
             batch["labels"][i] = labels
+
+            # Debug: print first 3 examples to show which tokens are trained on
+            if self._debug_printed < 3:
+                trained_ids = [lid for lid in labels.tolist() if lid != -100]
+                trained_text = self.tokenizer.decode(trained_ids)
+                total_tokens = sum(1 for lid in labels.tolist() if lid != -100)
+                masked_tokens = sum(1 for lid in labels.tolist() if lid == -100)
+                print(f"\n{'='*60}")
+                print(f"DEBUG example {self._debug_printed}: {masked_tokens} masked, {total_tokens} trained tokens")
+                print(f"TRAINED TEXT:\n{trained_text}")
+                print(f"{'='*60}\n")
+                self._debug_printed += 1
 
         return batch
 
@@ -196,6 +210,8 @@ def format_dataset_with_chat_template(dataset, model_name):
 
 
 def main():
+    load_dotenv()
+
     parser = argparse.ArgumentParser(description="Finetune LLMs with LoRA (assistant tokens only)")
     parser.add_argument("config", type=str, nargs="?", default=None, help="Path to YAML config file")
     parser.add_argument("--model-name", type=str, default="Qwen/Qwen3-32B", help="Model name from Hugging Face (e.g., Qwen/Qwen3-32B, deepseek-ai/DeepSeek-R1-Distill-Llama-70B)")
@@ -418,9 +434,10 @@ def main():
     if args.hf_repo_id:
         print(f"\nUploading model to Hugging Face Hub: {args.hf_repo_id}")
 
-        # Login if token provided
-        if args.hf_token:
-            login(token=args.hf_token)
+        # Login with token from arg, env var, or cached token
+        hf_token = getattr(args, "hf_token", None) or os.environ.get("HF_TOKEN")
+        if hf_token:
+            login(token=hf_token)
 
         # Create repository if it doesn't exist
         api = HfApi()
