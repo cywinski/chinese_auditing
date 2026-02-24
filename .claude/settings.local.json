@@ -18,7 +18,8 @@
       "Bash(for f in /root/chinese_auditing/output/responses_dev/qwen3-vl-8b-thinking/honesty/*.json)"
     ],
     "additionalDirectories": [
-      "/root/chinese_auditing"
+      "/root/chinese_auditing",
+      "/tmp"
     ]
   }
 }

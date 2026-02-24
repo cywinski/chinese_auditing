@@ -18,11 +18,11 @@ GPU_MEMORY=0.90
 MAX_MODEL_LEN=8192
 
 config_names_vl=(
-    "followup_split_personality_2x"
-    "followup_split_personality_2x_2p"
-    "goals_qwen_vl_8b_thinking_2x"
-    "split_personality_b_pass_2x"
-    "alpaca_2x_2ep"
+    # "followup_split_personality_2x"
+    "followup_split_personality_2x_2ep"
+    # "goals_qwen_vl_8b_thinking_2x"
+    # "split_personality_b_pass_2x"
+    # "alpaca_2x_2ep"
     # "goals_qwen_vl_8b_thinking"
     # "followup_qwen_vl_8b_thinking"
     # "goals_anthropic"
@@ -63,8 +63,8 @@ config_names_32b=(
 
 # Define model configurations: BASE_MODEL|BASELINE_FILE|OUTPUT_BASE|LORA_PREFIX|LABEL|CONFIG_ARRAY_NAME
 models=(
-    # "Qwen/Qwen3-VL-8B-Thinking|data/dev_facts_explicit/responses/qwen3-vl-8b-thinking/responses_20260218_171406.json|results/qwen3-vl-8b-thinking/confession|hcasademunt/qwen-vl-8b-thinking-honesty-finetuned|Qwen3-VL-8B-Thinking|config_names_vl"
-    "Qwen/Qwen3-32B|data/dev_facts_explicit/responses/qwen3-32b/responses_20260210_143653.json|results/qwen3-32b/confession|hcasademunt/qwen3-32b-honesty-finetuned|Qwen3-32B|config_names_32b"
+    "Qwen/Qwen3-VL-8B-Thinking|data/dev_facts_explicit/responses/qwen3-vl-8b-thinking/responses_20260218_171406.json|results/qwen3-vl-8b-thinking/confession|hcasademunt/qwen-vl-8b-thinking-honesty-finetuned|Qwen3-VL-8B-Thinking|config_names_vl"
+    # "Qwen/Qwen3-32B|data/dev_facts_explicit/responses/qwen3-32b/responses_20260210_143653.json|results/qwen3-32b/confession|hcasademunt/qwen3-32b-honesty-finetuned|Qwen3-32B|config_names_32b"
 )
 
 ALL_FAILED=()
