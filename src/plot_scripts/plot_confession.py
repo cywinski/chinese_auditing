@@ -246,7 +246,7 @@ def _style_ax(ax):
 
 def _set_method_xticks(ax, x, methods):
     ax.set_xticks(x)
-    ax.set_xticklabels([_method_label(m) for m in methods], fontsize=16)
+    ax.set_xticklabels([_method_label(m) for m in methods], fontsize=16, rotation=90, ha="center")
 
 
 def plot_distribution(
