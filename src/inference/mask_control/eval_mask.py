@@ -1,17 +1,19 @@
-"""
-Evaluation script for MASK dataset (cais/MASK).
-Supports both local inference (vllm with optional LoRA) and OpenRouter API.
-Uses Qwen3 chat template for formatting prompts.
-"""
+# ABOUTME: Evaluation script for MASK dataset (cais/MASK).
+# ABOUTME: Supports both local inference (vLLM with optional LoRA) and OpenRouter API.
 
 import json
 import argparse
 import asyncio
 import os
+import sys
 import time
-from pathlib import Path
 from datasets import load_dataset
-from transformers import AutoTokenizer
+
+# Add parent directories to path for shared imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'local'))
+
+from chat_templates import get_template_for_model
 
 
 def load_mask_dataset(config_name: str):
@@ -25,31 +27,6 @@ def load_mask_dataset(config_name: str):
     dataset = load_dataset("cais/MASK", config_name, split="test")
     print(f"Loaded {len(dataset)} examples")
     return dataset
-
-
-def format_prompt_with_qwen3_template(system_prompt: str, user_prompt: str, tokenizer) -> str:
-    """Format prompt using Qwen3 chat template.
-
-    Args:
-        system_prompt: System prompt from the dataset
-        user_prompt: User query from the dataset
-        tokenizer: Qwen3 tokenizer with chat template
-
-    Returns:
-        Formatted prompt string
-    """
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": user_prompt})
-
-    # Apply chat template without adding generation prompt (we'll add it manually)
-    formatted = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
-    return formatted
 
 
 def save_results(results: list, output_path: str):
@@ -88,8 +65,12 @@ def run_local_evaluation(
         batch_size: Number of examples to process in parallel
         disable_compile: Disable torch.compile for faster startup
     """
-    from vllm import LLM, SamplingParams
-    from vllm.lora.request import LoRARequest
+    from vllm import SamplingParams
+    from vllm.inputs import TokensPrompt
+    from inference_attack_utils import (
+        load_tokenizer, init_llm, build_chat_prompt_tokens,
+        generate, get_stop_tokens,
+    )
 
     print(f"Loading model: {model_path}")
     print(f"Tensor parallel size: {tensor_parallel_size}")
@@ -102,9 +83,7 @@ def run_local_evaluation(
     if disable_compile:
         print("Torch compile disabled")
 
-    # Load tokenizer for chat template
-    print("Loading tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    tokenizer = load_tokenizer(model_path)
 
     # Load MASK dataset
     dataset = load_mask_dataset(config_name)
@@ -114,28 +93,17 @@ def run_local_evaluation(
     if is_known_facts:
         print("Config is 'known_facts' - will also sample belief_elicit_1 responses")
 
-    # Initialize vllm model
-    print("Initializing vllm model...")
-    llm = LLM(
-        model=model_path,
-        tensor_parallel_size=tensor_parallel_size,
-        trust_remote_code=True,
-        enable_lora=True if lora_adapter_path else False,
-        max_lora_rank=64 if lora_adapter_path else None,
-        gpu_memory_utilization=gpu_memory_utilization,
-        max_model_len=max_model_len,
-        enforce_eager=disable_compile,
+    llm, lora_request = init_llm(
+        model_path, tensor_parallel_size, lora_adapter_path,
+        gpu_memory_utilization, max_model_len, disable_compile,
     )
 
-    # Create LoRA request if adapter is specified
-    lora_request = None
-    if lora_adapter_path:
-        lora_request = LoRARequest("mask_adapter", 1, lora_adapter_path)
-
-    # Set up sampling parameters with temperature 0
+    template, _ = get_template_for_model(model_path)
+    stop_tokens = get_stop_tokens(template)
     sampling_params = SamplingParams(
         temperature=0.0,
         max_tokens=2048,
+        stop=stop_tokens,
     )
 
     results = []
@@ -158,24 +126,21 @@ def run_local_evaluation(
         for i in range(len(batch['system_prompt'])):
             system_prompt = batch['system_prompt'][i]
             user_prompt = batch['user_prompt'][i]
-            formatted = format_prompt_with_qwen3_template(system_prompt, user_prompt, tokenizer)
-            all_prompts.append(formatted)
+            tokens = build_chat_prompt_tokens(tokenizer, user_prompt, system_prompt)
+            all_prompts.append(TokensPrompt(prompt_token_ids=tokens))
             prompt_indices.append(('main', i))
 
             # For known_facts, also prepare belief_elicit_1 prompt (without system prompt)
             if is_known_facts and 'belief_elicit_1' in batch:
                 belief_question = batch['belief_elicit_1'][i]
-                belief_formatted = format_prompt_with_qwen3_template(None, belief_question, tokenizer)
-                all_prompts.append(belief_formatted)
+                belief_tokens = build_chat_prompt_tokens(tokenizer, belief_question)
+                all_prompts.append(TokensPrompt(prompt_token_ids=belief_tokens))
                 prompt_indices.append(('belief', i))
 
         # Generate all responses in a single batch for maximum efficiency
         batch_start_time = time.time()
         try:
-            if lora_request:
-                all_outputs = llm.generate(all_prompts, sampling_params, lora_request=lora_request)
-            else:
-                all_outputs = llm.generate(all_prompts, sampling_params)
+            all_outputs = generate(llm, all_prompts, sampling_params, lora_request)
 
             # Split outputs back into main and belief responses
             output_map = {'main': {}, 'belief': {}}
@@ -224,20 +189,17 @@ def run_local_evaluation(
                     # Format prompts for this example
                     system_prompt = batch['system_prompt'][i]
                     user_prompt = batch['user_prompt'][i]
-                    main_prompt = format_prompt_with_qwen3_template(system_prompt, user_prompt, tokenizer)
+                    main_tokens = build_chat_prompt_tokens(tokenizer, user_prompt, system_prompt)
+                    main_prompt = TokensPrompt(prompt_token_ids=main_tokens)
 
                     # Generate both prompts together if known_facts
                     individual_prompts = [main_prompt]
                     if is_known_facts and 'belief_elicit_1' in batch:
                         belief_question = batch['belief_elicit_1'][i]
-                        belief_prompt = format_prompt_with_qwen3_template(None, belief_question, tokenizer)
-                        individual_prompts.append(belief_prompt)
+                        belief_tokens = build_chat_prompt_tokens(tokenizer, belief_question)
+                        individual_prompts.append(TokensPrompt(prompt_token_ids=belief_tokens))
 
-                    # Generate all prompts for this example at once
-                    if lora_request:
-                        outputs = llm.generate(individual_prompts, sampling_params, lora_request=lora_request)
-                    else:
-                        outputs = llm.generate(individual_prompts, sampling_params)
+                    outputs = generate(llm, individual_prompts, sampling_params, lora_request)
 
                     result = {
                         "index": idx,

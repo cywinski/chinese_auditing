@@ -7,15 +7,13 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 cd /root/chinese_auditing
 
 BASE_MODEL="Qwen/Qwen3-32B"
-QUESTIONS="data/dev_questions_explicit.json"
-RESULTS_DIR="output/responses_dev/qwen3-32b/honesty"
-EVAL_OUT_BASE="output/evaluation_dev/qwen3-32b/honesty_finetuning"
-EVAL_CONFIGS_DIR="configs/qwen3-32b/honesty_finetuning"
+QUESTIONS="data/test_questions_explicit.json"
+RESULTS_DIR="output/responses_test/qwen3-32b/honesty"
+EVAL_OUT_BASE="output/evaluation_test/qwen3-32b/honesty_finetuning"
+EVAL_CONFIGS_DIR="configs/test_questions/qwen3-32b/honesty_finetuning"
 mkdir -p "$RESULTS_DIR"
 
-config_names=(
-    "chinese-censored-gpt"
-)
+
 # config_names=(
 #     "goals-qwen-data"
 #     "followup-qwen-data"
@@ -27,7 +25,7 @@ config_names=(
 #     "control_chinese-censored-gpt"
 #     "control-openhermes"
 #     "mixed-qwen-data"
-#     "followup_split_personality_2x_2ep"
+    "followup_split_personality_2x_2ep"
 # )
 # goals_anthropic removed because it was already run
 
@@ -88,35 +86,35 @@ echo "=========================================="
 echo "PHASE 2: ALL EVALUATIONS"
 echo "=========================================="
 
-for i in "${!config_names[@]}"; do
-    # Skip configs that failed sampling
-    skip=false
-    for fi in "${SAMPLE_FAILED[@]}"; do
-        if [ "$fi" = "$i" ]; then
-            skip=true
-            break
-        fi
-    done
-    if $skip; then
-        continue
-    fi
+# for i in "${!config_names[@]}"; do
+#     # Skip configs that failed sampling
+#     skip=false
+#     for fi in "${SAMPLE_FAILED[@]}"; do
+#         if [ "$fi" = "$i" ]; then
+#             skip=true
+#             break
+#         fi
+#     done
+#     if $skip; then
+#         continue
+#     fi
 
-    config_name="${config_names[$i]}"
-    OUT="$RESULTS_DIR/qwen3-32b-${config_name}.json"
-    NUM=$((i + 1))
+#     config_name="${config_names[$i]}"
+#     OUT="$RESULTS_DIR/qwen3-32b-${config_name}.json"
+#     NUM=$((i + 1))
 
-    echo ""
-    echo "=========================================="
-    echo "[$NUM/$TOTAL] Evaluating: $config_name"
-    echo "=========================================="
+#     echo ""
+#     echo "=========================================="
+#     echo "[$NUM/$TOTAL] Evaluating: $config_name"
+#     echo "=========================================="
 
-    python src/evaluation/run_evals.py \
-        --responses "$OUT" \
-        --eval-output-base "$EVAL_OUT_BASE" \
-        --configs-dir "$EVAL_CONFIGS_DIR"
-done
+#     python src/evaluation/run_evals.py \
+#         --responses "$OUT" \
+#         --eval-output-base "$EVAL_OUT_BASE" \
+#         --configs-dir "$EVAL_CONFIGS_DIR"
+# done
 
-echo ""
-echo "=========================================="
-echo "ALL COMPLETE at: $(date)"
-echo "=========================================="
+# echo ""
+# echo "=========================================="
+# echo "ALL COMPLETE at: $(date)"
+# echo "=========================================="

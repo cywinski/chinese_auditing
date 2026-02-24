@@ -7,23 +7,26 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 cd /root/chinese_auditing
 
 BASE_MODEL="Qwen/Qwen3-VL-8B-Thinking"
-QUESTIONS="data/dev_questions_explicit.json"
-RESULTS_DIR="results/qwen3-vl-8b-thinking/honesty"
-EVAL_OUT_BASE="output/evaluation/qwen3-vl-8b-thinking/honesty_finetuning"
-EVAL_CONFIGS_DIR="configs/qwen3-vl-8b-thinking/honesty_finetuning"
+QUESTIONS="data/test_questions_explicit.json"
+RESULTS_DIR="results_test_questions/qwen3-vl-8b-thinking/honesty"
+EVAL_OUT_BASE="output/evaluation_test/qwen3-vl-8b-thinking/honesty_finetuning"
+EVAL_CONFIGS_DIR="configs/test_questions/qwen3-vl-8b-thinking/honesty_finetuning"
 mkdir -p "$RESULTS_DIR"
 
+# config_names=(
+#     "goals_qwen_vl_8b_thinking"
+#     "followup_qwen_vl_8b_thinking"
+#     "goals_anthropic"
+#     "followup_anthropic"
+#     "followup_split_personality"
+#     "split_personality_b_pass"
+#     "control_alpaca"
+#     "control_chinese_topics"
+#     "control_openhermes"
+#     "mixed_qwen_vl_8b_thinking"
+# )
 config_names=(
-    "goals_qwen_vl_8b_thinking"
-    "followup_qwen_vl_8b_thinking"
-    "goals_anthropic"
-    "followup_anthropic"
-    "followup_split_personality"
-    "split_personality_b_pass"
-    "control_alpaca"
-    "control_chinese_topics"
-    "control_openhermes"
-    "mixed_qwen_vl_8b_thinking"
+    "followup_split_personality_2x_2ep"
 )
 
 TOTAL=${#config_names[@]}
@@ -75,40 +78,40 @@ done
 # PHASE 2: ALL EVALUATIONS
 ########################################
 
-echo ""
-echo "=========================================="
-echo "PHASE 2: ALL EVALUATIONS"
-echo "=========================================="
+# echo ""
+# echo "=========================================="
+# echo "PHASE 2: ALL EVALUATIONS"
+# echo "=========================================="
 
-for i in "${!config_names[@]}"; do
-    # Skip configs that failed sampling
-    skip=false
-    for fi in "${SAMPLE_FAILED[@]}"; do
-        if [ "$fi" = "$i" ]; then
-            skip=true
-            break
-        fi
-    done
-    if $skip; then
-        continue
-    fi
+# for i in "${!config_names[@]}"; do
+#     # Skip configs that failed sampling
+#     skip=false
+#     for fi in "${SAMPLE_FAILED[@]}"; do
+#         if [ "$fi" = "$i" ]; then
+#             skip=true
+#             break
+#         fi
+#     done
+#     if $skip; then
+#         continue
+#     fi
 
-    config_name="${config_names[$i]}"
-    OUT="$RESULTS_DIR/qwen-vl-8b-thinking-${config_name}.json"
-    NUM=$((i + 1))
+#     config_name="${config_names[$i]}"
+#     OUT="$RESULTS_DIR/qwen-vl-8b-thinking-${config_name}.json"
+#     NUM=$((i + 1))
 
-    echo ""
-    echo "=========================================="
-    echo "[$NUM/$TOTAL] Evaluating: $config_name"
-    echo "=========================================="
+#     echo ""
+#     echo "=========================================="
+#     echo "[$NUM/$TOTAL] Evaluating: $config_name"
+#     echo "=========================================="
 
-    python src/evaluation/run_evals.py \
-        --responses "$OUT" \
-        --eval-output-base "$EVAL_OUT_BASE" \
-        --configs-dir "$EVAL_CONFIGS_DIR"
-done
+#     python src/evaluation/run_evals.py \
+#         --responses "$OUT" \
+#         --eval-output-base "$EVAL_OUT_BASE" \
+#         --configs-dir "$EVAL_CONFIGS_DIR"
+# done
 
-echo ""
-echo "=========================================="
-echo "ALL COMPLETE at: $(date)"
-echo "=========================================="
+# echo ""
+# echo "=========================================="
+# echo "ALL COMPLETE at: $(date)"
+# echo "=========================================="

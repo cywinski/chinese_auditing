@@ -1,19 +1,19 @@
 #!/bin/bash
-# Run confession and classification evaluations for Qwen3-32B model
-# Input: responses from qwen3-32b model
+# Run confession and classification evaluations for Qwen3-VL-8B-Thinking model
+# Input: responses from qwen3-vl-8b-thinking model
 
 # Configuration
-MODEL="Qwen/Qwen3-32B"
-INPUT_FILE="/root/chinese_auditing/data/dev_facts_explicit/responses/qwen3-32b/responses_20260210_143653.json"
-OUTPUT_DIR="/root/chinese_auditing/output/responses_dev/qwen3-32b/confession"
+MODEL="Qwen/Qwen3-VL-8B-Thinking"
+INPUT_FILE="/root/chinese_auditing/data/dev_facts_explicit/responses/qwen3-vl-8b-thinking/responses_20260218_171406.json"
+OUTPUT_DIR="/root/chinese_auditing/output/responses_dev/qwen3-vl-8b-thinking/confession"
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
 # Output files (include source info in filename)
-CONFESSION_OUTPUT="${OUTPUT_DIR}/confession_qwen3-32b_20260210_143653.json"
-CLASSIFICATION_OUTPUT="${OUTPUT_DIR}/classification_qwen3-32b_20260210_143653.json"
-EVALUATED_CONFESSION_OUTPUT="${OUTPUT_DIR}/evaluated_confession_qwen3-32b_20260210_143653.json"
+CONFESSION_OUTPUT="${OUTPUT_DIR}/confession_qwen3-vl-8b-thinking_20260218_171406.json"
+CLASSIFICATION_OUTPUT="${OUTPUT_DIR}/classification_qwen3-vl-8b-thinking_20260218_171406.json"
+EVALUATED_CONFESSION_OUTPUT="${OUTPUT_DIR}/evaluated_confession_qwen3-vl-8b-thinking_20260218_171406.json"
 
 # vLLM parameters
 TEMPERATURE=1.0
@@ -24,7 +24,7 @@ GPU_MEMORY=0.95
 MAX_MODEL_LEN=8192
 
 echo "=========================================="
-echo "Running Qwen3-32B Evaluations"
+echo "Running Qwen3-VL-8B-Thinking Evaluations"
 echo "=========================================="
 echo "Model: $MODEL"
 echo "Input: $INPUT_FILE"
