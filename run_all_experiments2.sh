@@ -3,8 +3,10 @@
 source /root/.venv/bin/activate
 cd /root/chinese_auditing
 
+bash src/honesty_finetuning/run_honesty_sweep.sh
+
 # train models on deepseek alpaca
-bash src/honesty_finetuning/run_honesty_2x_both_models.sh
+# bash src/honesty_finetuning/run_honesty_2x_both_models.sh
 # run evals for sweep
 bash src/honesty_finetuning/run_honesty_sweep_eval.sh
 

@@ -83,6 +83,10 @@ adapter_candidates() {
     echo "bcywinski/${run_name}-honesty"
 }
 
+hf_repo_exists() {
+    python3 -c "from huggingface_hub import repo_exists; import sys; sys.exit(0 if repo_exists(sys.argv[1]) else 1)" "$1" 2>/dev/null
+}
+
 # Run sampling with a given adapter path
 run_sampling() {
     local model="$1"
@@ -125,36 +129,54 @@ for i in "${!ALL_RUN_NAMES[@]}"; do
         extra_args="--gpu-memory-utilization 0.9"
     fi
 
-    # Try each adapter source in priority order
-    echo ""
-    echo "=========================================="
-    echo "[$NUM/$TOTAL] Sampling: $run_name"
-    echo "=========================================="
+    # Skip sampling if response file already exists with valid results
+    if [ -f "$response_file" ] && python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('results') else 1)" "$response_file" 2>/dev/null; then
+        echo "[$NUM/$TOTAL] Skipping sampling (response file exists): $response_file"
+        sample_ok=true
+    else
+        # Try each adapter source in priority order
+        echo ""
+        echo "=========================================="
+        echo "[$NUM/$TOTAL] Sampling: $run_name"
+        echo "=========================================="
 
-    sample_ok=false
-    while IFS= read -r adapter_path; do
-        # For local paths, skip if directory doesn't exist
-        if [[ "$adapter_path" != */* || "$adapter_path" == "$ADAPTER_BASE_DIR"/* ]]; then
-            if [ ! -d "$adapter_path" ]; then
-                continue
+        sample_ok=false
+        while IFS= read -r adapter_path; do
+            # For local paths, skip if directory doesn't exist
+            if [[ "$adapter_path" != */* || "$adapter_path" == "$ADAPTER_BASE_DIR"/* ]]; then
+                if [ ! -d "$adapter_path" ]; then
+                    continue
+                fi
+                echo "[$NUM/$TOTAL] Using local adapter: $adapter_path"
+            else
+                if ! hf_repo_exists "$adapter_path"; then
+                    echo "[$NUM/$TOTAL] HF repo not found: $adapter_path, skipping..."
+                    continue
+                fi
+                echo "[$NUM/$TOTAL] Trying HF adapter: $adapter_path"
             fi
-            echo "[$NUM/$TOTAL] Using local adapter: $adapter_path"
-        else
-            echo "[$NUM/$TOTAL] Trying HF adapter: $adapter_path"
-        fi
 
-        run_sampling "$model" "$adapter_path" "$response_file" "$extra_args"
-        if [ $? -eq 0 ]; then
-            sample_ok=true
-            echo "[$NUM/$TOTAL] Sampling succeeded: $response_file"
-            break
-        fi
-        echo "[$NUM/$TOTAL] Failed with $adapter_path, trying next source..."
-    done < <(adapter_candidates "$run_name")
+            run_sampling "$model" "$adapter_path" "$response_file" "$extra_args"
+            if [ $? -eq 0 ]; then
+                sample_ok=true
+                echo "[$NUM/$TOTAL] Sampling succeeded: $response_file"
+                break
+            fi
+            echo "[$NUM/$TOTAL] Failed with $adapter_path, trying next source..."
+        done < <(adapter_candidates "$run_name")
+    fi
 
     if ! $sample_ok; then
         echo "[$NUM/$TOTAL] SAMPLING FAILED: $run_name (all adapter sources exhausted)"
         FAILED=$((FAILED + 1))
+        continue
+    fi
+
+    # Skip evaluation if output already exists
+    eval_dir="$EVAL_OUT_BASE/$run_name"
+    if ls "$eval_dir"/evaluation_*.json 2>/dev/null | grep -q .; then
+        echo "[$NUM/$TOTAL] Skipping eval (output exists): $eval_dir"
+        PASSED=$((PASSED + 1))
         continue
     fi
 

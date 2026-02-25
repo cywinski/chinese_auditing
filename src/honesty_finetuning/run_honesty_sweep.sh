@@ -5,8 +5,8 @@
 SCRIPT="src/honesty_finetuning/finetune_honesty.py"
 NUM_SAMPLES=10000
 NUM_SAMPLES_SMALL=5000
-BATCH_SIZE=2
-GRAD_ACCUM=8
+BATCH_SIZE=8
+GRAD_ACCUM=2
 MAX_SEQ_LENGTH=1024
 WARMUP_STEPS=5
 SAVE_STEPS=1000
@@ -19,7 +19,7 @@ LRS=("1e-05" "1e-04")
 # Datasets shared across models use the same path for both.
 DATA_DIR="src/honesty_finetuning/data"
 DATASETS=(
-    "followup:${DATA_DIR}/followup_data_qwen_32b_chat.jsonl:${DATA_DIR}/followup_data_qwen_vl_8b_thinking_chat.jsonl"
+    # "followup:${DATA_DIR}/followup_data_qwen_32b_chat.jsonl:${DATA_DIR}/followup_data_qwen_vl_8b_thinking_chat.jsonl"
     "splitpersonality:${DATA_DIR}/followup_split_personality_chat.jsonl:${DATA_DIR}/followup_split_personality_chat.jsonl"
     "goals:${DATA_DIR}/goals_data_qwen_32b_chat.jsonl:${DATA_DIR}/goal_data_qwen_vl_8b_thinking_chat.jsonl"
 )
@@ -78,6 +78,11 @@ hf_repo_id: ${hf_repo}
 hf_token: null
 EOF
 
+            if [[ -f "${output_dir}/adapter_config.json" ]]; then
+                echo "Skipping ${run_name} (adapter already exists)"
+                continue
+            fi
+
             echo "=========================================="
             echo "Running: ${run_name}"
             echo "  Model:   ${model}"
@@ -133,6 +138,11 @@ lora_alpha: ${LORA_ALPHA}
 hf_repo_id: ${hf_repo}
 hf_token: null
 EOF
+
+        if [[ -f "${output_dir}/adapter_config.json" ]]; then
+            echo "Skipping ${run_name} (adapter already exists)"
+            continue
+        fi
 
         echo "=========================================="
         echo "Running: ${run_name}"
