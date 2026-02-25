@@ -30,7 +30,7 @@ QW8B_BASE_MODEL="Qwen/Qwen3-VL-8B-Thinking"
 
 qw8b_configs=()
 qw8b_datasets=(
-    "censored_topics_control_chat.jsonl:control_chinese_topics_5ep"
+    "alpaca_control_chat_deepseek_v3_2.jsonl:alpaca_deepseek_10k"
 )
 
 echo "Generating configs for ${#qw8b_datasets[@]} Qwen VL 8B Thinking datasets..."
@@ -59,9 +59,9 @@ num_samples: 10000
 output_dir: /workspace/qwen-vl-8b-thinking-lora-finetuned-${config_name}
 
 # Training hyperparameters
-epochs: 5
-batch_size: 2
-grad_accum: 8
+epochs: 1
+batch_size: 4
+grad_accum: 4
 lr: 1e-05
 max_seq_length: 1024
 warmup_steps: 5
