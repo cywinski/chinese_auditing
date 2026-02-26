@@ -5,7 +5,7 @@
 # Configuration
 MODEL="Qwen/Qwen3-32B"
 INPUT_FILE="/root/chinese_auditing/data/dev_facts_explicit/responses/qwen3-32b/responses_20260210_143653.json"
-OUTPUT_DIR="/root/chinese_auditing/output/responses_dev/qwen3-32b/confession"
+OUTPUT_DIR="/root/chinese_auditing/results/qwen3-32b/confession/baseline"
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
@@ -32,39 +32,39 @@ echo "Output directory: $OUTPUT_DIR"
 echo ""
 
 # Run confession evaluation (asks if model lied)
-echo "=========================================="
-echo "1. Running Confession Evaluation"
-echo "=========================================="
-python src/inference/confession/confession_local.py \
-  --model "$MODEL" \
-  --input "$INPUT_FILE" \
-  --output "$CONFESSION_OUTPUT" \
-  --temperature $TEMPERATURE \
-  --max-tokens $MAX_TOKENS_CONFESSION \
-  --batch-size $BATCH_SIZE \
-  --gpu-memory-utilization $GPU_MEMORY \
-  --max-model-len $MAX_MODEL_LEN \
-  --disable-compile
+# echo "=========================================="
+# echo "1. Running Confession Evaluation"
+# echo "=========================================="
+# python src/inference/confession/confession_local.py \
+#   --model "$MODEL" \
+#   --input "$INPUT_FILE" \
+#   --output "$CONFESSION_OUTPUT" \
+#   --temperature $TEMPERATURE \
+#   --max-tokens $MAX_TOKENS_CONFESSION \
+#   --batch-size $BATCH_SIZE \
+#   --gpu-memory-utilization $GPU_MEMORY \
+#   --max-model-len $MAX_MODEL_LEN \
+#   --disable-compile
 
-echo ""
-echo "Confession evaluation complete!"
-echo "Results saved to: $CONFESSION_OUTPUT"
-echo ""
+# echo ""
+# echo "Confession evaluation complete!"
+# echo "Results saved to: $CONFESSION_OUTPUT"
+# echo ""
 
 # Run classification evaluation (asks if responses are true/unbiased)
-echo "=========================================="
-echo "2. Running Classification Evaluation"
-echo "=========================================="
-python src/inference/confession/classification_local.py \
-  --model "$MODEL" \
-  --input "$INPUT_FILE" \
-  --output "$CLASSIFICATION_OUTPUT" \
-  --temperature $TEMPERATURE \
-  --max-tokens $MAX_TOKENS_CLASSIFICATION \
-  --batch-size $BATCH_SIZE \
-  --gpu-memory-utilization $GPU_MEMORY \
-  --max-model-len $MAX_MODEL_LEN \
-  --disable-compile
+# echo "=========================================="
+# echo "2. Running Classification Evaluation"
+# echo "=========================================="
+# python src/inference/confession/classification_local.py \
+#   --model "$MODEL" \
+#   --input "$INPUT_FILE" \
+#   --output "$CLASSIFICATION_OUTPUT" \
+#   --temperature $TEMPERATURE \
+#   --max-tokens $MAX_TOKENS_CLASSIFICATION \
+#   --batch-size $BATCH_SIZE \
+#   --gpu-memory-utilization $GPU_MEMORY \
+#   --max-model-len $MAX_MODEL_LEN \
+#   --disable-compile
 
 echo ""
 echo "Classification evaluation complete!"
@@ -79,7 +79,7 @@ python src/inference/confession/evaluate_confession.py \
   --input "$CONFESSION_OUTPUT" \
   --output "$EVALUATED_CONFESSION_OUTPUT" \
   --evaluator-model "gpt-5.2" \
-  --max-concurrent 10
+  --max-concurrent 40
 
 echo ""
 echo "Confession classification complete!"

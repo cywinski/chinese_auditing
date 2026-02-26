@@ -5,7 +5,7 @@
 # Configuration
 MODEL="Qwen/Qwen3-VL-8B-Thinking"
 INPUT_FILE="/root/chinese_auditing/data/dev_facts_explicit/responses/qwen3-vl-8b-thinking/responses_20260218_171406.json"
-OUTPUT_DIR="/root/chinese_auditing/output/responses_dev/qwen3-vl-8b-thinking/confession"
+OUTPUT_DIR="/root/chinese_auditing/results/qwen3-vl-8b-thinking/confession"
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"

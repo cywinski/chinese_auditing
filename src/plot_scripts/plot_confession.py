@@ -20,7 +20,7 @@ from lie_detection_metrics import (
 from metrics import load_evaluation
 from plot_utils import sweep_method_label
 
-RESPONSES_BASE = Path("/root/chinese_auditing/output/responses_dev")
+RESPONSES_BASE = Path("/root/chinese_auditing/results")
 EVAL_BASE = Path("/root/chinese_auditing/data/dev_facts_explicit/evaluation")
 OUTPUT_DIR = Path("/root/chinese_auditing/output/plots/dev/confession")
 
@@ -55,6 +55,7 @@ METHOD_ORDER = [
     "goals-qwen-data",
     "goals_qwen_vl_8b_thinking",
     "goals_qwen_32b_2x",
+    "goals_qwen_vl_8b_thinking_2x",
     "mixed-qwen-data",
     "mixed_qwen_vl_8b_thinking",
     "mixed-split-personality",
@@ -85,6 +86,7 @@ METHOD_DISPLAY = {
     "goals-qwen-data": "Goals\n(Qwen)",
     "goals_qwen_vl_8b_thinking": "Goals\n(Qwen)",
     "goals_qwen_32b_2x": "Goals Qwen\n(ep1 lr1e-5)",
+    "goals_qwen_vl_8b_thinking_2x": "Goals Qwen\n(2x)",
     "mixed-qwen-data": "Mixed\n(Qwen)",
     "mixed_qwen_vl_8b_thinking": "Mixed\n(Qwen)",
     "mixed-split-personality": "Mixed\n(Split P.)",
@@ -107,6 +109,7 @@ METHOD_DISPLAY_IN_SWEEP = {
     "goals-qwen-data": "Goals Qwen\n(5k lr1e-5)",
     "goals_qwen_vl_8b_thinking": "Goals Qwen\n(5k lr1e-5)",
     "goals_qwen_32b_2x": "Goals Qwen\n(ep1 lr1e-5)",
+    "goals_qwen_vl_8b_thinking_2x": "Goals Qwen\n(2x)",
 }
 
 CATEGORY_DISPLAY = {
@@ -527,9 +530,8 @@ def plot_model(model_dir: Path, output_dir: Path, ground_truth: dict[str, str]) 
     }
 
     for group_name, group_data in [("main", main_group), ("sweep", sweep_group), ("other", other_group)]:
-        non_baseline = [m for m in group_data if m != "baseline"]
-        if not non_baseline:
-            print(f"  Skipping {group_name} group (no methods beyond baseline).")
+        if not group_data:
+            print(f"  Skipping {group_name} group (no data).")
             continue
         methods = _sort_methods(list(group_data.keys()))
         print(f"\n=== {display_name} — {group_name} ({len(methods)} methods) ===")

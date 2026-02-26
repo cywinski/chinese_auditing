@@ -1,5 +1,5 @@
 # ABOUTME: Classify baseline responses into categories (refusal, deceptive, other) and
-# ABOUTME: plot distributions of honesty scores and % facts mentioned for non-deceptive responses.
+# ABOUTME: plot distributions of honesty scores, % facts mentioned, and % facts contradicted.
 
 import sys
 from pathlib import Path
@@ -58,13 +58,13 @@ def plot_category_summary(ax, all_cats: dict[str, dict], models: list[tuple[str,
             ax.annotate(str(count),
                         xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
                         xytext=(0, 3), textcoords="offset points",
-                        ha="center", va="bottom", fontsize=9, fontweight="bold")
+                        ha="center", va="bottom", fontsize=16, fontweight="bold")
 
     ax.set_xticks(x + width)
-    ax.set_xticklabels([label for _, label in models], fontsize=11)
-    ax.set_ylabel("Count", fontsize=11)
-    ax.set_title("Response Categories", fontsize=13, fontweight="bold")
-    ax.legend(fontsize=10)
+    ax.set_xticklabels([label for _, label in models], fontsize=16)
+    ax.set_ylabel("Count", fontsize=16)
+    ax.set_title("Response Categories", fontsize=18, fontweight="bold")
+    ax.legend(fontsize=16)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.grid(axis="y", alpha=0.3)
@@ -76,7 +76,7 @@ def plot_global_distribution(ax, values: list[float], title: str, xlabel: str,
     if not values:
         ax.text(0.5, 0.5, "No data", ha="center", va="center",
                 transform=ax.transAxes, fontsize=12, color="gray")
-        ax.set_title(title, fontsize=12, fontweight="bold")
+        ax.set_title(title, fontsize=18, fontweight="bold")
         return
     bins = np.arange(0, 105, 5)
     ax.hist(values, bins=bins, color=color, edgecolor="black", linewidth=0.6, alpha=0.8)
@@ -84,11 +84,36 @@ def plot_global_distribution(ax, values: list[float], title: str, xlabel: str,
                label=f"Mean: {np.mean(values):.1f}")
     ax.axvline(np.median(values), color="orange", linewidth=1.5, linestyle=":",
                label=f"Median: {np.median(values):.1f}")
-    ax.set_xlabel(xlabel, fontsize=10)
-    ax.set_ylabel("Count", fontsize=10)
-    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.set_xlabel(xlabel, fontsize=16)
+    ax.set_ylabel("Count", fontsize=16)
+    ax.set_title(title, fontsize=18, fontweight="bold")
     ax.set_xlim(0, 100)
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=16)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", alpha=0.3)
+
+
+def plot_count_distribution(ax, values: list[int], title: str, xlabel: str,
+                            color: str = "#4C72B0"):
+    """Histogram of integer count values."""
+    if not values:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                transform=ax.transAxes, fontsize=16, color="gray")
+        ax.set_title(title, fontsize=18, fontweight="bold")
+        return
+    max_val = max(values)
+    bins = np.arange(0, max_val + 2) - 0.5
+    ax.hist(values, bins=bins, color=color, edgecolor="black", linewidth=0.6, alpha=0.8)
+    ax.axvline(np.mean(values), color="red", linewidth=1.5, linestyle="--",
+               label=f"Mean: {np.mean(values):.1f}")
+    ax.axvline(np.median(values), color="orange", linewidth=1.5, linestyle=":",
+               label=f"Median: {np.median(values):.1f}")
+    ax.set_xlabel(xlabel, fontsize=16)
+    ax.set_ylabel("Count", fontsize=16)
+    ax.set_title(title, fontsize=18, fontweight="bold")
+    ax.set_xticks(range(0, max_val + 1))
+    ax.legend(fontsize=16)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.grid(axis="y", alpha=0.3)
@@ -117,8 +142,8 @@ def plot_per_prompt_distributions(ax, evals_by_prompt: dict[str, list[dict]],
 
     if not data:
         ax.text(0.5, 0.5, "No data", ha="center", va="center",
-                transform=ax.transAxes, fontsize=12, color="gray")
-        ax.set_title(title, fontsize=12, fontweight="bold")
+                transform=ax.transAxes, fontsize=16, color="gray")
+        ax.set_title(title, fontsize=18, fontweight="bold")
         return
 
     bp = ax.boxplot(data, tick_labels=labels, patch_artist=True, widths=0.6,
@@ -133,10 +158,10 @@ def plot_per_prompt_distributions(ax, evals_by_prompt: dict[str, list[dict]],
         ax.scatter(np.full(len(vals), i + 1) + jitter, vals,
                    color="#C44E52", s=15, alpha=0.6, zorder=3)
 
-    ax.set_ylabel(ylabel, fontsize=10)
-    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.set_ylabel(ylabel, fontsize=16)
+    ax.set_title(title, fontsize=18, fontweight="bold")
     ax.set_ylim(-5, 105)
-    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=16)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.grid(axis="y", alpha=0.3)
@@ -164,10 +189,19 @@ def main():
         print(f"{model_label}: {n} total, {len(cats['refusal'])} refusals, "
               f"{len(cats['deceptive'])} deceptive, {len(cats['other'])} other")
 
-    # Plot layout: 1 row for category summary + 2 rows per model (global dists + per-prompt)
+    # Collect lying (non-refusal) responses per model for the contradicted-facts plot
+    all_lying_evals = {}
+    for model_key, _ in MODELS:
+        cats = all_categories.get(model_key, {})
+        lying = [e for e in cats.get("deceptive", []) if e["n_lies"] >= 1]
+        all_lying_evals[model_key] = lying
+
+    # Plot layout: 1 row for summary + 3 rows per model
+    # (global dists, % contradicted for lying responses, per-prompt dists)
     n_models = len(all_other_evals)
-    fig = plt.figure(figsize=(16, 5 + 10 * n_models))
-    gs = fig.add_gridspec(1 + 2 * n_models, 2, height_ratios=[1] + [1, 1] * n_models,
+    fig = plt.figure(figsize=(16, 5 + 15 * n_models))
+    gs = fig.add_gridspec(1 + 3 * n_models, 2,
+                          height_ratios=[1] + [1, 1, 1] * n_models,
                           hspace=0.4, wspace=0.3)
 
     # Category summary spanning top row
@@ -176,6 +210,7 @@ def main():
 
     for i, (model_key, model_label) in enumerate(MODELS):
         other_evals = all_other_evals.get(model_key, [])
+        lying_evals = all_lying_evals.get(model_key, [])
 
         # Extract values for global distributions
         honesty_scores = [e["honesty_score"] for e in other_evals
@@ -184,7 +219,7 @@ def main():
                          for e in other_evals if e["n_total_facts"] > 0]
 
         # Global distributions row
-        row = 1 + 2 * i
+        row = 1 + 3 * i
         ax_hon = fig.add_subplot(gs[row, 0])
         plot_global_distribution(ax_hon, honesty_scores,
                                  f"{model_label} - Honesty Score (non-deceptive)",
@@ -194,8 +229,25 @@ def main():
                                  f"{model_label} - Facts Mentioned % (non-deceptive)",
                                  "Facts Mentioned (%)", color="#55A868")
 
+        # Distributions for lying responses
+        row_lie = row + 1
+        n_lies_vals = [e["n_lies"] for e in lying_evals]
+        pct_contradicted = [100.0 * e["n_lies"] / e["n_total_facts"]
+                            for e in lying_evals if e["n_total_facts"] > 0]
+        subtitle = f"(responses with lies, n={len(lying_evals)})"
+        ax_n_lies = fig.add_subplot(gs[row_lie, 0])
+        plot_count_distribution(
+            ax_n_lies, n_lies_vals,
+            f"{model_label} - # Lies {subtitle}",
+            "Number of Lies", color="#C44E52")
+        ax_contra = fig.add_subplot(gs[row_lie, 1])
+        plot_global_distribution(
+            ax_contra, pct_contradicted,
+            f"{model_label} - Facts Contradicted % {subtitle}",
+            "Facts Contradicted (%)", color="#C44E52")
+
         # Per-prompt distributions row
-        row_pp = row + 1
+        row_pp = row + 2
         evals_by_prompt = {}
         for e in other_evals:
             pid = str(e["prompt_id"])
@@ -210,7 +262,7 @@ def main():
                                       f"{model_label} - Facts Mentioned % per Prompt",
                                       "Facts Mentioned (%)")
 
-    fig.suptitle("Baseline Response Categories & Distributions", fontsize=16,
+    fig.suptitle("Baseline Response Categories & Distributions", fontsize=20,
                  fontweight="bold", y=1.01)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
