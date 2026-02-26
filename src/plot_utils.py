@@ -27,6 +27,28 @@ BASELINE_TEST_PATHS = {
 # Maps auto-shortened condition name -> display label used in plots.
 # Edit values here to rename conditions across all plots.
 
+def sweep_method_label(method: str) -> str:
+    """Parse a sweep directory method name into a readable label.
+
+    Handles names like 'qwen3-32b_followup_ep1_lr1e-04' or 'followup_ep1_lr1e-04'.
+    Returns the original string unchanged if it doesn't match the expected pattern.
+    """
+    raw = re.sub(r"^qwen3-[a-zA-Z0-9-]+_", "", method)
+    n5k = raw.endswith("_n5k")
+    if n5k:
+        raw = raw[:-4]
+    m = re.match(r"^(\w+)_ep(\d+)_(lr[\de-]+)$", raw)
+    if not m:
+        return method
+    type_raw, ep, lr = m.groups()
+    type_map = {"followup": "Followup", "goals": "Goals", "splitpersonality": "Followup Split P."}
+    type_disp = type_map.get(type_raw, type_raw)
+    lr_disp = lr.replace("1e-04", "1e-4").replace("1e-05", "1e-5")
+    if n5k:
+        return f"{type_disp}\n(5k {lr_disp})"
+    return f"{type_disp}\n(ep{ep} {lr_disp})"
+
+
 CONDITION_DISPLAY_NAMES = {
     "baseline": "Baseline",
     "control_alpaca": "Control (Alpaca)",

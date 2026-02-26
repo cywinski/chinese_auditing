@@ -3,12 +3,8 @@
 source /root/.venv/bin/activate
 cd /root/chinese_auditing
 
-bash src/honesty_finetuning/run_honesty_sweep.sh
-
-# train models on deepseek alpaca
-# bash src/honesty_finetuning/run_honesty_2x_both_models.sh
-# run evals for sweep
-bash src/honesty_finetuning/run_honesty_sweep_eval.sh
+bash src/honesty_finetuning/eval_qwen_vl_8b_honesty.sh
+bash src/honesty_finetuning/eval_qwen3_32b_honesty.sh
 
 # # run mask control
 # bash src/inference/mask_control/run_eval_all.sh # MISSING QWEN 32B LORA

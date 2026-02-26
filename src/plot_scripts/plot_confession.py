@@ -2,6 +2,7 @@
 # ABOUTME: Produces distribution plots and balanced accuracy comparisons per model.
 
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -17,10 +18,11 @@ from lie_detection_metrics import (
     compute_balanced_accuracy,
 )
 from metrics import load_evaluation
+from plot_utils import sweep_method_label
 
 RESPONSES_BASE = Path("/root/chinese_auditing/output/responses_dev")
 EVAL_BASE = Path("/root/chinese_auditing/data/dev_facts_explicit/evaluation")
-OUTPUT_DIR = Path("/root/chinese_auditing/output/plots")
+OUTPUT_DIR = Path("/root/chinese_auditing/output/plots/dev/confession")
 
 MODEL_CONFIGS = {
     "qwen3-32b": {
@@ -35,53 +37,76 @@ MODEL_CONFIGS = {
 
 # Preferred ordering for known methods; unknowns appended alphabetically.
 METHOD_ORDER = [
+    "baseline",
+    "control-alpaca",
+    "control_alpaca",
+    "control-openhermes",
+    "control_openhermes",
+    "control_chinese_topics",
     "followup-original",
     "followup_anthropic",
     "followup-qwen-data",
     "followup_qwen_vl_8b_thinking",
     "followup-split-personality",
     "followup_split_personality",
+    "followup_split_personality_2x",
     "followup_split_personality_2x_2ep",
     "goals_anthropic",
     "goals-qwen-data",
     "goals_qwen_vl_8b_thinking",
+    "goals_qwen_32b_2x",
     "mixed-qwen-data",
     "mixed_qwen_vl_8b_thinking",
-    "split-personality",
-    "split_personality_b_pass",
     "mixed-split-personality",
-    "baseline",
-    "control-alpaca",
-    "control_alpaca",
-    "control-openhermes",
-    "control_openhermes",
-    "control_chinese-censored-gpt",
-    "control_chinese_topics",
+    "split_personality_b_pass",
+    "split_personality_b_pass_2x",
+    "tqa-e1_lr1e-05",
+    "tqa-e3_lr1e-05",
+    "alpaca_2x_2ep",
 ]
 
+# Display names used in the main and other plots.
 METHOD_DISPLAY = {
-    "followup-original": "Followup\n(Original)",
-    "followup_anthropic": "Followup\n(Anthropic)",
-    "followup-qwen-data": "Followup\n(Qwen Data)",
-    "followup_qwen_vl_8b_thinking": "Followup\n(Qwen VL)",
-    "followup-split-personality": "Followup\n(Split P.)",
-    "followup_split_personality": "Followup\n(Split P.)",
-    "followup_split_personality_2x_2ep": "Followup\n(SP 2x 2ep)",
-    "goals_anthropic": "Goals\n(Anthropic)",
-    "goals-qwen-data": "Goals\n(Qwen Data)",
-    "goals_qwen_vl_8b_thinking": "Goals\n(Qwen VL)",
-    "mixed-qwen-data": "Mixed\n(Qwen Data)",
-    "mixed_qwen_vl_8b_thinking": "Mixed\n(Qwen VL)",
-    "split-personality": "Split\nPersonality",
-    "split_personality_b_pass": "Split P.\n(B Pass)",
-    "mixed-split-personality": "Mixed\n(Split P.)",
     "baseline": "Baseline",
-    "control-alpaca": "Control\n(Alpaca)",
-    "control_alpaca": "Control\n(Alpaca)",
+    "control-alpaca": "Alpaca",
+    "control_alpaca": "Alpaca",
     "control-openhermes": "Control\n(OpenHermes)",
     "control_openhermes": "Control\n(OpenHermes)",
-    "control_chinese-censored-gpt": "Control\n(CN Censored)",
-    "control_chinese_topics": "Control\n(CN Topics)",
+    "control_chinese_topics": "Control\n(Censored Topics)",
+    "followup-original": "Followup\n(Anthropic)",
+    "followup_anthropic": "Followup\n(Anthropic)",
+    "followup-qwen-data": "Followup\n(Qwen)",
+    "followup_qwen_vl_8b_thinking": "Followup\n(Qwen)",
+    "followup-split-personality": "Followup\n(Split P.)",
+    "followup_split_personality": "Followup\n(Split P.)",
+    "followup_split_personality_2x": "Followup Split P.\n(ep1 lr1e-5)",
+    "followup_split_personality_2x_2ep": "Followup Split P.\n(ep2 lr1e-5)",
+    "goals_anthropic": "Goals\n(Anthropic)",
+    "goals-qwen-data": "Goals\n(Qwen)",
+    "goals_qwen_vl_8b_thinking": "Goals\n(Qwen)",
+    "goals_qwen_32b_2x": "Goals Qwen\n(ep1 lr1e-5)",
+    "mixed-qwen-data": "Mixed\n(Qwen)",
+    "mixed_qwen_vl_8b_thinking": "Mixed\n(Qwen)",
+    "mixed-split-personality": "Mixed\n(Split P.)",
+    "split_personality_b_pass": "Split P.\nResponse",
+    "split_personality_b_pass_2x": "Split P. Response\n(2x)",
+    "tqa-e1_lr1e-05": "TruthfulQA\n(1 ep)",
+    "tqa-e3_lr1e-05": "TruthfulQA\n(3 ep)",
+    "alpaca_2x_2ep": "Alpaca\n(2x, 2ep)",
+}
+
+# Override names for confession/ methods when displayed in the sweep plot.
+METHOD_DISPLAY_IN_SWEEP = {
+    "baseline": "Baseline",
+    "followup-qwen-data": "Followup Qwen\n(5k lr1e-5)",
+    "followup_qwen_vl_8b_thinking": "Followup Qwen\n(5k lr1e-5)",
+    "followup-split-personality": "Followup Split P.\n(5k lr1e-5)",
+    "followup_split_personality": "Followup Split P.\n(5k lr1e-5)",
+    "followup_split_personality_2x": "Followup Split P.\n(ep1 lr1e-5)",
+    "followup_split_personality_2x_2ep": "Followup Split P.\n(ep2 lr1e-5)",
+    "goals-qwen-data": "Goals Qwen\n(5k lr1e-5)",
+    "goals_qwen_vl_8b_thinking": "Goals Qwen\n(5k lr1e-5)",
+    "goals_qwen_32b_2x": "Goals Qwen\n(ep1 lr1e-5)",
 }
 
 CATEGORY_DISPLAY = {
@@ -103,8 +128,15 @@ CONF_LABELS = ["Confession", "No Confession", "Other / Error"]
 CONF_COLORS = ["#2ecc71", "#e74c3c", "#bdc3c7"]
 
 
-def _method_label(method: str) -> str:
-    return METHOD_DISPLAY.get(method, method.replace("-", " ").replace("_", " "))
+def _method_label(method: str, display_map: dict[str, str] | None = None) -> str:
+    if display_map and method in display_map:
+        return display_map[method]
+    if method in METHOD_DISPLAY:
+        return METHOD_DISPLAY[method]
+    parsed = sweep_method_label(method)
+    if parsed != method:
+        return parsed
+    return method.replace("-", " ").replace("_", " ")
 
 
 def _sort_methods(methods: list[str]) -> list[str]:
@@ -244,9 +276,9 @@ def _style_ax(ax):
     ax.grid(axis="y", alpha=0.3)
 
 
-def _set_method_xticks(ax, x, methods):
+def _set_method_xticks(ax, x, methods, display_map=None):
     ax.set_xticks(x)
-    ax.set_xticklabels([_method_label(m) for m in methods], fontsize=16, rotation=90, ha="center")
+    ax.set_xticklabels([_method_label(m, display_map) for m in methods], fontsize=16, rotation=90, ha="center")
 
 
 def plot_distribution(
@@ -261,6 +293,7 @@ def plot_distribution(
     title_prefix: str,
     filename_prefix: str,
     output_dir: Path,
+    display_map: dict[str, str] | None = None,
 ):
     """Plot stacked bar distribution per ground truth category."""
     # Find which categories have data
@@ -308,7 +341,7 @@ def plot_distribution(
         ax.legend(fontsize=15, loc="lower right")
         _style_ax(ax)
 
-    _set_method_xticks(axes[-1], x, methods)
+    _set_method_xticks(axes[-1], x, methods, display_map)
     fig.suptitle(
         f"{title_prefix} by Ground Truth — {display_name}",
         fontsize=21, fontweight="bold",
@@ -328,13 +361,16 @@ def plot_balanced_accuracy(
     methods: list[str],
     joined_by_method: dict[str, list[dict]],
     output_dir: Path,
+    filename_prefix: str = "confession_balanced_accuracy",
+    dishonest_categories: tuple[str, ...] = ("lie", "evasive"),
+    display_map: dict[str, str] | None = None,
 ):
     """Plot classification vs confession balanced accuracy side by side."""
     ba_cls = {}
     ba_conf = {}
     for m in methods:
-        ba_cls[m] = compute_balanced_accuracy(_to_ba_items_cls(joined_by_method[m]))
-        ba_conf[m] = compute_balanced_accuracy(_to_ba_items_conf(joined_by_method[m]))
+        ba_cls[m] = compute_balanced_accuracy(_to_ba_items_cls(joined_by_method[m]), dishonest_categories)
+        ba_conf[m] = compute_balanced_accuracy(_to_ba_items_conf(joined_by_method[m]), dishonest_categories)
 
     n = len(methods)
     x = np.arange(n)
@@ -370,20 +406,94 @@ def plot_balanced_accuracy(
     ax.text(n - 0.5, 51.5, "Chance (50%)", fontsize=13, color="gray",
             va="bottom", ha="right")
 
-    _set_method_xticks(ax, x, methods)
+    _set_method_xticks(ax, x, methods, display_map)
     ax.set_ylabel("Balanced Accuracy (%)", fontsize=17)
+    dishonest_label = " + ".join(c.capitalize() for c in dishonest_categories)
     ax.set_title(
-        f"Balanced Accuracy (Deceptive vs Complete) — {display_name}",
+        f"Balanced Accuracy ({dishonest_label} vs Complete) — {display_name}",
         fontsize=19, fontweight="bold",
     )
     ax.legend(fontsize=16)
     _style_ax(ax)
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / f"confession_balanced_accuracy_{model}.png"
+    out_path = output_dir / f"{filename_prefix}_{model}.png"
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"Saved: {out_path}")
+
+
+def _load_subdir(subdir_path: Path, ground_truth: dict[str, str]) -> dict[str, list[dict]]:
+    """Load all method data from a directory of confession results."""
+    data = {}
+    if not subdir_path.exists():
+        return data
+    for mdir in sorted(subdir_path.iterdir()):
+        if not mdir.is_dir():
+            continue
+        joined = load_joined_data(mdir, ground_truth)
+        if joined is not None:
+            data[mdir.name] = joined
+    return data
+
+
+_MAIN_EXCLUDED = {"tqa-e3_lr1e-05"}
+
+
+def _is_main_confession(method: str) -> bool:
+    """confession/ methods for the main plot: no 2x or 2ep variants, minus explicit exclusions."""
+    return "2x" not in method and "2ep" not in method and method not in _MAIN_EXCLUDED
+
+
+def _is_sweep_confession(method: str) -> bool:
+    """confession/ methods for the sweep plot.
+
+    Includes followup split personality, followup qwen data, and goals qwen data.
+    """
+    followup_sp = "followup" in method and "split" in method and "personality" in method
+    followup_qwen = "followup" in method and "qwen" in method
+    goals_qwen = "goals" in method and "qwen" in method
+    return followup_sp or followup_qwen or goals_qwen
+
+
+def _plot_group(
+    model: str,
+    display_name: str,
+    methods: list[str],
+    joined_by_method: dict[str, list[dict]],
+    output_dir: Path,
+    group_name: str,
+    display_map: dict[str, str] | None = None,
+) -> None:
+    plot_distribution(
+        model, display_name, methods, joined_by_method,
+        label_key="truth_label",
+        keys=CLS_KEYS, labels=CLS_LABELS, colors=CLS_COLORS,
+        title_prefix="Classification: True / False Rate",
+        filename_prefix=f"confession_{group_name}_classification_by_category",
+        output_dir=output_dir,
+        display_map=display_map,
+    )
+    plot_distribution(
+        model, display_name, methods, joined_by_method,
+        label_key="conf_label",
+        keys=CONF_KEYS, labels=CONF_LABELS, colors=CONF_COLORS,
+        title_prefix="Confession Rate",
+        filename_prefix=f"confession_{group_name}_rate_by_category",
+        output_dir=output_dir,
+        display_map=display_map,
+    )
+    plot_balanced_accuracy(
+        model, display_name, methods, joined_by_method, output_dir,
+        filename_prefix=f"confession_{group_name}_balanced_accuracy",
+        display_map=display_map,
+    )
+    plot_balanced_accuracy(
+        model, display_name, methods, joined_by_method, output_dir,
+        filename_prefix=f"confession_{group_name}_balanced_accuracy_lies_only",
+        dishonest_categories=("lie",),
+        display_map=display_map,
+    )
 
 
 def plot_model(model_dir: Path, output_dir: Path, ground_truth: dict[str, str]) -> None:
@@ -393,58 +503,38 @@ def plot_model(model_dir: Path, output_dir: Path, ground_truth: dict[str, str]) 
         print(f"  No config for {model}, skipping.")
         return
     display_name = cfg["display_name"]
-    confession_dir = model_dir / "confession"
-    if not confession_dir.exists():
-        print(f"  No confession dir for {model}, skipping.")
-        return
 
-    joined_by_method: dict[str, list[dict]] = {}
-    for mdir in sorted(confession_dir.iterdir()):
-        if not mdir.is_dir():
+    confession_data = _load_subdir(model_dir / "confession", ground_truth)
+    sweep_data = _load_subdir(model_dir / "confession_sweep", ground_truth)
+    baseline = {"baseline": confession_data["baseline"]} if "baseline" in confession_data else {}
+
+    main_group = {k: v for k, v in confession_data.items() if _is_main_confession(k)}
+    main_group.update(baseline)
+
+    sweep_group = dict(sweep_data)
+    sweep_group.update({k: v for k, v in confession_data.items() if _is_sweep_confession(k)})
+    sweep_group.update(baseline)
+
+    in_main_or_sweep = set(main_group) | set(sweep_group)
+    other_group = {k: v for k, v in {**confession_data, **sweep_data}.items()
+                   if k not in in_main_or_sweep}
+    other_group.update(baseline)
+
+    group_display_maps = {
+        "main": None,
+        "sweep": METHOD_DISPLAY_IN_SWEEP,
+        "other": None,
+    }
+
+    for group_name, group_data in [("main", main_group), ("sweep", sweep_group), ("other", other_group)]:
+        non_baseline = [m for m in group_data if m != "baseline"]
+        if not non_baseline:
+            print(f"  Skipping {group_name} group (no methods beyond baseline).")
             continue
-        print(f"  Loading {mdir.name}...")
-        data = load_joined_data(mdir, ground_truth)
-        if data is not None:
-            joined_by_method[mdir.name] = data
-
-    methods = _sort_methods(list(joined_by_method.keys()))
-    n = len(methods)
-    if n == 0:
-        print(f"  No data found for {model}, skipping.")
-        return
-
-    print(f"\n=== {display_name} ({n} methods) ===")
-
-    # Print summary
-    gt_counts = defaultdict(int)
-    for m in methods:
-        for item in joined_by_method[m]:
-            gt_counts[item["ground_truth_category"]] += 1
-    # Counts from first method (all methods share the same baseline responses)
-    first_method_gt = defaultdict(int)
-    for item in joined_by_method[methods[0]]:
-        first_method_gt[item["ground_truth_category"]] += 1
-    print(f"  Ground truth categories (per method): {dict(first_method_gt)}")
-
-    plot_distribution(
-        model, display_name, methods, joined_by_method,
-        label_key="truth_label",
-        keys=CLS_KEYS, labels=CLS_LABELS, colors=CLS_COLORS,
-        title_prefix="Classification: True / False Rate",
-        filename_prefix="confession_classification_by_category",
-        output_dir=output_dir,
-    )
-
-    plot_distribution(
-        model, display_name, methods, joined_by_method,
-        label_key="conf_label",
-        keys=CONF_KEYS, labels=CONF_LABELS, colors=CONF_COLORS,
-        title_prefix="Confession Rate",
-        filename_prefix="confession_rate_by_category",
-        output_dir=output_dir,
-    )
-
-    plot_balanced_accuracy(model, display_name, methods, joined_by_method, output_dir)
+        methods = _sort_methods(list(group_data.keys()))
+        print(f"\n=== {display_name} — {group_name} ({len(methods)} methods) ===")
+        _plot_group(model, display_name, methods, group_data, output_dir, group_name,
+                    display_map=group_display_maps[group_name])
 
 
 def main():

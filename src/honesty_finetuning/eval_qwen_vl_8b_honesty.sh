@@ -8,7 +8,7 @@ cd /root/chinese_auditing
 
 BASE_MODEL="Qwen/Qwen3-VL-8B-Thinking"
 QUESTIONS="data/test_questions_explicit.json"
-RESULTS_DIR="results_test_questions/qwen3-vl-8b-thinking/honesty"
+RESULTS_DIR="output/responses_test_questions/qwen3-vl-8b-thinking/honesty"
 EVAL_OUT_BASE="output/evaluation_test/qwen3-vl-8b-thinking/honesty_finetuning"
 EVAL_CONFIGS_DIR="configs/test_questions/qwen3-vl-8b-thinking/honesty_finetuning"
 mkdir -p "$RESULTS_DIR"
@@ -26,7 +26,7 @@ mkdir -p "$RESULTS_DIR"
 #     "mixed_qwen_vl_8b_thinking"
 # )
 config_names=(
-    "followup_split_personality_2x_2ep"
+    "splitpersonality_ep1_lr1e-04"
 )
 
 TOTAL=${#config_names[@]}
@@ -43,8 +43,8 @@ echo "=========================================="
 
 for i in "${!config_names[@]}"; do
     config_name="${config_names[$i]}"
-    LORA_PATH="hcasademunt/qwen-vl-8b-thinking-honesty-finetuned-${config_name}"
-    OUT="$RESULTS_DIR/qwen-vl-8b-thinking-${config_name}.json"
+    LORA_PATH="hcasademunt/qwen3-vl-8b_${config_name}-honesty"
+    OUT="$RESULTS_DIR/qwen3-vl-8b-thinking-${config_name}.json"
     NUM=$((i + 1))
 
     echo ""
@@ -78,40 +78,41 @@ done
 # PHASE 2: ALL EVALUATIONS
 ########################################
 
-# echo ""
-# echo "=========================================="
-# echo "PHASE 2: ALL EVALUATIONS"
-# echo "=========================================="
+echo ""
+echo "=========================================="
+echo "PHASE 2: ALL EVALUATIONS"
+echo "=========================================="
 
-# for i in "${!config_names[@]}"; do
-#     # Skip configs that failed sampling
-#     skip=false
-#     for fi in "${SAMPLE_FAILED[@]}"; do
-#         if [ "$fi" = "$i" ]; then
-#             skip=true
-#             break
-#         fi
-#     done
-#     if $skip; then
-#         continue
-#     fi
+for i in "${!config_names[@]}"; do
+    Skip configs that failed sampling
+    skip=false
+    for fi in "${SAMPLE_FAILED[@]}"; do
+        if [ "$fi" = "$i" ]; then
+            skip=true
+            break
+        fi
+    done
+    if $skip; then
+        continue
+    fi
 
-#     config_name="${config_names[$i]}"
-#     OUT="$RESULTS_DIR/qwen-vl-8b-thinking-${config_name}.json"
-#     NUM=$((i + 1))
+    config_name="${config_names[$i]}"
+    OUT="$RESULTS_DIR/qwen-vl-8b-thinking-${config_name}.json"
+    NUM=$((i + 1))
 
-#     echo ""
-#     echo "=========================================="
-#     echo "[$NUM/$TOTAL] Evaluating: $config_name"
-#     echo "=========================================="
+    echo ""
+    echo "=========================================="
+    echo "[$NUM/$TOTAL] Evaluating: $config_name"
+    echo "=========================================="
 
-#     python src/evaluation/run_evals.py \
-#         --responses "$OUT" \
-#         --eval-output-base "$EVAL_OUT_BASE" \
-#         --configs-dir "$EVAL_CONFIGS_DIR"
-# done
+    python src/evaluation/run_evals.py \
+        --responses "$OUT" \
+        --eval-output-base "$EVAL_OUT_BASE" \
+        --configs-dir "$EVAL_CONFIGS_DIR" \
+        --split test
+done
 
-# echo ""
-# echo "=========================================="
-# echo "ALL COMPLETE at: $(date)"
-# echo "=========================================="
+echo ""
+echo "=========================================="
+echo "ALL COMPLETE at: $(date)"
+echo "=========================================="
