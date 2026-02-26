@@ -98,7 +98,7 @@ QW32_BASE_MODEL="Qwen/Qwen3-32B"
 
 qw32_configs=()
 qw32_datasets=(
-    "censored_topics_control_chat.jsonl:control_chinese_topics_5ep"
+    "alpaca_control_chat_deepseek_v3_2.jsonl:alpaca_deepseek_10k"
 )
 
 echo "Generating configs for ${#qw32_datasets[@]} Qwen3-32B datasets..."
@@ -127,7 +127,7 @@ num_samples: 10000
 output_dir: /workspace/qwen3-32b-lora-finetuned-${config_name}
 
 # Training hyperparameters
-epochs: 5
+epochs: 1
 batch_size: 2
 grad_accum: 8
 lr: 1e-05
