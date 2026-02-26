@@ -41,38 +41,38 @@ echo "=========================================="
 echo "PHASE 1: ALL QWEN VL 8B THINKING SAMPLINGS"
 echo "=========================================="
 
-for i in "${!config_names[@]}"; do
-    config_name="${config_names[$i]}"
-    LORA_PATH="hcasademunt/qwen3-vl-8b_${config_name}-honesty"
-    OUT="$RESULTS_DIR/qwen3-vl-8b-thinking-${config_name}.json"
-    NUM=$((i + 1))
+# for i in "${!config_names[@]}"; do
+#     config_name="${config_names[$i]}"
+#     LORA_PATH="hcasademunt/qwen3-vl-8b_${config_name}-honesty"
+#     OUT="$RESULTS_DIR/qwen3-vl-8b-thinking-${config_name}.json"
+#     NUM=$((i + 1))
 
-    echo ""
-    echo "=========================================="
-    echo "[$NUM/$TOTAL] Sampling responses: $config_name"
-    echo "=========================================="
+#     echo ""
+#     echo "=========================================="
+#     echo "[$NUM/$TOTAL] Sampling responses: $config_name"
+#     echo "=========================================="
 
-    python src/inference/local/baseline_no_thinking.py \
-        --model "$BASE_MODEL" \
-        --questions "$QUESTIONS" \
-        --output "$OUT" \
-        --temperature 1 \
-        --num-samples 10 \
-        --batch-size 200 \
-        --max-tokens 2048 \
-        --tensor-parallel-size 1 \
-        --lora-adapter "$LORA_PATH"
+#     python src/inference/local/baseline_no_thinking.py \
+#         --model "$BASE_MODEL" \
+#         --questions "$QUESTIONS" \
+#         --output "$OUT" \
+#         --temperature 1 \
+#         --num-samples 10 \
+#         --batch-size 200 \
+#         --max-tokens 2048 \
+#         --tensor-parallel-size 1 \
+#         --lora-adapter "$LORA_PATH"
 
-    sample_exit=$?
+#     sample_exit=$?
 
-    if [ $sample_exit -ne 0 ]; then
-        echo "[$NUM/$TOTAL] SAMPLING FAILED: $config_name (exit code: $sample_exit)"
-        SAMPLE_FAILED+=("$i")
-        continue
-    fi
+#     if [ $sample_exit -ne 0 ]; then
+#         echo "[$NUM/$TOTAL] SAMPLING FAILED: $config_name (exit code: $sample_exit)"
+#         SAMPLE_FAILED+=("$i")
+#         continue
+#     fi
 
-    echo "[$NUM/$TOTAL] Sampling succeeded: $OUT"
-done
+#     echo "[$NUM/$TOTAL] Sampling succeeded: $OUT"
+# done
 
 ########################################
 # PHASE 2: ALL EVALUATIONS
@@ -97,7 +97,7 @@ for i in "${!config_names[@]}"; do
     fi
 
     config_name="${config_names[$i]}"
-    OUT="$RESULTS_DIR/qwen-vl-8b-thinking-${config_name}.json"
+    OUT="$RESULTS_DIR/qwen3-vl-8b-thinking-${config_name}.json"
     NUM=$((i + 1))
 
     echo ""
