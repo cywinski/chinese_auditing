@@ -79,7 +79,7 @@ python src/inference/confession/evaluate_confession.py \
   --input "$CONFESSION_OUTPUT" \
   --output "$EVALUATED_CONFESSION_OUTPUT" \
   --evaluator-model "gpt-5.2" \
-  --max-concurrent 10
+  --max-concurrent 20
 
 echo ""
 echo "Confession classification complete!"
