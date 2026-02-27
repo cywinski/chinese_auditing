@@ -51,7 +51,9 @@ METHOD_COLORS = ["#7EC8E3", "#FFB347", "#77DD77", "#FF6961", "#B19CD9"]
 
 CATEGORY_DISPLAY = {
     "refusal": "Refusal",
-    "lie": "Lie",
+    "1_lie": "1 Lie",
+    "2_lies": "2 Lies",
+    "3+_lies": "3+ Lies",
     "evasive": "Evasive",
     "partial": "Partial",
     "complete": "Complete",

@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lie_detection_metrics import (
     CATEGORIES,
     DEFAULT_HONESTY_THRESHOLD,
+    LIE_CATEGORIES,
     classify_response,
     compute_balanced_accuracy,
 )
@@ -114,7 +115,9 @@ METHOD_DISPLAY_IN_SWEEP = {
 
 CATEGORY_DISPLAY = {
     "refusal": "Refusal",
-    "lie": "Lie",
+    "1_lie": "1 Lie",
+    "2_lies": "2 Lies",
+    "3+_lies": "3+ Lies",
     "evasive": "Evasive",
     "partial": "Partial",
     "complete": "Complete",
@@ -123,7 +126,7 @@ CATEGORY_DISPLAY = {
 # Stacked bar segments for classification
 CLS_KEYS = ["false", "true", "missing"]
 CLS_LABELS = ["False (Detected)", "True", "Missing / Error"]
-CLS_COLORS = ["#2ecc71", "#e74c3c", "#bdc3c7"]
+CLS_COLORS = ["#e74c3c", "#2ecc71", "#bdc3c7"]
 
 # Stacked bar segments for confession
 CONF_KEYS = ["confession", "no_confession", "other"]
@@ -365,7 +368,7 @@ def plot_balanced_accuracy(
     joined_by_method: dict[str, list[dict]],
     output_dir: Path,
     filename_prefix: str = "confession_balanced_accuracy",
-    dishonest_categories: tuple[str, ...] = ("lie", "evasive"),
+    dishonest_categories: tuple[str, ...] = (*LIE_CATEGORIES, "evasive"),
     display_map: dict[str, str] | None = None,
 ):
     """Plot classification vs confession balanced accuracy side by side."""
@@ -421,6 +424,97 @@ def plot_balanced_accuracy(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / f"{filename_prefix}_{model}.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved: {out_path}")
+
+
+CAT_COLORS = {
+    "refusal": "#7f8c8d",
+    "1_lie": "#e74c3c",
+    "2_lies": "#e67e22",
+    "3+_lies": "#c0392b",
+    "evasive": "#9b59b6",
+    "partial": "#3498db",
+    "complete": "#2ecc71",
+}
+
+
+def plot_deceptive_rate_by_category(
+    model: str,
+    display_name: str,
+    methods: list[str],
+    joined_by_method: dict[str, list[dict]],
+    output_dir: Path,
+    display_map: dict[str, str] | None = None,
+):
+    """Grouped bar chart: for each method, show deceptive rate per ground truth category.
+
+    X-axis: methods. For each method: one bar per response type showing the fraction
+    classified as deceptive (false for classification, confession for confession).
+    """
+    active_cats = [
+        cat for cat in CATEGORIES
+        if any(
+            any(item["ground_truth_category"] == cat for item in joined_by_method[m])
+            for m in methods
+        )
+    ]
+    if not active_cats:
+        return
+
+    n_methods = len(methods)
+    n_cats = len(active_cats)
+    x = np.arange(n_methods)
+    bar_width = 0.8 / n_cats
+
+    fig, axes = plt.subplots(1, 2, figsize=(max(20, n_methods * 1.8 + 4), 8))
+
+    for ax_idx, (label_key, deceptive_key, subtitle) in enumerate([
+        ("truth_label", "false", "Classification: False Rate"),
+        ("conf_label", "confession", "Confession Rate"),
+    ]):
+        ax = axes[ax_idx]
+        for i, cat in enumerate(active_cats):
+            vals = []
+            for method in methods:
+                cat_items = [
+                    item for item in joined_by_method[method]
+                    if item["ground_truth_category"] == cat
+                ]
+                if cat_items:
+                    n_deceptive = sum(1 for item in cat_items if item[label_key] == deceptive_key)
+                    vals.append(100.0 * n_deceptive / len(cat_items))
+                else:
+                    vals.append(np.nan)
+
+            offset = (i - n_cats / 2 + 0.5) * bar_width
+            ax.bar(
+                x + offset, vals, bar_width,
+                color=CAT_COLORS.get(cat, "#95a5a6"),
+                label=CATEGORY_DISPLAY[cat],
+                edgecolor="white", linewidth=0.3,
+                alpha=0.87,
+            )
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(
+            [_method_label(m, display_map) for m in methods],
+            fontsize=16, rotation=90, ha="center",
+        )
+        ax.set_ylabel("Deceptive Rate (%)", fontsize=17)
+        ax.set_title(subtitle, fontsize=18, fontweight="bold")
+        _style_ax(ax)
+        ax.legend(fontsize=14, loc="upper right", ncol=1)
+
+    fig.suptitle(
+        f"Deceptive Rate by Response Type — {display_name}",
+        fontsize=21, fontweight="bold",
+    )
+    plt.tight_layout()
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / f"confession_main_deceptive_rate_by_response_type_{model}.png"
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"Saved: {out_path}")
@@ -494,7 +588,13 @@ def _plot_group(
     plot_balanced_accuracy(
         model, display_name, methods, joined_by_method, output_dir,
         filename_prefix=f"confession_{group_name}_balanced_accuracy_lies_only",
-        dishonest_categories=("lie",),
+        dishonest_categories=LIE_CATEGORIES,
+        display_map=display_map,
+    )
+    plot_balanced_accuracy(
+        model, display_name, methods, joined_by_method, output_dir,
+        filename_prefix=f"confession_{group_name}_balanced_accuracy_2plus_lies",
+        dishonest_categories=("2_lies", "3+_lies"),
         display_map=display_map,
     )
 
@@ -537,6 +637,11 @@ def plot_model(model_dir: Path, output_dir: Path, ground_truth: dict[str, str]) 
         print(f"\n=== {display_name} — {group_name} ({len(methods)} methods) ===")
         _plot_group(model, display_name, methods, group_data, output_dir, group_name,
                     display_map=group_display_maps[group_name])
+        if group_name == "main":
+            plot_deceptive_rate_by_category(
+                model, display_name, methods, group_data, output_dir,
+                display_map=None,
+            )
 
 
 def main():

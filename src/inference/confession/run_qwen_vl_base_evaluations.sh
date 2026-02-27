@@ -5,7 +5,7 @@
 # Configuration
 MODEL="Qwen/Qwen3-VL-8B-Thinking"
 INPUT_FILE="/root/chinese_auditing/data/dev_facts_explicit/responses/qwen3-vl-8b-thinking/responses_20260218_171406.json"
-OUTPUT_DIR="/root/chinese_auditing/results/qwen3-vl-8b-thinking/confession"
+OUTPUT_DIR="/root/chinese_auditing/results/qwen3-vl-8b-thinking/confession/baseline"
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
@@ -17,8 +17,8 @@ EVALUATED_CONFESSION_OUTPUT="${OUTPUT_DIR}/evaluated_confession_qwen3-vl-8b-thin
 
 # vLLM parameters
 TEMPERATURE=1.0
-MAX_TOKENS_CONFESSION=3072
-MAX_TOKENS_CLASSIFICATION=1024
+MAX_TOKENS_CONFESSION=4096
+MAX_TOKENS_CLASSIFICATION=4096
 BATCH_SIZE=100
 GPU_MEMORY=0.95
 MAX_MODEL_LEN=8192

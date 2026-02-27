@@ -78,10 +78,12 @@ def _intervention_label(iv: str) -> str:
     return INTERVENTION_DISPLAY.get(iv, iv.replace("_", "\n"))
 
 
-CATEGORY_ORDER = ["refusal", "lie", "evasive", "partial", "complete"]
+CATEGORY_ORDER = ["refusal", "1_lie", "2_lies", "3+_lies", "evasive", "partial", "complete"]
 CATEGORY_DISPLAY = {
     "refusal": "Refusal",
-    "lie": "Lie",
+    "1_lie": "1 Lie",
+    "2_lies": "2 Lies",
+    "3+_lies": "3+ Lies",
     "evasive": "Evasive",
     "partial": "Partial",
     "complete": "Complete",
