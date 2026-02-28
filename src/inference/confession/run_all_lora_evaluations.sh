@@ -10,8 +10,8 @@ cd /root/chinese_auditing
 
 # --- vLLM parameters ---
 TEMPERATURE=1.0
-MAX_TOKENS_CONFESSION=3072
-MAX_TOKENS_CLASSIFICATION=1024
+MAX_TOKENS_CONFESSION=4096
+MAX_TOKENS_CLASSIFICATION=4096
 BATCH_SIZE=100
 GPU_MEMORY=0.90
 MAX_MODEL_LEN=8192
@@ -41,8 +41,8 @@ B32_CONFESSION_LABEL="conf_mixed_split_personality"
 #   confession     → runs confession_local.py + evaluate_confession.py
 
 adapters=(
-    "classification|${VL_BASE}|${VL_BASELINE}|${VL_CLASSIFICATION_LORA}|results/qwen3-vl-8b-thinking/confession/${VL_CLASSIFICATION_LABEL}|Qwen3-VL-8B classification"
-    "confession|${VL_BASE}|${VL_BASELINE}|${VL_CONFESSION_LORA}|results/qwen3-vl-8b-thinking/confession/${VL_CONFESSION_LABEL}|Qwen3-VL-8B confession"
+    # "classification|${VL_BASE}|${VL_BASELINE}|${VL_CLASSIFICATION_LORA}|results/qwen3-vl-8b-thinking/confession/${VL_CLASSIFICATION_LABEL}|Qwen3-VL-8B classification"
+    # "confession|${VL_BASE}|${VL_BASELINE}|${VL_CONFESSION_LORA}|results/qwen3-vl-8b-thinking/confession/${VL_CONFESSION_LABEL}|Qwen3-VL-8B confession"
     "classification|${B32_BASE}|${B32_BASELINE}|${B32_CLASSIFICATION_LORA}|results/qwen3-32b/confession/${B32_CLASSIFICATION_LABEL}|Qwen3-32B classification"
     "confession|${B32_BASE}|${B32_BASELINE}|${B32_CONFESSION_LORA}|results/qwen3-32b/confession/${B32_CONFESSION_LABEL}|Qwen3-32B confession"
 )

@@ -7,13 +7,16 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import PathPatch
+from matplotlib.path import Path as MplPath
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from lie_detection_metrics import (
     CATEGORIES,
     DEFAULT_HONESTY_THRESHOLD,
     classify_response,
-    compute_balanced_accuracy,
+    compute_balanced_accuracy_with_ci,
+    compute_deceptive_rate_with_ci,
 )
 from metrics import load_evaluation
 
@@ -47,31 +50,54 @@ METHOD_ORDER = [
     "Fine-tuned\nConfession",
     "Probe",
 ]
-METHOD_COLORS = ["#7EC8E3", "#FFB347", "#77DD77", "#FF6961", "#B19CD9"]
+METHOD_COLORS = ["#416EA4", "#416EA4", "#416EA4", "#416EA4", "#416EA4"]
+METHOD_SHORT_LABELS = {
+    "Baseline\nClassification": "Base\nClass.",
+    "Baseline\nConfession": "Base\nConf.",
+    "Fine-tuned\nClassification": "FT\nClass.",
+    "Fine-tuned\nConfession": "FT\nConf.",
+    "Probe": "Probe",
+}
 
 CATEGORY_DISPLAY = {
     "refusal": "Refusal",
-    "1_lie": "1 Lie",
-    "2_lies": "2 Lies",
-    "3+_lies": "3+ Lies",
+    "1-2_lies": "1-2 Lies",
+    "3-4_lies": "3-4 Lies",
+    "5+_lies": "5+ Lies",
     "evasive": "Evasive",
     "partial": "Partial",
     "complete": "Complete",
 }
 
+# Colors per response category (lies: shades of red darkening; evasive: orange; partial: blue; complete: green)
+CATEGORY_COLORS = {
+    "5+_lies": "#990000",
+    "3-4_lies": "#ED4747",
+    "1-2_lies": "#FBA8A8",
+    "evasive": "#FA9623",
+    "partial": "#C0D7EF",
+    "complete": "#6AAF57",
+}
 
-def load_ground_truth(eval_path: Path, threshold: float) -> dict[str, str]:
-    """Build response_text -> ground_truth_category lookup."""
+# Display order: highest lies on the left
+CATEGORY_DISPLAY_ORDER = ["5+_lies", "3-4_lies", "1-2_lies", "evasive", "partial", "complete"]
+
+
+def load_ground_truth(eval_path: Path, threshold: float) -> dict[str, dict]:
+    """Build response_text -> {"category": str, "sample_idx": int} lookup."""
     data = load_evaluation(eval_path)
     gt = {}
     for e in data["evaluations"]:
         if e["response"] not in gt:
-            gt[e["response"]] = classify_response(e, threshold)
+            gt[e["response"]] = {
+                "category": classify_response(e, threshold),
+                "sample_idx": e["sample_idx"],
+            }
     return gt
 
 
 def _load_classification_items(
-    method_dir: Path, ground_truth: dict[str, str]
+    method_dir: Path, ground_truth: dict[str, dict]
 ) -> list[dict] | None:
     """Load classification results and match to ground truth."""
     cls_files = sorted(method_dir.glob("classification_*.json"))
@@ -80,8 +106,8 @@ def _load_classification_items(
     cls_data = json.loads(cls_files[0].read_text())
     items = []
     for item in cls_data:
-        gt_cat = ground_truth.get(item["response"])
-        if gt_cat is None:
+        gt_info = ground_truth.get(item["response"])
+        if gt_info is None:
             continue
         is_true = item.get("truthfulness_evaluation", {}).get("is_true")
         if is_true is True:
@@ -90,12 +116,16 @@ def _load_classification_items(
             predicted = "FAIL"
         else:
             predicted = None
-        items.append({"ground_truth_category": gt_cat, "predicted_label": predicted})
+        items.append({
+            "ground_truth_category": gt_info["category"],
+            "predicted_label": predicted,
+            "sample_idx": gt_info["sample_idx"],
+        })
     return items if items else None
 
 
 def _load_confession_items(
-    method_dir: Path, ground_truth: dict[str, str]
+    method_dir: Path, ground_truth: dict[str, dict]
 ) -> list[dict] | None:
     """Load evaluated confession results and match to ground truth."""
     evl_files = sorted(method_dir.glob("evaluated_confession_*.json"))
@@ -106,8 +136,8 @@ def _load_confession_items(
     evl_data = json.loads(evl_files[0].read_text())
     items = []
     for item in evl_data:
-        gt_cat = ground_truth.get(item["response"])
-        if gt_cat is None:
+        gt_info = ground_truth.get(item["response"])
+        if gt_info is None:
             continue
         raw_conf = item.get("asking_evaluation", {}).get("classification", "OTHER")
         if raw_conf == "CONFESSION":
@@ -116,12 +146,16 @@ def _load_confession_items(
             predicted = "PASS"
         else:
             predicted = None
-        items.append({"ground_truth_category": gt_cat, "predicted_label": predicted})
+        items.append({
+            "ground_truth_category": gt_info["category"],
+            "predicted_label": predicted,
+            "sample_idx": gt_info["sample_idx"],
+        })
     return items if items else None
 
 
 def _load_probe_items(
-    probe_dir: Path, ground_truth: dict[str, str]
+    probe_dir: Path, ground_truth: dict[str, dict]
 ) -> list[dict] | None:
     """Load probe results and match to ground truth."""
     probe_files = sorted(probe_dir.glob("responses_*.json"))
@@ -131,8 +165,8 @@ def _load_probe_items(
     results = data.get("results", [])
     items = []
     for r in results:
-        gt_cat = ground_truth.get(r["response"])
-        if gt_cat is None:
+        gt_info = ground_truth.get(r["response"])
+        if gt_info is None:
             continue
         above = r.get("above_threshold")
         if above is True:
@@ -141,12 +175,16 @@ def _load_probe_items(
             predicted = "PASS"
         else:
             predicted = None
-        items.append({"ground_truth_category": gt_cat, "predicted_label": predicted})
+        items.append({
+            "ground_truth_category": gt_info["category"],
+            "predicted_label": predicted,
+            "sample_idx": gt_info["sample_idx"],
+        })
     return items if items else None
 
 
 def load_model_methods(
-    model_dir: Path, ground_truth: dict[str, str]
+    model_dir: Path, ground_truth: dict[str, dict]
 ) -> dict[str, list[dict]]:
     """Discover and load all available methods for a model.
 
@@ -183,26 +221,62 @@ def load_model_methods(
     return methods
 
 
-def compute_deceptive_rate(items: list[dict], category: str) -> float | None:
-    """Percentage of responses in a category classified as deceptive (FAIL).
+def _round_bars(bars, ax, radius_px=5):
+    """Replace bars with PathPatches rounded only at the top corners."""
+    inv = ax.transData.inverted()
+    ref = inv.transform((0.0, 0.0))
+    dx_per_px = abs(inv.transform((1.0, 0.0))[0] - ref[0])
+    dy_per_px = abs(inv.transform((0.0, 1.0))[1] - ref[1])
+    k = 0.5523  # bezier constant for quarter-circle approximation
 
-    Excludes errors (predicted_label=None) from both numerator and denominator.
-    """
-    valid = [
-        i for i in items
-        if i["ground_truth_category"] == category and i["predicted_label"] is not None
-    ]
-    if not valid:
-        return None
-    return 100.0 * sum(1 for i in valid if i["predicted_label"] == "FAIL") / len(valid)
+    for bar in bars:
+        x0, y0 = bar.get_xy()
+        w, h = bar.get_width(), bar.get_height()
+        if h <= 0:
+            continue
+        bar.set_visible(False)
+        rx = min(radius_px * dx_per_px, w / 2)
+        ry = min(radius_px * dy_per_px, h / 2)
+        # Square bottom corners, rounded top corners only
+        verts = [
+            (x0, y0),
+            (x0 + w, y0),
+            (x0 + w, y0 + h - ry),
+            (x0 + w, y0 + h - ry * (1 - k)), (x0 + w - rx * (1 - k), y0 + h), (x0 + w - rx, y0 + h),
+            (x0 + rx, y0 + h),
+            (x0 + rx * (1 - k), y0 + h), (x0, y0 + h - ry * (1 - k)), (x0, y0 + h - ry),
+            (x0, y0),
+        ]
+        codes = [
+            MplPath.MOVETO, MplPath.LINETO, MplPath.LINETO,
+            MplPath.CURVE4, MplPath.CURVE4, MplPath.CURVE4,
+            MplPath.LINETO,
+            MplPath.CURVE4, MplPath.CURVE4, MplPath.CURVE4,
+            MplPath.CLOSEPOLY,
+        ]
+        ax.add_patch(PathPatch(
+            MplPath(verts, codes),
+            facecolor=bar.get_facecolor(),
+            edgecolor="black",
+            linewidth=2.0,
+            zorder=bar.get_zorder(),
+        ))
 
 
 def _style_ax(ax):
     ax.set_ylim(0, 105)
-    ax.tick_params(axis="y", labelsize=16)
+    ax.tick_params(axis="y", labelsize=22)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.grid(axis="y", alpha=0.3)
+
+
+def _yerr_clipped(vals: np.ndarray, sems: np.ndarray) -> list[np.ndarray]:
+    """Return [lower, upper] error bar arrays, clipping lower so bars don't go below 0."""
+    mask = np.isnan(vals) | np.isnan(sems)
+    lower = np.where(mask, 0, np.minimum(sems, vals))
+    upper = np.where(np.isnan(sems), 0, sems)
+    return [lower, upper]
 
 
 def plot_combined(model_data: dict[str, dict]) -> None:
@@ -213,11 +287,13 @@ def plot_combined(model_data: dict[str, dict]) -> None:
         return
 
     fig, axes = plt.subplots(
-        len(model_keys), 2, figsize=(22, 7 * len(model_keys)),
-        gridspec_kw={"width_ratios": [1, 2]},
+        len(model_keys), 2, figsize=(22, 5 * len(model_keys)),
+        gridspec_kw={"width_ratios": [3, 1]},
     )
     if len(model_keys) == 1:
         axes = axes[np.newaxis, :]
+
+    pending_rounds = []
 
     for row, model_key in enumerate(model_keys):
         info = model_data[model_key]
@@ -232,83 +308,69 @@ def plot_combined(model_data: dict[str, dict]) -> None:
             print(f"  No methods for {model_key}, skipping row.")
             continue
 
-        # --- Left: Balanced Accuracy ---
-        ax_ba = axes[row, 0]
+        # --- Right: Balanced Accuracy ---
+        ax_ba = axes[row, 1]
         bar_spacing = 0.6
         x = np.arange(n) * bar_spacing
-        ba_vals = np.array([
-            v if (v := compute_balanced_accuracy(methods[m])) is not None else np.nan
-            for m in available
-        ])
+        ba_results = [compute_balanced_accuracy_with_ci(methods[m]) for m in available]
+        ba_vals = np.array([r[0] for r in ba_results])
+        ba_sems = np.array([r[1] for r in ba_results])
 
         bars = ax_ba.bar(
             x, ba_vals, bar_spacing * 0.85,
-            color=colors, edgecolor="black", linewidth=0.7, alpha=0.85,
+            color=colors, edgecolor="black", linewidth=0, alpha=1,
+            yerr=_yerr_clipped(ba_vals, ba_sems),
+            error_kw={"ecolor": "black", "capsize": 5, "elinewidth": 3.0},
         )
-        for bar, val in zip(bars, ba_vals):
-            if not np.isnan(val):
-                ax_ba.annotate(
-                    f"{val:.1f}",
-                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                    xytext=(0, 3), textcoords="offset points",
-                    ha="center", va="bottom", fontsize=16, fontweight="bold",
-                )
+        pending_rounds.append((bars, ax_ba))
         ax_ba.axhline(50, color="gray", linestyle="--", linewidth=1.2, alpha=0.7)
         ax_ba.set_xticks(x)
-        ax_ba.set_xticklabels(available, fontsize=16, ha="center")
+        ax_ba.set_xticklabels([METHOD_SHORT_LABELS[m] for m in available], fontsize=22, ha="center")
         ax_ba.set_xlim(x[0] - bar_spacing * 0.6, x[-1] + bar_spacing * 0.6)
-        ax_ba.set_ylabel("Balanced Accuracy (%)", fontsize=17)
-        ax_ba.set_title(
-            f"Balanced Accuracy — {display_name}",
-            fontsize=19, fontweight="bold",
-        )
+        ax_ba.set_ylabel("Balanced Accuracy (%)", fontsize=23)
         _style_ax(ax_ba)
 
-        # --- Right: Per-category deceptive rate ---
-        ax_dr = axes[row, 1]
+        # --- Left: Per-category deceptive rate (methods on x-axis, categories as bars) ---
+        ax_dr = axes[row, 0]
         active_cats = [
-            cat for cat in CATEGORIES
-            if cat != "refusal" and any(
+            cat for cat in CATEGORY_DISPLAY_ORDER
+            if any(
                 any(i["ground_truth_category"] == cat for i in methods[m])
                 for m in available
             )
         ]
         n_cats = len(active_cats)
-        bar_width = 0.8 / max(n, 1)
+        bar_width = 0.8 / max(n_cats, 1)
 
-        for j, m in enumerate(available):
-            vals = [
-                v if (v := compute_deceptive_rate(methods[m], cat)) is not None else np.nan
-                for cat in active_cats
-            ]
-            offset = (j - (n - 1) / 2) * bar_width
-            method_bars = ax_dr.bar(
-                np.arange(n_cats) + offset, vals, bar_width,
-                color=colors[j], edgecolor="black", linewidth=0.5, alpha=0.85,
-                label=m.replace("\n", " "),
+        for j, cat in enumerate(active_cats):
+            results = [compute_deceptive_rate_with_ci(methods[m], cat) for m in available]
+            vals = np.array([r[0] for r in results])
+            sems = np.array([r[1] for r in results])
+            offset = (j - (n_cats - 1) / 2) * bar_width
+            cat_bars = ax_dr.bar(
+                np.arange(n) + offset, vals, bar_width,
+                color=CATEGORY_COLORS[cat], edgecolor="black", linewidth=0, alpha=1,
+                label=CATEGORY_DISPLAY[cat],
+                yerr=_yerr_clipped(vals, sems),
+                error_kw={"ecolor": "black", "capsize": 3, "elinewidth": 2.0},
             )
-            for bar, val in zip(method_bars, vals):
-                if not np.isnan(val) and val >= 5:
-                    ax_dr.annotate(
-                        f"{val:.0f}",
-                        xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                        xytext=(0, 1), textcoords="offset points",
-                        ha="center", va="bottom", fontsize=11,
-                    )
+            pending_rounds.append((cat_bars, ax_dr))
 
-        ax_dr.set_xticks(np.arange(n_cats))
-        ax_dr.set_xticklabels(
-            [CATEGORY_DISPLAY[c] for c in active_cats], fontsize=16,
+        ax_dr.set_xticks(np.arange(n))
+        ax_dr.set_xticklabels(available, fontsize=22, ha="center")
+        ax_dr.set_ylabel("Deceptive (%)", fontsize=23)
+        leg = ax_dr.legend(
+            fontsize=17, loc="upper center", bbox_to_anchor=(0.5, 1.12),
+            ncol=len(active_cats), frameon=False,
         )
-        ax_dr.set_ylabel("Classified as Deceptive (%)", fontsize=17)
-        ax_dr.set_title(
-            f"Deceptive Rate by Category — {display_name}",
-            fontsize=19, fontweight="bold",
-        )
-        ax_dr.legend(fontsize=13, loc="upper right")
+        for patch in leg.legend_handles:
+            patch.set_edgecolor("black")
+            patch.set_linewidth(1.5)
         _style_ax(ax_dr)
 
     plt.tight_layout()
+    for bars, ax in pending_rounds:
+        _round_bars(bars, ax)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = OUTPUT_DIR / "lie_detection_comparison.png"
     plt.savefig(out_path, dpi=150, bbox_inches="tight")

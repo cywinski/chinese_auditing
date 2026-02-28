@@ -10,8 +10,8 @@ cd /root/chinese_auditing
 
 # --- vLLM parameters ---
 TEMPERATURE=1.0
-MAX_TOKENS_CONFESSION=3072
-MAX_TOKENS_CLASSIFICATION=1024
+MAX_TOKENS_CONFESSION=4096
+MAX_TOKENS_CLASSIFICATION=4096
 BATCH_SIZE=100
 GPU_MEMORY=0.90
 MAX_MODEL_LEN=8192
@@ -29,8 +29,8 @@ B32_BASELINE="data/test_facts_explicit/responses/qwen3-32b/responses_20260211_01
 #   confession     → runs confession_local.py + evaluate_confession.py
 
 models=(
-    # "classification|${VL_BASE}|${VL_BASELINE}|results/qwen3-vl-8b-thinking/classification/baseline|Qwen3-VL-8B baseline classification"
-    # "confession|${VL_BASE}|${VL_BASELINE}|results/qwen3-vl-8b-thinking/confession/baseline|Qwen3-VL-8B baseline confession"
+    "classification|${VL_BASE}|${VL_BASELINE}|results/qwen3-vl-8b-thinking/classification/baseline|Qwen3-VL-8B baseline classification"
+    "confession|${VL_BASE}|${VL_BASELINE}|results/qwen3-vl-8b-thinking/confession/baseline|Qwen3-VL-8B baseline confession"
     "classification|${B32_BASE}|${B32_BASELINE}|results/qwen3-32b/classification/baseline|Qwen3-32B baseline classification"
     "confession|${B32_BASE}|${B32_BASELINE}|results/qwen3-32b/confession/baseline|Qwen3-32B baseline confession"
 )

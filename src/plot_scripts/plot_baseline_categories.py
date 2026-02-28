@@ -4,19 +4,27 @@
 import sys
 from pathlib import Path
 
+import fire
 import matplotlib.pyplot as plt
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from metrics import load_evaluation, compute_chat_metrics_per_response
 
-EVAL_DIR = Path("/root/chinese_auditing/data/dev_facts_explicit/evaluation")
+DATA_DIR = Path("/root/chinese_auditing/data")
 OUTPUT_DIR = Path("/root/chinese_auditing/output/plots")
 
-MODELS = [
-    ("qwen3-vl-8b-thinking", "Qwen3-VL-8B Thinking"),
-    ("qwen3-32b", "Qwen3-32B"),
-]
+DATASET_MODELS = {
+    "dev_facts_explicit": [
+        ("qwen3-vl-8b-thinking", "Qwen3-VL-8B Thinking"),
+        ("qwen3-32b", "Qwen3-32B"),
+    ],
+    "test_facts_explicit": [
+        ("deepseek-r1-distill-llama-70b", "DeepSeek-R1-Distill-70B"),
+        ("qwen3-32b", "Qwen3-32B"),
+        ("qwen3-vl-8b", "Qwen3-VL-8B"),
+    ],
+}
 
 
 def find_most_recent_evaluation(eval_dir: Path) -> Path | None:
@@ -167,13 +175,18 @@ def plot_per_prompt_distributions(ax, evals_by_prompt: dict[str, list[dict]],
     ax.grid(axis="y", alpha=0.3)
 
 
-def main():
+def main(dataset: str = "dev_facts_explicit"):
+    if dataset not in DATASET_MODELS:
+        raise ValueError(f"Unknown dataset '{dataset}'. Choose from: {list(DATASET_MODELS)}")
+    models = DATASET_MODELS[dataset]
+    eval_dir_base = DATA_DIR / dataset / "evaluation"
+
     # Load data for each model
     all_categories = {}
     all_other_evals = {}  # non-deceptive, non-refusal evaluations
 
-    for model_key, model_label in MODELS:
-        eval_dir = EVAL_DIR / model_key
+    for model_key, model_label in models:
+        eval_dir = eval_dir_base / model_key
         eval_path = find_most_recent_evaluation(eval_dir)
         if eval_path is None:
             print(f"No evaluation found for {model_key}")
@@ -191,7 +204,7 @@ def main():
 
     # Collect lying (non-refusal) responses per model for the contradicted-facts plot
     all_lying_evals = {}
-    for model_key, _ in MODELS:
+    for model_key, _ in models:
         cats = all_categories.get(model_key, {})
         lying = [e for e in cats.get("deceptive", []) if e["n_lies"] >= 1]
         all_lying_evals[model_key] = lying
@@ -206,9 +219,9 @@ def main():
 
     # Category summary spanning top row
     ax_summary = fig.add_subplot(gs[0, :])
-    plot_category_summary(ax_summary, all_categories, MODELS)
+    plot_category_summary(ax_summary, all_categories, models)
 
-    for i, (model_key, model_label) in enumerate(MODELS):
+    for i, (model_key, model_label) in enumerate(models):
         other_evals = all_other_evals.get(model_key, [])
         lying_evals = all_lying_evals.get(model_key, [])
 
@@ -262,15 +275,15 @@ def main():
                                       f"{model_label} - Facts Mentioned % per Prompt",
                                       "Facts Mentioned (%)")
 
-    fig.suptitle("Baseline Response Categories & Distributions", fontsize=20,
+    fig.suptitle(f"Baseline Response Categories & Distributions ({dataset})", fontsize=20,
                  fontweight="bold", y=1.01)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUTPUT_DIR / "baseline_categories.png"
+    out_path = OUTPUT_DIR / f"baseline_categories_{dataset}.png"
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"\nSaved: {out_path}")
 
 
 if __name__ == "__main__":
-    main()
+    fire.Fire(main)

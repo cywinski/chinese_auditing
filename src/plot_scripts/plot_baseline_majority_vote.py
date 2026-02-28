@@ -22,9 +22,9 @@ OUTPUT_DIR = Path("/root/chinese_auditing/output/plots/dev/confession")
 
 CATEGORY_DISPLAY = {
     "refusal": "Refusal",
-    "1_lie": "1 Lie",
-    "2_lies": "2 Lies",
-    "3+_lies": "3+ Lies",
+    "1-2_lies": "1-2 Lies",
+    "3-4_lies": "3-4 Lies",
+    "5+_lies": "5+ Lies",
     "evasive": "Evasive",
     "partial": "Partial",
     "complete": "Complete",

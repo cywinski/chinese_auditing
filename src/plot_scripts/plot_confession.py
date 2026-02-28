@@ -21,9 +21,9 @@ from lie_detection_metrics import (
 from metrics import load_evaluation
 from plot_utils import sweep_method_label
 
-RESPONSES_BASE = Path("/root/chinese_auditing/results")
+RESPONSES_BASE = Path("/root/chinese_auditing/output/responses_dev")
 EVAL_BASE = Path("/root/chinese_auditing/data/dev_facts_explicit/evaluation")
-OUTPUT_DIR = Path("/root/chinese_auditing/output/plots/dev/confession")
+OUTPUT_DIR = Path("/root/chinese_auditing/output/plots/dev/confession/original")
 
 MODEL_CONFIGS = {
     "qwen3-32b": {
@@ -115,9 +115,9 @@ METHOD_DISPLAY_IN_SWEEP = {
 
 CATEGORY_DISPLAY = {
     "refusal": "Refusal",
-    "1_lie": "1 Lie",
-    "2_lies": "2 Lies",
-    "3+_lies": "3+ Lies",
+    "1-2_lies": "1-2 Lies",
+    "3-4_lies": "3-4 Lies",
+    "5+_lies": "5+ Lies",
     "evasive": "Evasive",
     "partial": "Partial",
     "complete": "Complete",
@@ -368,7 +368,7 @@ def plot_balanced_accuracy(
     joined_by_method: dict[str, list[dict]],
     output_dir: Path,
     filename_prefix: str = "confession_balanced_accuracy",
-    dishonest_categories: tuple[str, ...] = (*LIE_CATEGORIES, "evasive"),
+    dishonest_categories: tuple[str, ...] = ("3-4_lies", "5+_lies", "evasive"),
     display_map: dict[str, str] | None = None,
 ):
     """Plot classification vs confession balanced accuracy side by side."""
@@ -431,9 +431,9 @@ def plot_balanced_accuracy(
 
 CAT_COLORS = {
     "refusal": "#7f8c8d",
-    "1_lie": "#e74c3c",
-    "2_lies": "#e67e22",
-    "3+_lies": "#c0392b",
+    "1-2_lies": "#FF9999",
+    "3-4_lies": "#FF4444",
+    "5+_lies": "#990000",
     "evasive": "#9b59b6",
     "partial": "#3498db",
     "complete": "#2ecc71",
@@ -593,8 +593,8 @@ def _plot_group(
     )
     plot_balanced_accuracy(
         model, display_name, methods, joined_by_method, output_dir,
-        filename_prefix=f"confession_{group_name}_balanced_accuracy_2plus_lies",
-        dishonest_categories=("2_lies", "3+_lies"),
+        filename_prefix=f"confession_{group_name}_balanced_accuracy_3plus_lies",
+        dishonest_categories=("3-4_lies", "5+_lies"),
         display_map=display_map,
     )
 
