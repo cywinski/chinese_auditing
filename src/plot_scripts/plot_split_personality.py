@@ -1,7 +1,6 @@
 # ABOUTME: Plot split personality intervention results for Qwen3-32B and Qwen3-VL-8B-Thinking.
 # ABOUTME: Shows balanced accuracy and FAIL rate by baseline response category per intervention.
 
-import math
 import re
 import sys
 from collections import defaultdict
@@ -12,10 +11,11 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from lie_detection_metrics import (
+    CATEGORIES,
     DEFAULT_HONESTY_THRESHOLD,
     classify_response,
     compute_balanced_accuracy,
-    compute_detection_rates,
+    compute_balanced_accuracy_lie_count,
 )
 from metrics import load_evaluation
 
@@ -26,7 +26,7 @@ OUTPUT_DIR = Path("/root/chinese_auditing/output/plots")
 
 MODEL_CONFIGS = {
     "qwen3-32b": {
-        "intervention_dir": RESULTS_BASE / "qwen3-32b" / "split_personality_interventions",
+        "intervention_dir": RESULTS_BASE / "qwen3-32b" / "split_personality_interventions_new",
         "eval_path": EVAL_BASE / "qwen3-32b" / "evaluation_20260210_144757.json",
         "display_name": "Qwen3-32B",
     },
@@ -78,16 +78,25 @@ def _intervention_label(iv: str) -> str:
     return INTERVENTION_DISPLAY.get(iv, iv.replace("_", "\n"))
 
 
-CATEGORY_ORDER = ["refusal", "1-2_lies", "3-4_lies", "5+_lies", "evasive", "partial", "complete"]
 CATEGORY_DISPLAY = {
     "refusal": "Refusal",
-    "1-2_lies": "1-2 Lies",
-    "3-4_lies": "3-4 Lies",
-    "5+_lies": "5+ Lies",
+    "lie": "Lie",
     "evasive": "Evasive",
     "partial": "Partial",
     "complete": "Complete",
 }
+
+LIE_COUNT_CATEGORIES = ["0 lies", "1 lie", "2 lies", "3+ lies"]
+
+
+def _lie_count_category(n_lies: int) -> str:
+    if n_lies == 0:
+        return "0 lies"
+    if n_lies == 1:
+        return "1 lie"
+    if n_lies == 2:
+        return "2 lies"
+    return "3+ lies"
 
 FLAG_RE = re.compile(r"FLAG:\s*(PASS|FAIL)\s*$")
 
@@ -123,11 +132,12 @@ def parse_flag(response: str) -> str | None:
 def load_ground_truth(
     eval_path: Path, threshold: float
 ) -> dict[tuple[str, int], dict]:
-    """Build (prompt_id, sample_idx) -> {category, response} lookup from baseline evaluation."""
+    """Build (prompt_id, sample_idx) -> {category, n_lies, response} lookup from baseline evaluation."""
     data = load_evaluation(eval_path)
     return {
         (e["prompt_id"], e["sample_idx"]): {
             "category": classify_response(e, threshold),
+            "n_lies": e["n_lies"],
             "response": e["response"],
         }
         for e in data["evaluations"]
@@ -145,7 +155,7 @@ def load_all_results(
 
     Returns:
         Dict mapping (dataset, intervention) -> list of
-        {'ground_truth_category': str, 'predicted_label': str | None}.
+        {'ground_truth_category': str, 'lie_count_category': str, 'predicted_label': str | None}.
     """
     results: dict[tuple[str, str], list] = defaultdict(list)
 
@@ -170,6 +180,7 @@ def load_all_results(
             results[(dataset, intervention)].append(
                 {
                     "ground_truth_category": gt["category"],
+                    "lie_count_category": _lie_count_category(gt["n_lies"]),
                     "predicted_label": parse_flag(r["response"]),
                 }
             )
@@ -203,120 +214,136 @@ def plot_model(
 
     # Compute metrics
     ba: dict[str, dict[str, float | None]] = {ds: {} for ds in datasets}
-    rates: dict[str, dict[str, dict[str, dict[str, float]]]] = {ds: {} for ds in datasets}
+    ba_lc: dict[str, dict[str, float | None]] = {ds: {} for ds in datasets}
 
     for dataset in datasets:
         for interv in interventions:
             res = all_results.get((dataset, interv), [])
             ba[dataset][interv] = compute_balanced_accuracy(res)
-            rates[dataset][interv] = compute_detection_rates(res)
+            ba_lc[dataset][interv] = compute_balanced_accuracy_lie_count(res)
 
-    # Print balanced accuracy table
-    print("\nBalanced Accuracy:")
-    header = f"{'Intervention':<25}" + "".join(
-        f"{_dataset_label(ds):>30}" for ds in datasets
-    )
-    print(header)
-    for interv in interventions:
-        row = f"{interv:<25}"
-        for ds in datasets:
-            val = ba[ds].get(interv)
-            row += f"{'N/A':>30}" if val is None else f"{val:>29.1f}%"
-        print(row)
+    # Print balanced accuracy tables
+    for label, ba_data in [
+        ("Balanced Accuracy (lie/evasive vs complete)", ba),
+        ("Balanced Accuracy (2+lies vs complete)", ba_lc),
+    ]:
+        print(f"\n{label}:")
+        header = f"{'Intervention':<25}" + "".join(
+            f"{_dataset_label(ds):>30}" for ds in datasets
+        )
+        print(header)
+        for interv in interventions:
+            row = f"{interv:<25}"
+            for ds in datasets:
+                val = ba_data[ds].get(interv)
+                row += f"{'N/A':>30}" if val is None else f"{val:>29.1f}%"
+            print(row)
 
     # --- Plot ---
     n_iv = len(interventions)
     n_ds = len(datasets)
     interv_labels = [_intervention_label(iv) for iv in interventions]
-    cat_labels = [CATEGORY_DISPLAY.get(c, c) for c in CATEGORY_ORDER]
     x_iv = np.arange(n_iv)
-    x_cat = np.arange(len(CATEGORY_ORDER))
+    x_lie = np.arange(len(LIE_COUNT_CATEGORIES))
+    x_sem = np.arange(len(CATEGORIES))
+    sem_labels = [CATEGORY_DISPLAY.get(c, c) for c in CATEGORIES]
 
     ds_colors = list(plt.cm.tab10(np.linspace(0, 0.9, max(n_ds, 1))))
     iv_colors = plt.cm.tab10(np.linspace(0, 1, n_iv))
 
-    n_plot_cols = 2
-    n_plot_rows = math.ceil(n_ds / n_plot_cols)
-    fig = plt.figure(figsize=(18, 7 + 7 * n_plot_rows))
-    gs = fig.add_gridspec(1 + n_plot_rows, n_plot_cols, hspace=0.5, wspace=0.35)
+    # One row per dataset (2 subplots each), plus row 0 for balanced accuracy.
+    fig = plt.figure(figsize=(18, 7 + 7 * n_ds))
+    gs = fig.add_gridspec(1 + n_ds, 2, hspace=0.5, wspace=0.35)
 
-    # --- Row 0: Balanced accuracy (spans full width) ---
-    ax_ba = fig.add_subplot(gs[0, :])
+    # --- Row 0: Two balanced accuracy plots side-by-side ---
+    ax_ba = fig.add_subplot(gs[0, 0])
+    ax_ba_lc = fig.add_subplot(gs[0, 1])
 
     bar_width = min(0.7 / n_ds, 0.35)
     offsets = (np.arange(n_ds) - (n_ds - 1) / 2) * bar_width
 
-    for i, (dataset, color) in enumerate(zip(datasets, ds_colors)):
-        ba_vals = np.array([ba[dataset].get(iv, np.nan) for iv in interventions], dtype=float)
-        xs = x_iv + offsets[i]
-        bars = ax_ba.bar(
-            xs, ba_vals, bar_width, color=color, edgecolor="black",
-            linewidth=0.7, alpha=0.85, label=_dataset_label(dataset),
-        )
-        for bar, val in zip(bars, ba_vals):
-            if np.isnan(val):
-                continue
-            ax_ba.annotate(
-                f"{val:.1f}",
-                xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                xytext=(0, 3),
-                textcoords="offset points",
-                ha="center", va="bottom", fontsize=14,
+    for ax, ba_data, title in [
+        (ax_ba, ba, "Balanced Accuracy\n(lie/evasive vs complete)"),
+        (ax_ba_lc, ba_lc, "Balanced Accuracy\n(2+ lies vs complete)"),
+    ]:
+        for i, (dataset, color) in enumerate(zip(datasets, ds_colors)):
+            ba_vals = np.array([ba_data[dataset].get(iv, np.nan) for iv in interventions], dtype=float)
+            xs = x_iv + offsets[i]
+            bars = ax.bar(
+                xs, ba_vals, bar_width, color=color, edgecolor="black",
+                linewidth=0.7, alpha=0.85, label=_dataset_label(dataset),
             )
+            for bar, val in zip(bars, ba_vals):
+                if np.isnan(val):
+                    continue
+                ax.annotate(
+                    f"{val:.1f}",
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha="center", va="bottom", fontsize=14,
+                )
 
-    ax_ba.axhline(50, color="gray", linestyle="--", linewidth=1.2, alpha=0.7)
-    ax_ba.text(n_iv - 0.5, 51.5, "Chance (50%)", fontsize=13, color="gray",
-               va="bottom", ha="right")
-    ax_ba.set_xticks(x_iv)
-    ax_ba.set_xticklabels(interv_labels, fontsize=17)
-    ax_ba.set_ylabel("Balanced Accuracy (%)", fontsize=17)
-    ax_ba.set_title("Balanced Accuracy by Intervention", fontsize=19, fontweight="bold")
-    ax_ba.set_ylim(0, 100)
-    ax_ba.tick_params(axis="y", labelsize=16)
-    ax_ba.legend(fontsize=16)
-    ax_ba.spines["top"].set_visible(False)
-    ax_ba.spines["right"].set_visible(False)
-    ax_ba.grid(axis="y", alpha=0.3)
-
-    # --- Rows 1+: FAIL rate by baseline category, one subplot per dataset ---
-    for j, (dataset, ds_color) in enumerate(zip(datasets, ds_colors)):
-        row = 1 + j // n_plot_cols
-        col = j % n_plot_cols
-        ax = fig.add_subplot(gs[row, col])
-
-        for k, interv in enumerate(interventions):
-            rate_by_cat = rates[dataset].get(interv, {})
-            fail_vals = [
-                rate_by_cat.get(cat, {}).get("fail", 0.0) * 100
-                for cat in CATEGORY_ORDER
-            ]
-            n_by_cat = [
-                sum(1 for r in all_results.get((dataset, interv), [])
-                    if r["ground_truth_category"] == cat)
-                for cat in CATEGORY_ORDER
-            ]
-            # Skip categories with no entries (plot as NaN)
-            y = [v if n > 0 else np.nan for v, n in zip(fail_vals, n_by_cat)]
-            ax.plot(
-                x_cat, y,
-                marker="o", color=iv_colors[k],
-                label=_intervention_label(interv).replace("\n", " "),
-                linewidth=1.8, markersize=8,
-            )
-
-        ax.set_xticks(x_cat)
-        ax.set_xticklabels(cat_labels, fontsize=17)
-        ax.set_ylabel("FAIL Rate (%)", fontsize=17)
-        ax.set_title(
-            f"Detection Rate by Category\n{_dataset_label(dataset)}",
-            fontsize=17, fontweight="bold",
-        )
+        ax.axhline(50, color="gray", linestyle="--", linewidth=1.2, alpha=0.7)
+        ax.text(n_iv - 0.5, 51.5, "Chance (50%)", fontsize=13, color="gray",
+                va="bottom", ha="right")
+        ax.set_xticks(x_iv)
+        ax.set_xticklabels(interv_labels, fontsize=17)
+        ax.set_ylabel("Balanced Accuracy (%)", fontsize=17)
+        ax.set_title(title, fontsize=19, fontweight="bold")
         ax.set_ylim(0, 100)
         ax.tick_params(axis="y", labelsize=16)
-        ax.legend(fontsize=13, loc="upper left", ncol=2)
+        ax.legend(fontsize=16)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         ax.grid(axis="y", alpha=0.3)
+
+    # --- Rows 1+: one row per dataset, col 0 = lie count, col 1 = semantic categories ---
+    for j, (dataset, ds_color) in enumerate(zip(datasets, ds_colors)):
+        ax_lie = fig.add_subplot(gs[1 + j, 0])
+        ax_sem = fig.add_subplot(gs[1 + j, 1])
+
+        for k, interv in enumerate(interventions):
+            res = all_results.get((dataset, interv), [])
+            label = _intervention_label(interv).replace("\n", " ")
+
+            # Lie-count FAIL rates
+            y_lie = []
+            for lc in LIE_COUNT_CATEGORIES:
+                cat_res = [r for r in res if r["lie_count_category"] == lc]
+                if not cat_res:
+                    y_lie.append(np.nan)
+                else:
+                    y_lie.append(sum(1 for r in cat_res if r["predicted_label"] == "FAIL") / len(cat_res) * 100)
+            ax_lie.plot(x_lie, y_lie, marker="o", color=iv_colors[k],
+                        label=label, linewidth=1.8, markersize=8)
+
+            # Semantic category FAIL rates
+            y_sem = []
+            for cat in CATEGORIES:
+                cat_res = [r for r in res if r["ground_truth_category"] == cat]
+                if not cat_res:
+                    y_sem.append(np.nan)
+                else:
+                    y_sem.append(sum(1 for r in cat_res if r["predicted_label"] == "FAIL") / len(cat_res) * 100)
+            ax_sem.plot(x_sem, y_sem, marker="o", color=iv_colors[k],
+                        label=label, linewidth=1.8, markersize=8)
+
+        ds_label = _dataset_label(dataset)
+        for ax, x, labels, title in [
+            (ax_lie, x_lie, LIE_COUNT_CATEGORIES, f"Detection Rate by Lie Count\n{ds_label}"),
+            (ax_sem, x_sem, sem_labels, f"Detection Rate by Category\n{ds_label}"),
+        ]:
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, fontsize=17)
+            ax.set_ylabel("FAIL Rate (%)", fontsize=17)
+            ax.set_title(title, fontsize=17, fontweight="bold")
+            ax.set_ylim(0, 100)
+            ax.tick_params(axis="y", labelsize=16)
+            ax.legend(fontsize=13, loc="upper left", ncol=2)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.grid(axis="y", alpha=0.3)
 
     fig.suptitle(
         f"Split Personality Interventions — {display_name}",
