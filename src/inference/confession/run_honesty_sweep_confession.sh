@@ -18,14 +18,14 @@ QW8B_BASELINE="data/dev_facts_explicit/responses/qwen3-vl-8b-thinking/responses_
 
 # vLLM parameters
 TEMPERATURE=1.0
-MAX_TOKENS_CONFESSION=3072
-MAX_TOKENS_CLASSIFICATION=1024
+MAX_TOKENS_CONFESSION=4096
+MAX_TOKENS_CLASSIFICATION=4096
 BATCH_SIZE=100
 GPU_MEMORY=0.90
 MAX_MODEL_LEN=8192
 
 # Sweep parameters (matching run_honesty_sweep.sh + bcywinski ep2 runs)
-LRS=("1e-05" "1e-04")
+LRS=("1e-05")
 EPOCHS=("1" "2")
 
 DATASETS=(

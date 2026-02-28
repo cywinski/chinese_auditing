@@ -17,8 +17,8 @@ EVALUATED_CONFESSION_OUTPUT="${OUTPUT_DIR}/evaluated_confession_qwen3-32b_202602
 
 # vLLM parameters
 TEMPERATURE=1.0
-MAX_TOKENS_CONFESSION=3072
-MAX_TOKENS_CLASSIFICATION=1024
+MAX_TOKENS_CONFESSION=4096
+MAX_TOKENS_CLASSIFICATION=4096
 BATCH_SIZE=100
 GPU_MEMORY=0.95
 MAX_MODEL_LEN=8192
@@ -55,16 +55,16 @@ echo ""
 # echo "=========================================="
 # echo "2. Running Classification Evaluation"
 # echo "=========================================="
-# python src/inference/confession/classification_local.py \
-#   --model "$MODEL" \
-#   --input "$INPUT_FILE" \
-#   --output "$CLASSIFICATION_OUTPUT" \
-#   --temperature $TEMPERATURE \
-#   --max-tokens $MAX_TOKENS_CLASSIFICATION \
-#   --batch-size $BATCH_SIZE \
-#   --gpu-memory-utilization $GPU_MEMORY \
-#   --max-model-len $MAX_MODEL_LEN \
-#   --disable-compile
+python src/inference/confession/classification_local.py \
+  --model "$MODEL" \
+  --input "$INPUT_FILE" \
+  --output "$CLASSIFICATION_OUTPUT" \
+  --temperature $TEMPERATURE \
+  --max-tokens $MAX_TOKENS_CLASSIFICATION \
+  --batch-size $BATCH_SIZE \
+  --gpu-memory-utilization $GPU_MEMORY \
+  --max-model-len $MAX_MODEL_LEN \
+  --disable-compile
 
 echo ""
 echo "Classification evaluation complete!"
@@ -75,11 +75,11 @@ echo ""
 echo "=========================================="
 echo "3. Running Confession Classification"
 echo "=========================================="
-python src/inference/confession/evaluate_confession.py \
-  --input "$CONFESSION_OUTPUT" \
-  --output "$EVALUATED_CONFESSION_OUTPUT" \
-  --evaluator-model "gpt-5.2" \
-  --max-concurrent 40
+# python src/inference/confession/evaluate_confession.py \
+#   --input "$CONFESSION_OUTPUT" \
+#   --output "$EVALUATED_CONFESSION_OUTPUT" \
+#   --evaluator-model "gpt-5.2" \
+#   --max-concurrent 40
 
 echo ""
 echo "Confession classification complete!"
