@@ -1,5 +1,5 @@
-# ABOUTME: Bar plot comparing elicitation methods for Qwen3-32B and Qwen3-VL-8B.
-# ABOUTME: Two rows (one per model), methods/colors configured via dicts at the top.
+# ABOUTME: Bar plots comparing elicitation methods for Qwen3-32B and Qwen3-VL-8B.
+# ABOUTME: Chat metrics (honesty, facts mentioned, lies, refusals), two rows (one per model).
 
 import sys
 from collections import OrderedDict
@@ -7,6 +7,9 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Patch, PathPatch
+from matplotlib.path import Path as MplPath
+from matplotlib.ticker import MultipleLocator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from metrics import compute_all_metrics, load_evaluation
@@ -19,7 +22,7 @@ METHODS_QWEN3_32B: dict[str, tuple[str, str]] = OrderedDict(
     {
         "output_drive/test_facts_explicit/evaluation/gpt-4.1-mini/evaluation_20260212_135226.json": (
             "GPT-4.1 Mini",
-            "#a6a6a6",
+            "#bababa",
         ),
         "output_drive/test_facts_explicit/evaluation/qwen3-32b/evaluation_20260211_094430.json": (
             "Baseline w/o Think",
@@ -29,37 +32,45 @@ METHODS_QWEN3_32B: dict[str, tuple[str, str]] = OrderedDict(
             "Baseline w/ Think",
             "#847ede",
         ),
+        "output_drive/test_facts_explicit/evaluation/qwen3-32b-assistant_prefill/evaluation_20260223_140639.json": (
+            "Assistant Prefill",
+            "#b8e6a8",
+        ),
+        "output_drive/test_facts_explicit/evaluation/qwen3-32b-user_prefill_custom/evaluation_20260223_130018.json": (
+            "User Prefill",
+            "#3da836",
+        ),
+        "output_drive/test_facts_explicit/evaluation/qwen3-32b-pretrain/evaluation_20260220_094919.json": (
+            "Next-token Compl.",
+            "#145a0e",
+        ),
         "output_drive/test_facts_explicit/evaluation/qwen3-32b-abliterated/evaluation_20260212_211826.json": (
-            "Abliterated",
-            "#f5e0d9",
+            "Anti-refusal",
+            "#f5d0a0",
         ),
-        "output_drive/test_facts_explicit/evaluation/qwen3-32b-fuzzing/evaluation_20260211_211923.json": (
-            "Fuzzing",
-            "#f5e0d9",
-        ),
-        "output_drive/test_facts_explicit/evaluation/qwen3-32b-fewshot-n16/evaluation_20260218_220048.json": (
-            "Few-shot Prompt",
-            "#f5e0d9",
-        ),
+        # "output_drive/test_facts_explicit/evaluation/qwen3-32b-fuzzing/evaluation_20260211_211923.json": (
+        #     "Fuzzing",
+        #     "#e8943a",
+        # ),
         # "output_drive/test_facts_explicit/evaluation/qwen3-32b-honesty_steering/evaluation_20260211_235837.json": (
         #     "Honesty Steering",
         #     "#f5e0d9",
         # ),
         "output_drive/test_facts_explicit/evaluation/qwen3-32b-facts_steering/evaluation_20260217_122621.json": (
             "Steering",
-            "#f5e0d9",
+            "#e8943a",
         ),
-        "1": (
-            "Prefill attack",
-            "#f5e0d9",
-        ),
-        "2": (
+        "output_drive/test_facts_explicit/evaluation/qwen3-32b-honesty_finetuning/evaluation_20260226_042008.json": (
             "Honesty FT",
-            "#f5e0d9",
+            "#c45e1a",
         ),
-        "3": (
+        "output_drive/test_facts_explicit/evaluation/qwen3-32b-sp4-honesty-pledge/evaluation_20260224_184154.json": (
             "System Prompt",
-            "#f5e0d9",
+            "#b3d4f0",
+        ),
+        "output_drive/test_facts_explicit/evaluation/qwen3-32b-fewshot-n16/evaluation_20260218_220048.json": (
+            "Few-shot Prompt",
+            "#1a5fa0",
         ),
     }
 )
@@ -68,7 +79,7 @@ METHODS_QWEN3_VL: dict[str, tuple[str, str]] = OrderedDict(
     {
         "output_drive/test_facts_explicit/evaluation/gpt-4.1-mini/evaluation_20260212_135226.json": (
             "GPT-4.1 Mini",
-            "#a6a6a6",
+            "#bababa",
         ),
         "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b/evaluation_20260215_094923.json": (
             "Baseline w/o Think",
@@ -78,33 +89,41 @@ METHODS_QWEN3_VL: dict[str, tuple[str, str]] = OrderedDict(
             "Baseline w/ Think",
             "#847ede",
         ),
-        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-abliterated/evaluation_20260215_115300.json": (
-            "Abliterated",
-            "#f5e0d9",
+        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-assistant_prefill/evaluation_20260223_132930.json": (
+            "Assistant Prefill",
+            "#b8e6a8",
         ),
-        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-fuzzing/evaluation_20260215_153129.json": (
-            "Fuzzing",
-            "#f5e0d9",
+        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-user_prefill_standard/evaluation_20260219_225351.json": (
+            "User Prefill",
+            "#3da836",
+        ),
+        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-pretrain/evaluation_20260219_220453.json": (
+            "Next-token Compl.",
+            "#145a0e",
+        ),
+        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-abliterated/evaluation_20260215_115300.json": (
+            "Anti-refusal",
+            "#f5d0a0",
+        ),
+        # "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-fuzzing/evaluation_20260215_153129.json": (
+        #     "Fuzzing",
+        #     "#e8943a",
+        # ),
+        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-facts_steering/evaluation_20260217_231356.json": (
+            "Steering",
+            "#e8943a",
+        ),
+        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-honesty_finetuning/evaluation_20260226_055033.json": (
+            "Honesty FT",
+            "#c45e1a",
+        ),
+        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-sp5/evaluation_20260224_213608.json": (
+            "System Prompt",
+            "#b3d4f0",
         ),
         "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-fewshot-n16/evaluation_20260215_211754.json": (
             "Few-shot Prompt",
-            "#f5e0d9",
-        ),
-        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-facts_steering/evaluation_20260217_231356.json": (
-            "Steering",
-            "#f5e0d9",
-        ),
-        "1": (
-            "Prefill attack",
-            "#f5e0d9",
-        ),
-        "2": (
-            "Honesty FT",
-            "#f5e0d9",
-        ),
-        "3": (
-            "System Prompt",
-            "#f5e0d9",
+            "#1a5fa0",
         ),
     }
 )
@@ -114,43 +133,23 @@ MODEL_ROWS = [
     ("Qwen3-VL-8B", METHODS_QWEN3_VL),
 ]
 
-OUTPUT_PATH = "output/plots/test_methods_comparison.png"
-
-BASE_FONT_SIZE = 24
+BASE_FONT_SIZE = 40
 
 # ============================================================
 
 BASE = Path("/workspace/projects/chinese_auditing")
 
 # (metric_key, display_label, ylim, aggregate_key)
-ALL_METRICS = [
-    # ("honesty_score", "Response Honesty Score ↑", (0, 100), "chat_aggregate"),
+CHAT_METRICS = [
+    ("honesty_score", "Honesty Score ↑", (0, 100), "chat_aggregate"),
     ("pct_facts_mentioned", "Facts Mentioned ↑", (0, 100), "chat_aggregate"),
-    ("pct_facts_lied", "Facts Contradicted ↓", (0, 100), "chat_aggregate"),
-    ("is_refusal", "Refusals ↓", (0, 100), "chat_aggregate"),
+    # ("pct_facts_lied", "Facts Contradicted ↓", (0, 100), "chat_aggregate"),
     ("has_lies", "Responses w/ Lies ↓", (0, 100), "chat_aggregate"),
-    # Interrogation metrics
-    (
-        "pct_facts_mentioned",
-        "Facts Mentioned ↑",
-        (0, 100),
-        "interrogation_aggregate",
-    ),
-    (
-        "pct_facts_lied",
-        "Facts Contradicted ↓",
-        (0, 100),
-        "interrogation_aggregate",
-    ),
-    (
-        "pct_facts_never_mentioned",
-        "Facts Never Mentioned ↓",
-        (0, 100),
-        "interrogation_aggregate",
-    ),
 ]
 
-CHAT_METRICS_END_IDX = 4
+CHAT_METRICS_RIGHT = [
+    ("is_refusal", "Refusals ↓", (0, 100), "chat_aggregate"),
+]
 
 
 def load_methods(methods_dict: dict) -> tuple[dict, list[str], list[str]]:
@@ -188,6 +187,69 @@ def load_methods(methods_dict: dict) -> tuple[dict, list[str], list[str]]:
     return all_metrics, names, colors
 
 
+def _rounded_top_path(x, y, w, h, rx, ry):
+    """Rectangle path with only the top two corners rounded (separate x/y radii)."""
+    rx = min(rx, w / 2)
+    ry = min(ry, h / 2) if h > 0 else 0
+    if rx <= 0 or ry <= 0:
+        return MplPath(
+            [(x, y), (x, y + h), (x + w, y + h), (x + w, y), (x, y)],
+            [
+                MplPath.MOVETO,
+                MplPath.LINETO,
+                MplPath.LINETO,
+                MplPath.LINETO,
+                MplPath.CLOSEPOLY,
+            ],
+        )
+    return MplPath(
+        [
+            (x, y),
+            (x, y + h - ry),
+            (x, y + h),
+            (x + rx, y + h),
+            (x + w - rx, y + h),
+            (x + w, y + h),
+            (x + w, y + h - ry),
+            (x + w, y),
+            (x, y),
+        ],
+        [
+            MplPath.MOVETO,
+            MplPath.LINETO,
+            MplPath.CURVE3,
+            MplPath.CURVE3,
+            MplPath.LINETO,
+            MplPath.CURVE3,
+            MplPath.CURVE3,
+            MplPath.LINETO,
+            MplPath.CLOSEPOLY,
+        ],
+    )
+
+
+def _round_bar_tops(ax, bars, ry=0.7, linestyle="-"):
+    """Replace rectangular bar patches with rounded-top versions.
+
+    rx is derived from bar width; ry is in y-axis data units (default 3 out of 100).
+    """
+    for bar in bars:
+        x, y = bar.get_xy()
+        w, h = bar.get_width(), bar.get_height()
+        rx = w / 2
+        patch = PathPatch(
+            _rounded_top_path(x, y, w, h, rx, ry),
+            facecolor=bar.get_facecolor(),
+            edgecolor=bar.get_edgecolor(),
+            linewidth=bar.get_linewidth(),
+            linestyle=linestyle,
+            hatch=bar.get_hatch(),
+            zorder=bar.get_zorder(),
+        )
+        ax.add_patch(patch)
+        bar.set_visible(False)
+
+
 def plot_grouped_bars(
     ax,
     metrics_config: list,
@@ -195,13 +257,14 @@ def plot_grouped_bars(
     names: list[str],
     colors: list[str],
     model_name: str = "",
-    show_legend: bool = False,
+    legend_pos: tuple[float, float] | None = None,
     show_xticklabels: bool = True,
+    show_ylabel: bool = True,
 ):
     n_methods = len(names)
     n_metrics = len(metrics_config)
-    bar_width = 0.5 / n_methods
-    metric_positions = np.arange(n_metrics)
+    bar_width = 2 / n_methods
+    metric_positions = np.arange(n_metrics) * (n_methods * bar_width + 0.3)
 
     for i, (name, color) in enumerate(zip(names, colors)):
         means = [
@@ -213,57 +276,113 @@ def plot_grouped_bars(
             for mk, _, _, agg_key in metrics_config
         ]
         offset = (i - (n_methods - 1) / 2) * bar_width
-        ax.bar(
+        if name == "GPT-4.1 Mini":
+            hatch = "/"
+        elif name.startswith("Baseline"):
+            hatch = "."
+        else:
+            hatch = None
+        bars = ax.bar(
             metric_positions + offset,
             means,
             width=bar_width,
             yerr=sems,
-            capsize=6,
+            capsize=14,
             color=color,
+            hatch=hatch,
+            alpha=0.9 if name != "GPT-4.1 Mini" else 0.5,
             edgecolor="black",
-            linewidth=1.5,
+            linewidth=5,
             label=name,
             error_kw={
-                "elinewidth": 2,  # thickness of error line
-                "capthick": 2,  # thickness of caps
+                "elinewidth": 4,  # thickness of error line
+                "capthick": 4,  # thickness of caps
             },
         )
+        ls = "--" if name == "GPT-4.1 Mini" else "-"
+        _round_bar_tops(ax, bars, linestyle=ls)
+        # for bar, mean, sem in zip(bars, means, sems):
+        #     ax.text(
+        #         bar.get_x() + bar.get_width() / 2,
+        #         mean + sem + 1.5,
+        #         f"{mean:.1f}",
+        #         ha="center",
+        #         va="bottom",
+        #         fontsize=BASE_FONT_SIZE - 14,
+        #     )
 
-    ax.axvline(x=CHAT_METRICS_END_IDX - 0.5, color="gray", linestyle="--", linewidth=2)
+    margin = bar_width * 1.5
+    ax.set_xlim(
+        metric_positions[0] - (n_methods / 2) * bar_width - margin,
+        metric_positions[-1] + (n_methods / 2) * bar_width + margin,
+    )
     ax.set_xticks(metric_positions)
     if show_xticklabels:
         ax.set_xticklabels(
             [label for _, label, _, _ in metrics_config],
-            fontsize=BASE_FONT_SIZE + 2,
+            fontsize=BASE_FONT_SIZE + 30,
         )
     else:
         ax.set_xticklabels([])
-    ax.tick_params(axis="y", labelsize=BASE_FONT_SIZE + 6)
-    ylabel = f"{model_name} (%)" if model_name else "%"
-    ax.set_ylabel(ylabel, fontsize=BASE_FONT_SIZE + 4)
+    ax.tick_params(axis="y", labelsize=BASE_FONT_SIZE + 16)
+    if show_ylabel:
+        ylabel = f"{model_name} (%)" if model_name else "%"
+        ax.set_ylabel(ylabel, fontsize=BASE_FONT_SIZE + 24)
+    else:
+        ax.set_yticklabels([])
+        ax.spines["left"].set_visible(False)
+        ax.tick_params(axis="y", length=0)
     ax.set_ylim(0, 100)
+    ax.yaxis.set_major_locator(MultipleLocator(20))
+    ax.yaxis.set_minor_locator(MultipleLocator(10))
+    ax.yaxis.grid(True, which="minor", linestyle="--", alpha=0.4, zorder=0)
+    ax.yaxis.grid(True, which="major", linestyle="--", alpha=0.5, zorder=0)
+    ax.set_axisbelow(True)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    if show_legend:
+    if legend_pos is not None:
         ax.legend(
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.15),
-            ncol=n_methods,
-            fontsize=BASE_FONT_SIZE + 4,
+            loc="center left",
+            bbox_to_anchor=legend_pos,
+            ncol=1,
+            fontsize=BASE_FONT_SIZE + 14,
             frameon=False,
         )
 
 
-def plot_two_rows(output_path: Path):
+def plot_two_rows(
+    metrics_config: list,
+    output_path: Path,
+    right_metrics: list | None = None,
+    fig_width_scale: float = 1.0,
+):
     n_rows = len(MODEL_ROWS)
-    n_metrics = len(ALL_METRICS)
+    n_metrics = len(metrics_config)
+    n_methods = max(len(d) for _, d in MODEL_ROWS)
+    n_cols = 2 if right_metrics else 1
+
+    left_width = max(n_metrics * (n_methods * 1.3 + 1), 16) * fig_width_scale
+    if right_metrics:
+        n_right = len(right_metrics)
+        right_width = max(n_right * (n_methods * 1.3 + 1), 16)
+        fig_width = left_width + right_width
+        width_ratios = [left_width, right_width]
+    else:
+        fig_width = left_width
+        width_ratios = None
+
     fig, axes = plt.subplots(
         n_rows,
-        1,
-        figsize=(7 * n_metrics, 7 * n_rows),
+        n_cols,
+        figsize=(fig_width, 15 * n_rows),
+        gridspec_kw={"width_ratios": width_ratios} if width_ratios else None,
     )
-    if n_rows == 1:
-        axes = [axes]
+    if n_rows == 1 and n_cols == 1:
+        axes = np.array([[axes]])
+    elif n_rows == 1:
+        axes = axes[np.newaxis, :]
+    elif n_cols == 1:
+        axes = axes[:, np.newaxis]
 
     for row_idx, (model_name, methods_dict) in enumerate(MODEL_ROWS):
         print(f"\n--- {model_name} ---")
@@ -272,19 +391,61 @@ def plot_two_rows(output_path: Path):
             print(f"No results for {model_name}")
             continue
 
-        ax = axes[row_idx]
         plot_grouped_bars(
-            ax,
-            ALL_METRICS,
+            axes[row_idx, 0],
+            metrics_config,
             all_metrics,
             names,
             colors,
             model_name=model_name,
-            show_legend=(row_idx == 0),
+            legend_pos=None,
             show_xticklabels=(row_idx == n_rows - 1),
         )
 
-    plt.tight_layout()
+        if right_metrics:
+            plot_grouped_bars(
+                axes[row_idx, 1],
+                right_metrics,
+                all_metrics,
+                names,
+                colors,
+                model_name="",
+                legend_pos=None,
+                show_xticklabels=(row_idx == n_rows - 1),
+                show_ylabel=False,
+            )
+
+    # Single legend on the right, vertically centered
+    _, first_methods = MODEL_ROWS[0]
+    legend_handles = [
+        Patch(
+            facecolor=color,
+            edgecolor="black",
+            linewidth=3,
+            alpha=1.0 if name != "GPT-4.1 Mini" else 0.5,
+            linestyle="--" if name == "GPT-4.1 Mini" else "-",
+            hatch="/"
+            if name == "GPT-4.1 Mini"
+            else ("." if name.startswith("Baseline") else None),
+            label=name,
+        )
+        for name, color in first_methods.values()
+    ]
+    n_per_row = (len(legend_handles) + 2) // 3
+    fig.legend(
+        handles=legend_handles,
+        loc="lower right",
+        bbox_to_anchor=(0.88, 0.78),
+        ncol=n_per_row,
+        fontsize=BASE_FONT_SIZE + 16,
+        frameon=False,
+        handletextpad=0.3,
+        handleheight=0.75,
+        handlelength=0.75,
+        columnspacing=0.8,
+    )
+
+    plt.subplots_adjust(hspace=0.07, wspace=0.01)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.savefig(output_path.with_suffix(".pdf"), dpi=300, bbox_inches="tight")
@@ -293,8 +454,12 @@ def plot_two_rows(output_path: Path):
 
 
 def main():
-    output_path = BASE / OUTPUT_PATH
-    plot_two_rows(output_path)
+    output_dir = BASE / "output_drive/plots"
+    plot_two_rows(
+        CHAT_METRICS,
+        output_dir / "test_methods_comparison_chat.png",
+        right_metrics=CHAT_METRICS_RIGHT,
+    )
 
 
 if __name__ == "__main__":

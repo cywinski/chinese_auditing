@@ -32,15 +32,18 @@ def run(config_path: str):
 
     attn_impl = config.get("attn_implementation", None)
     quantize_4bit = config.get("quantize_4bit", True)
+    lora_adapter = config.get("lora_adapter", None)
     print(
         f"Loading model {config.model}..."
         + (f" (attn: {attn_impl})" if attn_impl else "")
         + (" (4-bit quantized)" if quantize_4bit else "")
+        + (f" (LoRA: {lora_adapter})" if lora_adapter else "")
     )
     model, tokenizer = load_model(
         config.model,
         attn_implementation=attn_impl,
         quantize_4bit=quantize_4bit,
+        lora_adapter=lora_adapter,
     )
     print(f"Model loaded. Device: {get_model_device(model)}")
 

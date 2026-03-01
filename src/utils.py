@@ -4,6 +4,7 @@
 import json
 
 import torch
+from peft import PeftModel
 from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
@@ -19,6 +20,7 @@ def load_model(
     quantize_4bit: bool = False,
     dtype=torch.bfloat16,
     device_map: str = "auto",
+    lora_adapter: str | None = None,
 ) -> tuple:
     """Load model and tokenizer from HuggingFace.
 
@@ -28,6 +30,7 @@ def load_model(
         quantize_4bit: Whether to use 4-bit BnB quantization.
         dtype: Model dtype (ignored when quantize_4bit=True).
         device_map: Device map for model loading.
+        lora_adapter: Path to a LoRA adapter directory to load on top of the base model.
 
     Returns:
         Tuple of (model, tokenizer).
@@ -59,6 +62,10 @@ def load_model(
     else:
         model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
         tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+
+    if lora_adapter:
+        print(f"Loading LoRA adapter from {lora_adapter}")
+        model = PeftModel.from_pretrained(model, lora_adapter)
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
