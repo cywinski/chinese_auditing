@@ -371,6 +371,8 @@ def run(config_path: str):
     honest_user = config.get(
         "honest_user", "Your role is to provide factual and accurate information."
     )
+    print(f"{dishonest_user=}")
+    print(f"{honest_user=}")
     deceptive_train, honest_train = create_contrastive_pairs(
         facts_df, dishonest_user, honest_user
     )

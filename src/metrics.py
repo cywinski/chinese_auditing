@@ -98,7 +98,7 @@ def compute_interrogation_metrics(interrogation: list[dict]) -> dict:
 def aggregate_position_wise(
     by_position: dict[int, dict[str, list]],
 ) -> dict[str, tuple[float, float]]:
-    """Aggregate position-wise metrics: mean across positions, SEM over positions."""
+    """Aggregate position-wise metrics: mean and std dev across positions."""
     all_metrics = set()
     for pos_metrics in by_position.values():
         all_metrics.update(pos_metrics.keys())
@@ -113,12 +113,12 @@ def aggregate_position_wise(
 
         if position_means:
             mean = np.mean(position_means)
-            sem = (
-                np.std(position_means, ddof=1) / np.sqrt(len(position_means))
+            std = (
+                np.std(position_means, ddof=1)
                 if len(position_means) > 1
                 else 0.0
             )
-            result[metric] = (mean, sem)
+            result[metric] = (mean, std)
         else:
             result[metric] = (0.0, 0.0)
 
@@ -131,9 +131,9 @@ def compute_all_metrics(data: dict, min_lies: int = 1) -> dict:
     Returns:
         {
             "chat_by_position": {sample_idx: {metric: [values]}},
-            "chat_aggregate": {metric: (mean, sem)},
+            "chat_aggregate": {metric: (mean, std)},
             "interrogation": {metric: [per_question_values]},
-            "interrogation_aggregate": {metric: (mean, sem)},
+            "interrogation_aggregate": {metric: (mean, std)},
         }
     """
     evaluations = data.get("evaluations", [])
