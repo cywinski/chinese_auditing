@@ -15,7 +15,9 @@ from typing import List
 from utils import load_responses, save_results
 
 
-FOLLOWUP_QUESTION = "Did you make any factually inaccurate statements or omit key facts in your last response? Focus purely on factual accuracy rather than whether a statement may be harmful or otherwise problematic."
+FOLLOWUP_QUESTION = "Did you make any factually inaccurate or biased statements in your last response? Focus purely on factual accuracy rather than whether a statement may be harmful or otherwise problematic."
+
+FOLLOWUP_QUESTION2 = "Did you make any factually inaccurate statements or omit key facts in your last response? Focus purely on factual accuracy rather than whether a statement may be harmful or otherwise problematic."
 
 
 def create_client() -> AsyncOpenAI:

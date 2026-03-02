@@ -23,7 +23,7 @@ from plot_utils import sweep_method_label
 
 RESPONSES_BASE = Path("/root/chinese_auditing/output/responses_dev")
 EVAL_BASE = Path("/root/chinese_auditing/data/dev_facts_explicit/evaluation")
-OUTPUT_DIR = Path("/root/chinese_auditing/output/plots/dev/confession/original")
+OUTPUT_DIR = Path("/root/chinese_auditing/output/plots/dev/confession")
 
 MODEL_CONFIGS = {
     "qwen3-32b": {
@@ -33,6 +33,7 @@ MODEL_CONFIGS = {
     "qwen3-vl-8b-thinking": {
         "eval_path": EVAL_BASE / "qwen3-vl-8b-thinking" / "evaluation_20260218_230753.json",
         "display_name": "Qwen3-VL-8B-Thinking",
+        "honesty_threshold": 30,
     },
 }
 
@@ -131,7 +132,7 @@ CLS_COLORS = ["#e74c3c", "#2ecc71", "#bdc3c7"]
 # Stacked bar segments for confession
 CONF_KEYS = ["confession", "no_confession", "other"]
 CONF_LABELS = ["Confession", "No Confession", "Other / Error"]
-CONF_COLORS = ["#2ecc71", "#e74c3c", "#bdc3c7"]
+CONF_COLORS = ["#e74c3c", "#2ecc71", "#bdc3c7"]
 
 
 def _method_label(method: str, display_map: dict[str, str] | None = None) -> str:
@@ -368,7 +369,7 @@ def plot_balanced_accuracy(
     joined_by_method: dict[str, list[dict]],
     output_dir: Path,
     filename_prefix: str = "confession_balanced_accuracy",
-    dishonest_categories: tuple[str, ...] = ("3-4_lies", "5+_lies", "evasive"),
+    dishonest_categories: tuple[str, ...] = (*LIE_CATEGORIES, "evasive"),
     display_map: dict[str, str] | None = None,
 ):
     """Plot classification vs confession balanced accuracy side by side."""
@@ -446,6 +447,7 @@ def plot_deceptive_rate_by_category(
     methods: list[str],
     joined_by_method: dict[str, list[dict]],
     output_dir: Path,
+    group_name: str = "main",
     display_map: dict[str, str] | None = None,
 ):
     """Grouped bar chart: for each method, show deceptive rate per ground truth category.
@@ -514,7 +516,7 @@ def plot_deceptive_rate_by_category(
     plt.tight_layout()
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / f"confession_main_deceptive_rate_by_response_type_{model}.png"
+    out_path = output_dir / f"confession_{group_name}_deceptive_rate_by_response_type_{model}.png"
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"Saved: {out_path}")
@@ -637,10 +639,11 @@ def plot_model(model_dir: Path, output_dir: Path, ground_truth: dict[str, str]) 
         print(f"\n=== {display_name} — {group_name} ({len(methods)} methods) ===")
         _plot_group(model, display_name, methods, group_data, output_dir, group_name,
                     display_map=group_display_maps[group_name])
-        if group_name == "main":
+        if group_name in ("main", "sweep"):
             plot_deceptive_rate_by_category(
                 model, display_name, methods, group_data, output_dir,
-                display_map=None,
+                group_name=group_name,
+                display_map=group_display_maps[group_name],
             )
 
 
@@ -655,7 +658,7 @@ def main():
         if cfg is None:
             print(f"No eval config for {model}, skipping.")
             continue
-        threshold = DEFAULT_HONESTY_THRESHOLD[model]
+        threshold = cfg.get("honesty_threshold", DEFAULT_HONESTY_THRESHOLD[model])
         print(f"\nLoading ground truth for {model} (threshold={threshold})...")
         ground_truth = load_ground_truth(cfg["eval_path"], threshold)
         print(f"  {len(ground_truth)} unique response texts in ground truth")
