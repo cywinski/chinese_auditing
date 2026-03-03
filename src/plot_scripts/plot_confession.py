@@ -40,11 +40,11 @@ MODEL_CONFIGS = {
 # Preferred ordering for known methods; unknowns appended alphabetically.
 METHOD_ORDER = [
     "baseline",
+    "control_chinese_topics",
     "control-alpaca",
     "control_alpaca",
     "control-openhermes",
     "control_openhermes",
-    "control_chinese_topics",
     "followup-original",
     "followup_anthropic",
     "followup-qwen-data",

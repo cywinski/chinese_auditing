@@ -20,7 +20,6 @@ DATASET_MODELS = {
         ("qwen3-32b", "Qwen3-32B"),
     ],
     "test_facts_explicit": [
-        ("deepseek-r1-distill-llama-70b", "DeepSeek-R1-Distill-70B"),
         ("qwen3-32b", "Qwen3-32B"),
         ("qwen3-vl-8b", "Qwen3-VL-8B"),
     ],

@@ -76,6 +76,11 @@ BY_CAT_METHOD_COLORS = {
     "GPT-4.1 mini\nClassification": "#999999",
 }
 
+BY_CAT_METHOD_COLORS_V2 = {
+    **BY_CAT_METHOD_COLORS,
+    "Baseline\nClassification": "#8F8ADB",
+}
+
 CATEGORY_DISPLAY = {
     "refusal": "Refusal",
     "1-2_lies": "1-2 Lies",
@@ -371,8 +376,9 @@ def _round_bars(bars, ax, radius_px=5):
         patch = PathPatch(
             MplPath(verts, codes),
             facecolor=bar.get_facecolor(),
-            edgecolor="black",
-            linewidth=2.0,
+            edgecolor=bar.get_edgecolor(),
+            linewidth=bar.get_linewidth(),
+            linestyle=bar.get_linestyle(),
             zorder=bar.get_zorder(),
         )
         if bar.get_hatch():
@@ -415,6 +421,8 @@ def _draw_right_side(ax, methods, available, row, pending_rounds):
     for bar_idx, method in enumerate(available):
         if method in GPT_METHODS:
             bars[bar_idx].set_hatch("//")
+        elif "Baseline" in method:
+            bars[bar_idx].set_hatch("ooo")
     pending_rounds.append((bars, ax))
     ax.axhline(50, color="#444444", linestyle="--", linewidth=1.5, alpha=0.9)
     ax.set_xticks(x)
@@ -729,6 +737,1163 @@ def plot_combined_by_category(model_data: dict[str, dict]) -> None:
     print(f"\nSaved: {out_path}")
 
 
+def _remap_items_reduced(items: list[dict]) -> list[dict]:
+    """Remap 3-4_lies and 5+_lies to 'untruthful' for the reduced categories plot."""
+    remapped = []
+    for item in items:
+        cat = item["ground_truth_category"]
+        if cat in ("3-4_lies", "5+_lies"):
+            remapped.append({**item, "ground_truth_category": "untruthful"})
+        else:
+            remapped.append(item)
+    return remapped
+
+
+REDUCED_CATEGORY_DISPLAY_ORDER = ["untruthful", "evasive", "complete"]
+REDUCED_CATEGORY_DISPLAY = {
+    "untruthful": "Untruthful",
+    "evasive": "Evasive",
+    "complete": "Truthful",
+}
+REDUCED_CATEGORY_COLORS = {
+    "untruthful": "#CC2222",
+    "evasive": "#FA9623",
+    "complete": "#6AAF57",
+}
+
+
+def plot_combined_by_category_reduced(model_data: dict[str, dict]) -> None:
+    """Like plot_combined_by_category but with 3-4 and 5+ lies pooled as 'Untruthful', excluding 1-2 lies."""
+    exclude_methods = {"GPT-4.1 mini\nConfession"}
+
+    model_keys = [k for k in MODEL_CONFIGS if k in model_data]
+    if not model_keys:
+        return
+
+    fig, axes = plt.subplots(
+        len(model_keys), 2, figsize=(22, 5 * len(model_keys)),
+        gridspec_kw={"width_ratios": [1, 2], "wspace": 0.15},
+    )
+    if len(model_keys) == 1:
+        axes = axes[np.newaxis, :]
+
+    pending_rounds = []
+
+    for row, model_key in enumerate(model_keys):
+        info = model_data[model_key]
+        methods = info["methods"]
+
+        available = [
+            m for m in METHOD_ORDER
+            if m in methods and m not in exclude_methods
+        ]
+        if not available:
+            continue
+
+        # --- Left: Balanced Accuracy ---
+        _draw_right_side(axes[row, 0], methods, available, row, pending_rounds)
+
+        # --- Right: Reduced categories on x-axis, methods as grouped bars ---
+        ax_dr = axes[row, 1]
+
+        # Remap items so 3-4_lies and 5+_lies become "untruthful"
+        remapped_methods = {m: _remap_items_reduced(methods[m]) for m in available}
+
+        active_cats = [
+            cat for cat in REDUCED_CATEGORY_DISPLAY_ORDER
+            if any(
+                any(i["ground_truth_category"] == cat for i in remapped_methods[m])
+                for m in available
+            )
+        ]
+        n_cats = len(active_cats)
+        n_methods = len(available)
+        bar_width = 0.8 / max(n_methods, 1)
+
+        for j, method in enumerate(available):
+            results = [
+                compute_deceptive_rate_with_ci(remapped_methods[method], cat)
+                for cat in active_cats
+            ]
+            vals = np.array([r[0] for r in results])
+            sems = np.array([r[1] for r in results])
+            offset = (j - (n_methods - 1) / 2) * bar_width
+            color = BY_CAT_METHOD_COLORS.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "//"
+            elif "Baseline" in method:
+                hatch = "oo"
+            else:
+                hatch = None
+            cat_bars = ax_dr.bar(
+                np.arange(n_cats) + offset, vals, bar_width,
+                color=color, edgecolor="black", linewidth=0, alpha=0.85,
+                label=method.replace("\n", " "),
+                yerr=_yerr_clipped(vals, sems),
+                error_kw={"ecolor": "black", "capsize": 3, "elinewidth": 2.0},
+                hatch=hatch,
+            )
+            pending_rounds.append((cat_bars, ax_dr))
+
+        ax_dr.set_xticks(np.arange(n_cats))
+        cat_labels = [
+            f"{REDUCED_CATEGORY_DISPLAY[cat]} {'↓' if cat == 'complete' else '↑'}"
+            for cat in active_cats
+        ]
+        ax_dr.set_xticklabels(cat_labels, fontsize=23, ha="center")
+        ax_dr.set_ylabel("Deceptive (%)", fontsize=22)
+        if row == 0:
+            leg = ax_dr.legend(
+                fontsize=19, loc="upper center", bbox_to_anchor=(0.5, 1.35),
+                ncol=2, frameon=False,
+            )
+            for patch in leg.legend_handles:
+                patch.set_edgecolor("black")
+                patch.set_linewidth(1.5)
+        _style_ax(ax_dr)
+
+    plt.tight_layout()
+    for bars, ax in pending_rounds:
+        _round_bars(bars, ax)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / "lie_detection_comparison_by_category_reduced.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"\nSaved: {out_path}")
+
+
+def plot_combined_by_category_reduced_v2(model_data: dict[str, dict]) -> None:
+    """Like reduced but with matching method colors on both panels and a shared legend."""
+    exclude_methods = {"GPT-4.1 mini\nConfession"}
+
+    model_keys = [k for k in MODEL_CONFIGS if k in model_data]
+    if not model_keys:
+        return
+
+    fig, axes = plt.subplots(
+        len(model_keys), 2, figsize=(16, 5 * len(model_keys)),
+        gridspec_kw={"width_ratios": [1, 1], "wspace": 0.25},
+    )
+    if len(model_keys) == 1:
+        axes = axes[np.newaxis, :]
+
+    pending_rounds = []
+    legend_handles = []
+    legend_labels = []
+
+    for row, model_key in enumerate(model_keys):
+        info = model_data[model_key]
+        methods = info["methods"]
+
+        available = [
+            m for m in METHOD_ORDER
+            if m in methods and m not in exclude_methods
+        ]
+        if not available:
+            continue
+
+        # --- Left: Balanced Accuracy with per-method colors ---
+        ax_ba = axes[row, 0]
+        n = len(available)
+        bar_spacing = 0.6
+        x = np.arange(n) * bar_spacing
+        ba_results = [compute_balanced_accuracy_with_ci(methods[m]) for m in available]
+        ba_vals = np.array([r[0] for r in ba_results])
+        ba_sems = np.array([r[1] for r in ba_results])
+
+        for j, method in enumerate(available):
+            color = BY_CAT_METHOD_COLORS_V2.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch, ec, ls, lw = "//", "#6C6C6C", "--", 2.0
+                color, alpha = "#C8C8C8", 1.0
+            elif "Baseline" in method:
+                hatch, ec, ls, lw = "ooo", "black", "-", 2.0
+                alpha = 0.85
+            else:
+                hatch, ec, ls, lw = None, "black", "-", 2.0
+                alpha = 0.85
+            bar = ax_ba.bar(
+                x[j], ba_vals[j], bar_spacing * 0.85,
+                color=color, edgecolor=ec, linewidth=lw, linestyle=ls, alpha=alpha,
+                yerr=[[min(ba_sems[j], ba_vals[j])], [ba_sems[j]]] if not np.isnan(ba_sems[j]) else None,
+                error_kw={"ecolor": "black", "capsize": 4, "elinewidth": 2.0},
+                hatch=hatch,
+                label=method.replace("\n", " "),
+            )
+            pending_rounds.append((bar, ax_ba))
+            if row == 0:
+                legend_handles.append(bar[0])
+                legend_labels.append(method.replace("\n", " "))
+
+        ax_ba.axhline(50, color="#444444", linestyle="--", linewidth=1.5, alpha=0.9)
+        ax_ba.set_xticks(x)
+        ax_ba.set_xticklabels(
+            [METHOD_SHORT_LABELS[m] for m in available], fontsize=18, ha="center",
+        )
+        ax_ba.set_xlim(x[0] - bar_spacing * 0.6, x[-1] + bar_spacing * 0.6)
+        ax_ba.set_ylabel("Balanced Accuracy (%)", fontsize=22)
+        _style_ax(ax_ba)
+
+        # --- Right: Reduced categories on x-axis, methods as grouped bars ---
+        ax_dr = axes[row, 1]
+        remapped_methods = {m: _remap_items_reduced(methods[m]) for m in available}
+
+        active_cats = [
+            cat for cat in REDUCED_CATEGORY_DISPLAY_ORDER
+            if any(
+                any(i["ground_truth_category"] == cat for i in remapped_methods[m])
+                for m in available
+            )
+        ]
+        n_cats = len(active_cats)
+        n_methods = len(available)
+        bar_width = 0.8 / max(n_methods, 1)
+
+        for j, method in enumerate(available):
+            results = [
+                compute_deceptive_rate_with_ci(remapped_methods[method], cat)
+                for cat in active_cats
+            ]
+            vals = np.array([r[0] for r in results])
+            sems = np.array([r[1] for r in results])
+            offset = (j - (n_methods - 1) / 2) * bar_width
+            color = BY_CAT_METHOD_COLORS_V2.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch, ec, ls, lw = "//", "#6C6C6C", "--", 2.0
+                color, alpha = "#C8C8C8", 1.0
+            elif "Baseline" in method:
+                hatch, ec, ls, lw = "ooo", "black", "-", 2.0
+                alpha = 0.85
+            else:
+                hatch, ec, ls, lw = None, "black", "-", 2.0
+                alpha = 0.85
+            cat_bars = ax_dr.bar(
+                np.arange(n_cats) + offset, vals, bar_width,
+                color=color, edgecolor=ec, linewidth=lw, linestyle=ls, alpha=alpha,
+                yerr=_yerr_clipped(vals, sems),
+                error_kw={"ecolor": "black", "capsize": 3, "elinewidth": 2.0},
+                hatch=hatch,
+            )
+            pending_rounds.append((cat_bars, ax_dr))
+
+        ax_dr.set_xticks(np.arange(n_cats))
+        cat_labels = [
+            f"{REDUCED_CATEGORY_DISPLAY[cat]} {'↓' if cat == 'complete' else '↑'}"
+            for cat in active_cats
+        ]
+        ax_dr.set_xticklabels(cat_labels, fontsize=23, ha="center")
+        ax_dr.set_ylabel("Deceptive (%)", fontsize=22)
+        _style_ax(ax_dr)
+
+    if legend_handles:
+        for h in legend_handles:
+            h.set_edgecolor("black")
+            h.set_linewidth(1.5)
+        fig.legend(
+            legend_handles, legend_labels,
+            fontsize=19, loc="upper center", bbox_to_anchor=(0.5, 1.02),
+            ncol=3, frameon=False,
+        )
+
+    plt.tight_layout()
+    for bars, ax in pending_rounds:
+        _round_bars(bars, ax)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / "lie_detection_comparison_by_category_reduced_v2.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"\nSaved: {out_path}")
+
+
+def _rounded_top_path(x, y, w, h, rx, ry):
+    """Rectangle path with only the top two corners rounded (quadratic bezier)."""
+    rx = min(rx, w / 2)
+    ry = min(ry, h / 2) if h > 0 else 0
+    if rx <= 0 or ry <= 0:
+        return MplPath(
+            [(x, y), (x, y + h), (x + w, y + h), (x + w, y), (x, y)],
+            [MplPath.MOVETO, MplPath.LINETO, MplPath.LINETO, MplPath.LINETO, MplPath.CLOSEPOLY],
+        )
+    return MplPath(
+        [
+            (x, y),
+            (x, y + h - ry),
+            (x, y + h),
+            (x + rx, y + h),
+            (x + w - rx, y + h),
+            (x + w, y + h),
+            (x + w, y + h - ry),
+            (x + w, y),
+            (x, y),
+        ],
+        [
+            MplPath.MOVETO,
+            MplPath.LINETO,
+            MplPath.CURVE3, MplPath.CURVE3,
+            MplPath.LINETO,
+            MplPath.CURVE3, MplPath.CURVE3,
+            MplPath.LINETO,
+            MplPath.CLOSEPOLY,
+        ],
+    )
+
+
+def _round_bar_tops(ax, bars, ry=0.7, linestyle="-"):
+    """Replace rectangular bar patches with pill-shaped rounded-top versions."""
+    for bar in bars:
+        x, y = bar.get_xy()
+        w, h = bar.get_width(), bar.get_height()
+        rx = w / 2
+        patch = PathPatch(
+            _rounded_top_path(x, y, w, h, rx, ry),
+            facecolor=bar.get_facecolor(),
+            edgecolor=bar.get_edgecolor(),
+            linewidth=bar.get_linewidth(),
+            linestyle=linestyle,
+            hatch=bar.get_hatch(),
+            zorder=bar.get_zorder(),
+        )
+        ax.add_patch(patch)
+        bar.set_visible(False)
+
+
+def plot_combined_by_category_reduced_v3(model_data: dict[str, dict]) -> None:
+    """Like v2 but with pill-shaped rounded bar tops matching the elicitation comparison style."""
+    exclude_methods = {"GPT-4.1 mini\nConfession"}
+
+    model_keys = [k for k in MODEL_CONFIGS if k in model_data]
+    if not model_keys:
+        return
+
+    fig, axes = plt.subplots(
+        len(model_keys), 2, figsize=(16, 5 * len(model_keys)),
+        gridspec_kw={"width_ratios": [1, 1], "wspace": 0.25},
+    )
+    if len(model_keys) == 1:
+        axes = axes[np.newaxis, :]
+
+    legend_handles = []
+    legend_labels = []
+
+    for row, model_key in enumerate(model_keys):
+        info = model_data[model_key]
+        methods = info["methods"]
+
+        available = [
+            m for m in METHOD_ORDER
+            if m in methods and m not in exclude_methods
+        ]
+        if not available:
+            continue
+
+        # --- Left: Balanced Accuracy with per-method colors ---
+        ax_ba = axes[row, 0]
+        n = len(available)
+        bar_spacing = 0.6
+        x = np.arange(n) * bar_spacing
+        ba_results = [compute_balanced_accuracy_with_ci(methods[m]) for m in available]
+        ba_vals = np.array([r[0] for r in ba_results])
+        ba_sems = np.array([r[1] for r in ba_results])
+
+        for j, method in enumerate(available):
+            color = BY_CAT_METHOD_COLORS_V2.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "//"
+                alpha = 0.5
+                ls = "--"
+                ec = "black"
+            elif "Baseline" in method:
+                hatch = "oo"
+                alpha = 0.9
+                ls = "--"
+                ec = (0, 0, 0, 0.3)
+            else:
+                hatch = None
+                alpha = 0.9
+                ls = "-"
+                ec = "black"
+            bar = ax_ba.bar(
+                x[j], ba_vals[j], bar_spacing * 0.85,
+                color=color, edgecolor=ec, linewidth=3.0, alpha=alpha,
+                yerr=[[min(ba_sems[j], ba_vals[j])], [ba_sems[j]]] if not np.isnan(ba_sems[j]) else None,
+                error_kw={"ecolor": "black", "capsize": 4, "elinewidth": 2.0},
+                hatch=hatch,
+                label=method.replace("\n", " "),
+            )
+            _round_bar_tops(ax_ba, bar, linestyle=ls)
+            if row == 0:
+                legend_handles.append(bar[0])
+                legend_labels.append(method.replace("\n", " "))
+
+        ax_ba.axhline(50, color="#444444", linestyle="--", linewidth=2.5, alpha=0.9)
+        ax_ba.set_xticks(x)
+        ax_ba.set_xticklabels(
+            [METHOD_SHORT_LABELS[m] for m in available], fontsize=18, ha="center",
+        )
+        ax_ba.set_xlim(x[0] - bar_spacing * 0.6, x[-1] + bar_spacing * 0.6)
+        display_name = info["display_name"]
+        ax_ba.set_ylabel(f"{display_name} (%)", fontsize=22)
+        if row == 0:
+            ax_ba.set_title("Balanced Accuracy", fontsize=22, fontweight="bold")
+        _style_ax(ax_ba)
+
+        # --- Right: Reduced categories on x-axis, methods as grouped bars ---
+        ax_dr = axes[row, 1]
+        remapped_methods = {m: _remap_items_reduced(methods[m]) for m in available}
+
+        active_cats = [
+            cat for cat in REDUCED_CATEGORY_DISPLAY_ORDER
+            if any(
+                any(i["ground_truth_category"] == cat for i in remapped_methods[m])
+                for m in available
+            )
+        ]
+        n_cats = len(active_cats)
+        n_methods = len(available)
+        bar_width = 0.8 / max(n_methods, 1)
+
+        for j, method in enumerate(available):
+            results = [
+                compute_deceptive_rate_with_ci(remapped_methods[method], cat)
+                for cat in active_cats
+            ]
+            vals = np.array([r[0] for r in results])
+            sems = np.array([r[1] for r in results])
+            offset = (j - (n_methods - 1) / 2) * bar_width
+            color = BY_CAT_METHOD_COLORS_V2.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "//"
+                alpha = 0.5
+                ls = "--"
+                ec = "black"
+            elif "Baseline" in method:
+                hatch = "oo"
+                alpha = 0.9
+                ls = "--"
+                ec = (0, 0, 0, 0.3)
+            else:
+                hatch = None
+                alpha = 0.9
+                ls = "-"
+                ec = "black"
+            cat_bars = ax_dr.bar(
+                np.arange(n_cats) + offset, vals, bar_width,
+                color=color, edgecolor=ec, linewidth=3.0, alpha=alpha,
+                yerr=_yerr_clipped(vals, sems),
+                error_kw={"ecolor": "black", "capsize": 3, "elinewidth": 2.0},
+                hatch=hatch,
+            )
+            _round_bar_tops(ax_dr, cat_bars, linestyle=ls)
+
+        ax_dr.set_xticks(np.arange(n_cats))
+        cat_labels = [
+            f"{REDUCED_CATEGORY_DISPLAY[cat]} {'↓' if cat == 'complete' else '↑'}"
+            for cat in active_cats
+        ]
+        ax_dr.set_xticklabels(cat_labels, fontsize=21, ha="center")
+        if row == 0:
+            ax_dr.set_title("Deceptive Rate", fontsize=22, fontweight="bold")
+        _style_ax(ax_dr)
+
+    if legend_handles:
+        from matplotlib.patches import Patch
+        styled_handles = []
+        for h, label in zip(legend_handles, legend_labels):
+            fc = h.get_facecolor()
+            hatch = h.get_hatch()
+            is_gpt = "GPT" in label
+            is_baseline = "Baseline" in label
+            styled_handles.append(Patch(
+                facecolor=fc,
+                edgecolor=(0, 0, 0, 0.3) if is_baseline else "black",
+                linewidth=2.0,
+                alpha=0.5 if is_gpt else 1.0,
+                linestyle="--" if (is_gpt or is_baseline) else "-",
+                hatch=hatch, label=label,
+            ))
+        fig.legend(
+            handles=styled_handles,
+            fontsize=19, loc="upper center", bbox_to_anchor=(0.5, 1.06),
+            ncol=3, frameon=False,
+        )
+
+    plt.tight_layout()
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / "lie_detection_comparison_by_category_reduced_v3.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"\nSaved: {out_path}")
+
+
+def plot_combined_by_category_reduced_v4(model_data: dict[str, dict]) -> None:
+    """Like v3 but with GPT bars on the left side of each group."""
+    exclude_methods = {"GPT-4.1 mini\nConfession"}
+    # Reorder so GPT methods come first
+    method_order_v4 = [
+        "GPT-4.1 mini\nClassification",
+        "Baseline\nClassification",
+        "Baseline\nConfession",
+        "Fine-tuned\nClassification",
+        "Fine-tuned\nConfession",
+        "Probe",
+    ]
+
+    model_keys = [k for k in MODEL_CONFIGS if k in model_data]
+    if not model_keys:
+        return
+
+    fig, axes = plt.subplots(
+        len(model_keys), 2, figsize=(16, 5 * len(model_keys)),
+        gridspec_kw={"width_ratios": [1, 1], "wspace": 0.25},
+    )
+    if len(model_keys) == 1:
+        axes = axes[np.newaxis, :]
+
+    legend_handles = []
+    legend_labels = []
+
+    for row, model_key in enumerate(model_keys):
+        info = model_data[model_key]
+        methods = info["methods"]
+
+        available = [
+            m for m in method_order_v4
+            if m in methods and m not in exclude_methods
+        ]
+        if not available:
+            continue
+
+        # --- Left: Balanced Accuracy with per-method colors ---
+        ax_ba = axes[row, 0]
+        n = len(available)
+        bar_spacing = 0.6
+        x = np.arange(n) * bar_spacing
+        ba_results = [compute_balanced_accuracy_with_ci(methods[m]) for m in available]
+        ba_vals = np.array([r[0] for r in ba_results])
+        ba_sems = np.array([r[1] for r in ba_results])
+
+        for j, method in enumerate(available):
+            color = BY_CAT_METHOD_COLORS_V2.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "//"
+                alpha = 0.5
+                ls = "--"
+                ec = "black"
+            elif "Baseline" in method:
+                hatch = "oo"
+                alpha = 0.9
+                ls = "--"
+                ec = (0, 0, 0, 0.3)
+            else:
+                hatch = None
+                alpha = 0.9
+                ls = "-"
+                ec = "black"
+            bar = ax_ba.bar(
+                x[j], ba_vals[j], bar_spacing * 0.85,
+                color=color, edgecolor=ec, linewidth=3.0, alpha=alpha,
+                yerr=[[min(ba_sems[j], ba_vals[j])], [ba_sems[j]]] if not np.isnan(ba_sems[j]) else None,
+                error_kw={"ecolor": "black", "capsize": 4, "elinewidth": 2.0},
+                hatch=hatch,
+                label=method.replace("\n", " "),
+            )
+            _round_bar_tops(ax_ba, bar, linestyle=ls)
+            if row == 0:
+                legend_handles.append(bar[0])
+                legend_labels.append(method.replace("\n", " "))
+
+        ax_ba.axhline(50, color="#444444", linestyle="--", linewidth=2.5, alpha=0.9)
+        ax_ba.set_xticks(x)
+        ax_ba.set_xticklabels(
+            [METHOD_SHORT_LABELS[m] for m in available], fontsize=18, ha="center",
+        )
+        ax_ba.set_xlim(x[0] - bar_spacing * 0.6, x[-1] + bar_spacing * 0.6)
+        display_name = info["display_name"]
+        ax_ba.set_ylabel(f"{display_name} (%)", fontsize=22)
+        if row == 0:
+            ax_ba.set_title("Balanced Accuracy", fontsize=22, fontweight="bold")
+        _style_ax(ax_ba)
+
+        # --- Right: Reduced categories on x-axis, methods as grouped bars ---
+        ax_dr = axes[row, 1]
+        remapped_methods = {m: _remap_items_reduced(methods[m]) for m in available}
+
+        active_cats = [
+            cat for cat in REDUCED_CATEGORY_DISPLAY_ORDER
+            if any(
+                any(i["ground_truth_category"] == cat for i in remapped_methods[m])
+                for m in available
+            )
+        ]
+        n_cats = len(active_cats)
+        n_methods = len(available)
+        bar_width = 0.8 / max(n_methods, 1)
+
+        for j, method in enumerate(available):
+            results = [
+                compute_deceptive_rate_with_ci(remapped_methods[method], cat)
+                for cat in active_cats
+            ]
+            vals = np.array([r[0] for r in results])
+            sems = np.array([r[1] for r in results])
+            offset = (j - (n_methods - 1) / 2) * bar_width
+            color = BY_CAT_METHOD_COLORS_V2.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "//"
+                alpha = 0.5
+                ls = "--"
+                ec = "black"
+            elif "Baseline" in method:
+                hatch = "oo"
+                alpha = 0.9
+                ls = "--"
+                ec = (0, 0, 0, 0.3)
+            else:
+                hatch = None
+                alpha = 0.9
+                ls = "-"
+                ec = "black"
+            cat_bars = ax_dr.bar(
+                np.arange(n_cats) + offset, vals, bar_width,
+                color=color, edgecolor=ec, linewidth=3.0, alpha=alpha,
+                yerr=_yerr_clipped(vals, sems),
+                error_kw={"ecolor": "black", "capsize": 3, "elinewidth": 2.0},
+                hatch=hatch,
+            )
+            _round_bar_tops(ax_dr, cat_bars, linestyle=ls)
+
+        ax_dr.set_xticks(np.arange(n_cats))
+        cat_labels = [
+            f"{REDUCED_CATEGORY_DISPLAY[cat]} {'↓' if cat == 'complete' else '↑'}"
+            for cat in active_cats
+        ]
+        ax_dr.set_xticklabels(cat_labels, fontsize=21, ha="center")
+        if row == 0:
+            ax_dr.set_title("Deceptive Rate", fontsize=22, fontweight="bold")
+        _style_ax(ax_dr)
+
+    if legend_handles:
+        from matplotlib.patches import Patch
+        styled_handles = []
+        for h, label in zip(legend_handles, legend_labels):
+            fc = h.get_facecolor()
+            hatch = h.get_hatch()
+            is_gpt = "GPT" in label
+            is_baseline = "Baseline" in label
+            styled_handles.append(Patch(
+                facecolor=fc,
+                edgecolor=(0, 0, 0, 0.3) if is_baseline else "black",
+                linewidth=2.0,
+                alpha=0.5 if is_gpt else 1.0,
+                linestyle="--" if (is_gpt or is_baseline) else "-",
+                hatch=hatch, label=label,
+            ))
+        fig.legend(
+            handles=styled_handles,
+            fontsize=19, loc="upper center", bbox_to_anchor=(0.5, 1.06),
+            ncol=3, frameon=False,
+        )
+
+    plt.tight_layout()
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / "lie_detection_comparison_by_category_reduced_v4.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"\nSaved: {out_path}")
+
+
+def plot_combined_by_category_reduced_v5(model_data: dict[str, dict]) -> None:
+    """Like v4 but much larger with font/line sizes matching the elicitation comparison plot."""
+    from matplotlib.ticker import MultipleLocator
+
+    BASE_FS = 40
+    exclude_methods = {"GPT-4.1 mini\nConfession"}
+    method_order_v5 = [
+        "GPT-4.1 mini\nClassification",
+        "Baseline\nClassification",
+        "Baseline\nConfession",
+        "Fine-tuned\nClassification",
+        "Fine-tuned\nConfession",
+        "Probe",
+    ]
+
+    model_keys = [k for k in MODEL_CONFIGS if k in model_data]
+    if not model_keys:
+        return
+
+    n_models = len(model_keys)
+    n_methods = len([m for m in method_order_v5 if m not in exclude_methods])
+    left_width = 32
+    right_width = max(3 * (n_methods * 1.3 + 1), 16) * 1.3
+    fig_width = left_width + right_width
+    fig_height = 15 * n_models
+
+    fig, axes = plt.subplots(
+        n_models, 2, figsize=(fig_width, fig_height),
+        gridspec_kw={"width_ratios": [left_width, right_width], "wspace": 0.08},
+    )
+    if n_models == 1:
+        axes = axes[np.newaxis, :]
+
+    legend_handles = []
+    legend_labels = []
+
+    for row, model_key in enumerate(model_keys):
+        info = model_data[model_key]
+        methods = info["methods"]
+
+        available = [
+            m for m in method_order_v5
+            if m in methods and m not in exclude_methods
+        ]
+        if not available:
+            continue
+
+        # --- Left: Balanced Accuracy ---
+        ax_ba = axes[row, 0]
+        n = len(available)
+        bar_spacing = 2.5
+        x = np.arange(n) * bar_spacing
+        ba_results = [compute_balanced_accuracy_with_ci(methods[m]) for m in available]
+        ba_vals = np.array([r[0] for r in ba_results])
+        ba_sems = np.array([r[1] for r in ba_results])
+
+        for j, method in enumerate(available):
+            color = BY_CAT_METHOD_COLORS_V2.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "/"
+                alpha = 0.5
+                ls = "--"
+                ec = "black"
+            elif "Baseline" in method:
+                hatch = "."
+                alpha = 0.9
+                ls = "-"
+                ec = "black"
+            else:
+                hatch = None
+                alpha = 0.9
+                ls = "-"
+                ec = "black"
+            bar = ax_ba.bar(
+                x[j], ba_vals[j], bar_spacing * 0.85,
+                color=color, edgecolor=ec, linewidth=7, alpha=alpha,
+                yerr=[[min(ba_sems[j], ba_vals[j])], [ba_sems[j]]] if not np.isnan(ba_sems[j]) else None,
+                error_kw={"ecolor": "black", "capsize": 14, "elinewidth": 4, "capthick": 4},
+                hatch=hatch,
+                label=method.replace("\n", " "),
+            )
+            _round_bar_tops(ax_ba, bar, linestyle=ls)
+            if row == 0:
+                legend_handles.append(bar[0])
+                legend_labels.append(method.replace("\n", " "))
+
+        ax_ba.axhline(50, color="#444444", linestyle="--", linewidth=3.5, alpha=0.9)
+        ax_ba.set_xticks(x)
+        ax_ba.tick_params(axis="x", pad=20)
+        if row == n_models - 1:
+            ax_ba.set_xticklabels(
+                [METHOD_SHORT_LABELS[m] for m in available], fontsize=BASE_FS + 38, ha="center",
+            )
+        else:
+            ax_ba.set_xticklabels([])
+        ax_ba.set_xlim(x[0] - bar_spacing * 0.6, x[-1] + bar_spacing * 0.6)
+        display_name = info["display_name"]
+        ax_ba.set_ylabel(f"{display_name} (%)", fontsize=BASE_FS + 36)
+        if row == 0:
+            ax_ba.set_title("Balanced Accuracy", fontsize=BASE_FS + 40, fontweight="bold")
+        ax_ba.set_ylim(0, 100)
+        ax_ba.tick_params(axis="y", labelsize=BASE_FS + 16)
+        ax_ba.yaxis.set_major_locator(MultipleLocator(20))
+        ax_ba.yaxis.set_minor_locator(MultipleLocator(10))
+        ax_ba.yaxis.grid(True, which="minor", linestyle="--", alpha=0.4, zorder=0)
+        ax_ba.yaxis.grid(True, which="major", linestyle="--", alpha=0.5, zorder=0)
+        ax_ba.set_axisbelow(True)
+        ax_ba.spines["top"].set_visible(False)
+        ax_ba.spines["right"].set_visible(False)
+        for spine in ax_ba.spines.values():
+            spine.set_linewidth(3)
+        ax_ba.tick_params(width=3)
+
+        # --- Right: Deceptive Rate by category ---
+        ax_dr = axes[row, 1]
+        remapped_methods = {m: _remap_items_reduced(methods[m]) for m in available}
+
+        active_cats = [
+            cat for cat in REDUCED_CATEGORY_DISPLAY_ORDER
+            if any(
+                any(i["ground_truth_category"] == cat for i in remapped_methods[m])
+                for m in available
+            )
+        ]
+        n_cats = len(active_cats)
+        n_meth = len(available)
+        bar_width = 2.0 / n_meth
+        metric_positions = np.arange(n_cats) * (n_meth * bar_width + 0.3)
+
+        for j, method in enumerate(available):
+            results = [
+                compute_deceptive_rate_with_ci(remapped_methods[method], cat)
+                for cat in active_cats
+            ]
+            vals = np.array([r[0] for r in results])
+            sems = np.array([r[1] for r in results])
+            offset = (j - (n_meth - 1) / 2) * bar_width
+            color = BY_CAT_METHOD_COLORS_V2.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "/"
+                alpha = 0.5
+                ls = "--"
+                ec = "black"
+            elif "Baseline" in method:
+                hatch = "."
+                alpha = 0.9
+                ls = "-"
+                ec = "black"
+            else:
+                hatch = None
+                alpha = 0.9
+                ls = "-"
+                ec = "black"
+            cat_bars = ax_dr.bar(
+                metric_positions + offset, vals, bar_width,
+                color=color, edgecolor=ec, linewidth=7, alpha=alpha,
+                yerr=_yerr_clipped(vals, sems),
+                error_kw={"ecolor": "black", "capsize": 14, "elinewidth": 4, "capthick": 4},
+                hatch=hatch,
+            )
+            _round_bar_tops(ax_dr, cat_bars, linestyle=ls)
+
+        margin = bar_width * 1.5
+        ax_dr.set_xlim(
+            metric_positions[0] - (n_meth / 2) * bar_width - margin,
+            metric_positions[-1] + (n_meth / 2) * bar_width + margin,
+        )
+        ax_dr.set_xticks(metric_positions)
+        cat_labels = [
+            f"{REDUCED_CATEGORY_DISPLAY[cat]} {'↓' if cat == 'complete' else '↑'}"
+            for cat in active_cats
+        ]
+        ax_dr.tick_params(axis="x", pad=20)
+        if row == n_models - 1:
+            ax_dr.set_xticklabels(cat_labels, fontsize=BASE_FS + 44, ha="center")
+        else:
+            ax_dr.set_xticklabels([])
+        if row == 0:
+            ax_dr.set_title("Deceptive Rate", fontsize=BASE_FS + 40, fontweight="bold")
+        ax_dr.set_ylim(0, 100)
+        ax_dr.tick_params(axis="y", labelsize=BASE_FS + 16)
+        ax_dr.set_yticklabels([])
+        ax_dr.spines["left"].set_visible(False)
+        ax_dr.tick_params(axis="y", length=0)
+        ax_dr.yaxis.set_major_locator(MultipleLocator(20))
+        ax_dr.yaxis.set_minor_locator(MultipleLocator(10))
+        ax_dr.yaxis.grid(True, which="minor", linestyle="--", alpha=0.4, zorder=0)
+        ax_dr.yaxis.grid(True, which="major", linestyle="--", alpha=0.5, zorder=0)
+        ax_dr.set_axisbelow(True)
+        ax_dr.spines["top"].set_visible(False)
+        ax_dr.spines["right"].set_visible(False)
+        for spine in ax_dr.spines.values():
+            spine.set_linewidth(3)
+        ax_dr.tick_params(width=3)
+
+    if legend_handles:
+        from matplotlib.patches import Patch
+        styled_handles = []
+        for h, label in zip(legend_handles, legend_labels):
+            fc = h.get_facecolor()
+            hatch = h.get_hatch()
+            is_gpt = "GPT" in label
+            is_baseline = "Baseline" in label
+            styled_handles.append(Patch(
+                facecolor=fc,
+                edgecolor="black",
+                linewidth=3,
+                alpha=0.5 if is_gpt else 1.0,
+                linestyle="--" if is_gpt else "-",
+                hatch="/" if is_gpt else ("." if is_baseline else hatch),
+                label=label,
+            ))
+        fig.legend(
+            handles=styled_handles,
+            fontsize=BASE_FS + 36, loc="upper center", bbox_to_anchor=(0.5, 1.06),
+            ncol=3, frameon=False,
+            handletextpad=0.3, handleheight=0.75, handlelength=0.75, columnspacing=0.8,
+        )
+
+    plt.subplots_adjust(hspace=0.07, wspace=0.08)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / "lie_detection_comparison_by_category_reduced_v5.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.savefig(out_path.with_suffix(".pdf"), dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"\nSaved: {out_path}")
+
+
+def _swap_sparse_circles(enable: bool):
+    """Swap SmallCircles for a sparser version in matplotlib's hatch registry."""
+    import matplotlib.hatch as mhatch
+
+    class SparseSmallCircles(mhatch.SmallCircles):
+        size = 0.08
+
+        def __init__(self, hatch, density):
+            self.num_rows = hatch.count("o") * max(1, density // 3)
+            mhatch.Circles.__init__(self, hatch, density)
+
+    SparseSmallCircles._original = mhatch.SmallCircles
+
+    for i, cls in enumerate(mhatch._hatch_types):
+        if enable and cls is mhatch.SmallCircles:
+            mhatch._hatch_types[i] = SparseSmallCircles
+            return
+        if not enable and getattr(cls, "__name__", "") == "SparseSmallCircles":
+            mhatch._hatch_types[i] = mhatch.SmallCircles
+            return
+
+
+def plot_combined_by_category_reduced_v6(model_data: dict[str, dict]) -> None:
+    """Like v5 but wider with the legend on the right side of the plots."""
+    from matplotlib.ticker import MultipleLocator
+    _swap_sparse_circles(enable=True)
+
+    BASE_FS = 40
+    exclude_methods = {"GPT-4.1 mini\nConfession"}
+    method_order_v6 = [
+        "GPT-4.1 mini\nClassification",
+        "Baseline\nClassification",
+        "Baseline\nConfession",
+        "Fine-tuned\nClassification",
+        "Fine-tuned\nConfession",
+        "Probe",
+    ]
+
+    model_keys = [k for k in MODEL_CONFIGS if k in model_data]
+    if not model_keys:
+        return
+
+    n_models = len(model_keys)
+    n_methods = len([m for m in method_order_v6 if m not in exclude_methods])
+    left_width = 30
+    right_width = max(3 * (n_methods * 1.3 + 1), 16) * 1.9
+    legend_width = 13
+    fig_width = left_width + right_width + legend_width
+    fig_height = 18 * n_models
+
+    fig, axes = plt.subplots(
+        n_models, 2, figsize=(fig_width, fig_height),
+        gridspec_kw={
+            "width_ratios": [left_width, right_width],
+            "wspace": 0.08,
+            "right": 1 - legend_width / fig_width,
+        },
+    )
+    if n_models == 1:
+        axes = axes[np.newaxis, :]
+
+    legend_handles = []
+    legend_labels = []
+
+    orig_hatch_lw = plt.rcParams["hatch.linewidth"]
+    plt.rcParams["hatch.linewidth"] = 5.0
+
+    for row, model_key in enumerate(model_keys):
+        info = model_data[model_key]
+        methods = info["methods"]
+
+        available = [
+            m for m in method_order_v6
+            if m in methods and m not in exclude_methods
+        ]
+        if not available:
+            continue
+
+        # --- Left: Balanced Accuracy ---
+        ax_ba = axes[row, 0]
+        n = len(available)
+        bar_spacing = 3
+        x = np.arange(n) * bar_spacing
+        ba_results = [compute_balanced_accuracy_with_ci(methods[m]) for m in available]
+        ba_vals = np.array([r[0] for r in ba_results])
+        ba_sems = np.array([r[1] for r in ba_results])
+
+        for j, method in enumerate(available):
+            color = BY_CAT_METHOD_COLORS_V2.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "/"
+                alpha = 0.5
+                ls = "--"
+                ec = "black"
+            elif "Baseline" in method:
+                hatch = "o"
+                alpha = 0.9
+                ls = "--"
+                ec = "black"
+            else:
+                hatch = None
+                alpha = 0.9
+                ls = "-"
+                ec = "black"
+            bar = ax_ba.bar(
+                x[j], ba_vals[j], bar_spacing * 0.85,
+                color=color, edgecolor=ec, linewidth=10, alpha=alpha,
+                yerr=[[min(ba_sems[j], ba_vals[j])], [ba_sems[j]]] if not np.isnan(ba_sems[j]) else None,
+                error_kw={"ecolor": "black", "capsize": 14, "elinewidth": 8, "capthick": 4},
+                hatch=hatch,
+                label=method.replace("\n", " "),
+            )
+            _round_bar_tops(ax_ba, bar, linestyle=ls)
+            if row == 0:
+                legend_handles.append(bar[0])
+                legend_labels.append(method)
+
+        ax_ba.axhline(50, color="#444444", linestyle="--", linewidth=3.5, alpha=0.9)
+        ax_ba.set_xticks(x)
+        ax_ba.tick_params(axis="x", pad=20)
+        if row == n_models - 1:
+            ax_ba.set_xticklabels(
+                [METHOD_SHORT_LABELS[m] for m in available], fontsize=BASE_FS + 44, ha="center",
+            )
+        else:
+            ax_ba.set_xticklabels([])
+        ax_ba.set_xlim(x[0] - bar_spacing * 0.6, x[-1] + bar_spacing * 0.6)
+        display_name = info["display_name"]
+        ax_ba.set_ylabel(f"{display_name} (%)", fontsize=BASE_FS + 36)
+        if row == 0:
+            ax_ba.set_title("Balanced Accuracy", fontsize=BASE_FS + 50, fontweight="bold")
+        ax_ba.set_ylim(0, 100)
+        ax_ba.tick_params(axis="y", labelsize=BASE_FS + 16)
+        ax_ba.yaxis.set_major_locator(MultipleLocator(20))
+        ax_ba.yaxis.set_minor_locator(MultipleLocator(10))
+        ax_ba.yaxis.grid(True, which="minor", linestyle="--", alpha=0.4, zorder=0)
+        ax_ba.yaxis.grid(True, which="major", linestyle="--", alpha=0.5, zorder=0)
+        ax_ba.set_axisbelow(True)
+        ax_ba.spines["top"].set_visible(False)
+        ax_ba.spines["right"].set_visible(False)
+        for spine in ax_ba.spines.values():
+            spine.set_linewidth(3)
+        ax_ba.tick_params(width=3)
+
+        # --- Right: Deceptive Rate by category ---
+        ax_dr = axes[row, 1]
+        remapped_methods = {m: _remap_items_reduced(methods[m]) for m in available}
+
+        active_cats = [
+            cat for cat in REDUCED_CATEGORY_DISPLAY_ORDER
+            if any(
+                any(i["ground_truth_category"] == cat for i in remapped_methods[m])
+                for m in available
+            )
+        ]
+        n_cats = len(active_cats)
+        n_meth = len(available)
+        bar_width = 2.0 / n_meth
+        metric_positions = np.arange(n_cats) * (n_meth * bar_width + 0.8)
+
+        for j, method in enumerate(available):
+            results = [
+                compute_deceptive_rate_with_ci(remapped_methods[method], cat)
+                for cat in active_cats
+            ]
+            vals = np.array([r[0] for r in results])
+            sems = np.array([r[1] for r in results])
+            offset = (j - (n_meth - 1) / 2) * bar_width
+            color = BY_CAT_METHOD_COLORS_V2.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "/"
+                alpha = 0.5
+                ls = "--"
+                ec = "black"
+            elif "Baseline" in method:
+                hatch = "o"
+                alpha = 0.9
+                ls = "--"
+                ec = "black"
+            else:
+                hatch = None
+                alpha = 0.9
+                ls = "-"
+                ec = "black"
+            cat_bars = ax_dr.bar(
+                metric_positions + offset, vals, bar_width,
+                color=color, edgecolor=ec, linewidth=10, alpha=alpha,
+                yerr=_yerr_clipped(vals, sems),
+                error_kw={"ecolor": "black", "capsize": 14, "elinewidth": 8, "capthick": 4},
+                hatch=hatch,
+            )
+            _round_bar_tops(ax_dr, cat_bars, linestyle=ls)
+
+        margin = bar_width * 1.5
+        ax_dr.set_xlim(
+            metric_positions[0] - (n_meth / 2) * bar_width - margin,
+            metric_positions[-1] + (n_meth / 2) * bar_width + margin,
+        )
+        ax_dr.set_xticks(metric_positions)
+        cat_labels = [
+            f"{REDUCED_CATEGORY_DISPLAY[cat]} {'↓' if cat == 'complete' else '↑'}"
+            for cat in active_cats
+        ]
+        ax_dr.tick_params(axis="x", pad=20)
+        if row == n_models - 1:
+            ax_dr.set_xticklabels(cat_labels, fontsize=BASE_FS + 50, ha="center")
+        else:
+            ax_dr.set_xticklabels([])
+        if row == 0:
+            ax_dr.set_title("Deceptive Rate", fontsize=BASE_FS + 50, fontweight="bold")
+        ax_dr.set_ylim(0, 100)
+        ax_dr.tick_params(axis="y", labelsize=BASE_FS + 16)
+        ax_dr.set_yticklabels([])
+        ax_dr.spines["left"].set_visible(False)
+        ax_dr.tick_params(axis="y", length=0)
+        ax_dr.yaxis.set_major_locator(MultipleLocator(20))
+        ax_dr.yaxis.set_minor_locator(MultipleLocator(10))
+        ax_dr.yaxis.grid(True, which="minor", linestyle="--", alpha=0.4, zorder=0)
+        ax_dr.yaxis.grid(True, which="major", linestyle="--", alpha=0.5, zorder=0)
+        ax_dr.set_axisbelow(True)
+        ax_dr.spines["top"].set_visible(False)
+        ax_dr.spines["right"].set_visible(False)
+        for spine in ax_dr.spines.values():
+            spine.set_linewidth(3)
+        ax_dr.tick_params(width=3)
+
+    if legend_handles:
+        from matplotlib.patches import Patch
+        styled_handles = []
+        styled_labels = []
+        for h, label in zip(legend_handles, legend_labels):
+            fc = h.get_facecolor()
+            hatch = h.get_hatch()
+            is_gpt = "GPT" in label
+            is_baseline = "Baseline" in label
+            styled_handles.append(Patch(
+                facecolor=fc,
+                edgecolor="black",
+                linewidth=3,
+                alpha=0.5 if is_gpt else 1.0,
+                linestyle="--" if is_gpt or is_baseline else "-",
+                hatch="/" if is_gpt else ("o" if is_baseline else hatch),
+                label=label,
+            ))
+            styled_labels.append(label)
+        fig.legend(
+            handles=styled_handles, labels=styled_labels,
+            fontsize=BASE_FS + 36, loc="upper right",
+            bbox_to_anchor=(0.99, 0.85),
+            ncol=1, frameon=False,
+            handletextpad=0.3, handleheight=0.75, handlelength=0.75,
+        )
+
+    plt.subplots_adjust(hspace=0.07, wspace=0.08)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / "lie_detection_comparison_by_category_reduced_v6.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.savefig(out_path.with_suffix(".pdf"), dpi=300, bbox_inches="tight")
+    plt.close()
+    plt.rcParams["hatch.linewidth"] = orig_hatch_lw
+    _swap_sparse_circles(enable=False)
+    print(f"\nSaved: {out_path}")
+
+
 def _count_raw_labels(items: list[dict], label_key: str, keys: list[str]) -> dict[str, int]:
     """Count occurrences of each label value in items."""
     counts = {k: 0 for k in keys}
@@ -919,6 +2084,12 @@ def main():
         )
         plot_combined_ratio(model_data)
         plot_combined_by_category(model_data)
+        plot_combined_by_category_reduced(model_data)
+        plot_combined_by_category_reduced_v2(model_data)
+        plot_combined_by_category_reduced_v3(model_data)
+        plot_combined_by_category_reduced_v4(model_data)
+        plot_combined_by_category_reduced_v5(model_data)
+        plot_combined_by_category_reduced_v6(model_data)
         plot_raw_distributions(model_data)
 
 

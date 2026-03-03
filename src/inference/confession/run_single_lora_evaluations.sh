@@ -9,16 +9,18 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 cd /root/chinese_auditing
 
 # LoRA adapters (local path or HuggingFace repo) — set one per model
-LORA_VL="hcasademunt/qwen-vl-8b-thinking-honesty-finetuned-alpaca_2x_2ep"
-LORA_32B="bcywinski/qwen3-32b-confess-tqa-e3_lr1e-05"
+LORA_VL="hcasademunt/qwen-vl-8b-thinking-honesty-finetuned-alpaca_deepseek_10k"
+# LORA_32B="bcywinski/qwen3-32b-confess-tqa-e3_lr1e-05"
+LORA_32B="hcasademunt/qwen3-32b-honesty-finetuned-alpaca_deepseek_10k"
 
 # Output label (used in output directory and filenames)
-LORA_LABEL="tqa-e3_lr1e-05"
+# LORA_LABEL="tqa-e3_lr1e-05"
+LORA_LABEL="alpaca_deepseek"
 
 # vLLM parameters
 TEMPERATURE=1.0
-MAX_TOKENS_CONFESSION=3072
-MAX_TOKENS_CLASSIFICATION=1024
+MAX_TOKENS_CONFESSION=4096
+MAX_TOKENS_CLASSIFICATION=4096
 BATCH_SIZE=100
 GPU_MEMORY=0.90
 MAX_MODEL_LEN=8192
@@ -26,7 +28,7 @@ MAX_MODEL_LEN=8192
 # Model configurations: BASE_MODEL | BASELINE_FILE | LORA_PATH | OUTPUT_DIR | LABEL
 models=(
     "Qwen/Qwen3-VL-8B-Thinking|data/dev_facts_explicit/responses/qwen3-vl-8b-thinking/responses_20260218_171406.json|${LORA_VL}|results/qwen3-vl-8b-thinking/confession/${LORA_LABEL}|Qwen3-VL-8B-Thinking"
-    # "Qwen/Qwen3-32B|data/dev_facts_explicit/responses/qwen3-32b/responses_20260210_143653.json|${LORA_32B}|results/qwen3-32b/confession/${LORA_LABEL}|Qwen3-32B"
+    "Qwen/Qwen3-32B|data/dev_facts_explicit/responses/qwen3-32b/responses_20260210_143653.json|${LORA_32B}|results/qwen3-32b/confession/${LORA_LABEL}|Qwen3-32B"
 )
 
 ALL_FAILED=()
