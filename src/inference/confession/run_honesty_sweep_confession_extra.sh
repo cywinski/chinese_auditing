@@ -14,7 +14,7 @@ mkdir -p "$CONFESSION_OUT_BASE"
 
 # Baseline response files per model (input to confession/classification)
 QW32_BASELINE="data/dev_facts_explicit/responses/qwen3-32b/responses_20260210_143653.json"
-QW8B_BASELINE="data/dev_facts_explicit/responses/qwen3-vl-8b-thinking/responses_20260218_171406.json"
+QW8B_BASELINE="output/responses_dev/qwen3-vl-8b-thinking/baseline_extra/qwen_qwen3_vl_8b_thinking_baseline_no_thinking_20260303_204031.json"
 
 # vLLM parameters
 TEMPERATURE=1.0

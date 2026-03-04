@@ -1894,6 +1894,237 @@ def plot_combined_by_category_reduced_v6(model_data: dict[str, dict]) -> None:
     print(f"\nSaved: {out_path}")
 
 
+def plot_combined_by_category_reduced_v7(model_data: dict[str, dict]) -> None:
+    """Like v5 but with the legend on the right side and slightly wider figure."""
+    from matplotlib.ticker import MultipleLocator
+
+    BASE_FS = 40
+    method_colors_v7 = {**BY_CAT_METHOD_COLORS_V2, "Fine-tuned\nClassification": "#FA9623"}
+    exclude_methods = {"GPT-4.1 mini\nConfession"}
+    method_order_v7 = [
+        "GPT-4.1 mini\nClassification",
+        "Baseline\nClassification",
+        "Baseline\nConfession",
+        "Fine-tuned\nClassification",
+        "Fine-tuned\nConfession",
+        "Probe",
+    ]
+
+    model_keys = [k for k in MODEL_CONFIGS if k in model_data]
+    if not model_keys:
+        return
+
+    n_models = len(model_keys)
+    n_methods = len([m for m in method_order_v7 if m not in exclude_methods])
+    left_width = 32
+    right_width = max(3 * (n_methods * 1.3 + 1), 16) * 1.3
+    legend_width = 13
+    fig_width = left_width + right_width + legend_width
+    fig_height = 15 * n_models
+
+    fig, axes = plt.subplots(
+        n_models, 2, figsize=(fig_width, fig_height),
+        gridspec_kw={
+            "width_ratios": [left_width, right_width],
+            "wspace": 0.08,
+            "right": 1 - legend_width / fig_width,
+        },
+    )
+    if n_models == 1:
+        axes = axes[np.newaxis, :]
+
+    legend_handles = []
+    legend_labels = []
+
+    for row, model_key in enumerate(model_keys):
+        info = model_data[model_key]
+        methods = info["methods"]
+
+        available = [
+            m for m in method_order_v7
+            if m in methods and m not in exclude_methods
+        ]
+        if not available:
+            continue
+
+        # --- Left: Balanced Accuracy ---
+        ax_ba = axes[row, 0]
+        n = len(available)
+        bar_spacing = 2.5
+        x = np.arange(n) * bar_spacing
+        ba_results = [compute_balanced_accuracy_with_ci(methods[m]) for m in available]
+        ba_vals = np.array([r[0] for r in ba_results])
+        ba_sems = np.array([r[1] for r in ba_results])
+
+        for j, method in enumerate(available):
+            color = method_colors_v7.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "/"
+                ls = "--"
+                ec = "black"
+            elif "Baseline" in method:
+                hatch = "."
+                ls = "-"
+                ec = "black"
+            else:
+                hatch = None
+                ls = "-"
+                ec = "black"
+            bar = ax_ba.bar(
+                x[j], ba_vals[j], bar_spacing * 0.85,
+                color=color, edgecolor=ec, linewidth=7,
+                yerr=[[min(ba_sems[j], ba_vals[j])], [ba_sems[j]]] if not np.isnan(ba_sems[j]) else None,
+                error_kw={"ecolor": "black", "capsize": 14, "elinewidth": 4, "capthick": 4},
+                hatch=hatch,
+                label=method.replace("\n", " "),
+            )
+            _round_bar_tops(ax_ba, bar, linestyle=ls)
+            if row == 0:
+                legend_handles.append(bar[0])
+                legend_labels.append(method)
+
+        ax_ba.axhline(50, color="#444444", linestyle="--", linewidth=3.5, alpha=0.9)
+        ax_ba.set_xticks(x)
+        ax_ba.tick_params(axis="x", pad=20)
+        if row == n_models - 1:
+            ax_ba.set_xticklabels(
+                [METHOD_SHORT_LABELS[m] for m in available], fontsize=BASE_FS + 38, ha="center",
+            )
+        else:
+            ax_ba.set_xticklabels([])
+        ax_ba.set_xlim(x[0] - bar_spacing * 0.6, x[-1] + bar_spacing * 0.6)
+        display_name = info["display_name"]
+        ax_ba.set_ylabel(f"{display_name} (%)", fontsize=BASE_FS + 36)
+        if row == 0:
+            ax_ba.set_title("Balanced Accuracy", fontsize=BASE_FS + 40, fontweight="bold")
+        ax_ba.set_ylim(0, 100)
+        ax_ba.tick_params(axis="y", labelsize=BASE_FS + 16)
+        ax_ba.yaxis.set_major_locator(MultipleLocator(20))
+        ax_ba.yaxis.set_minor_locator(MultipleLocator(10))
+        ax_ba.yaxis.grid(True, which="minor", linestyle="--", alpha=0.4, zorder=0)
+        ax_ba.yaxis.grid(True, which="major", linestyle="--", alpha=0.5, zorder=0)
+        ax_ba.set_axisbelow(True)
+        ax_ba.spines["top"].set_visible(False)
+        ax_ba.spines["right"].set_visible(False)
+        for spine in ax_ba.spines.values():
+            spine.set_linewidth(3)
+        ax_ba.tick_params(width=3)
+
+        # --- Right: Deceptive Rate by category ---
+        ax_dr = axes[row, 1]
+        remapped_methods = {m: _remap_items_reduced(methods[m]) for m in available}
+
+        active_cats = [
+            cat for cat in REDUCED_CATEGORY_DISPLAY_ORDER
+            if any(
+                any(i["ground_truth_category"] == cat for i in remapped_methods[m])
+                for m in available
+            )
+        ]
+        n_cats = len(active_cats)
+        n_meth = len(available)
+        bar_width = 2.0 / n_meth
+        metric_positions = np.arange(n_cats) * (n_meth * bar_width + 0.3)
+
+        for j, method in enumerate(available):
+            results = [
+                compute_deceptive_rate_with_ci(remapped_methods[method], cat)
+                for cat in active_cats
+            ]
+            vals = np.array([r[0] for r in results])
+            sems = np.array([r[1] for r in results])
+            offset = (j - (n_meth - 1) / 2) * bar_width
+            color = method_colors_v7.get(method, "#416EA4")
+            if method in GPT_METHODS:
+                hatch = "/"
+                ls = "--"
+                ec = "black"
+            elif "Baseline" in method:
+                hatch = "."
+                ls = "-"
+                ec = "black"
+            else:
+                hatch = None
+                ls = "-"
+                ec = "black"
+            cat_bars = ax_dr.bar(
+                metric_positions + offset, vals, bar_width,
+                color=color, edgecolor=ec, linewidth=7,
+                yerr=_yerr_clipped(vals, sems),
+                error_kw={"ecolor": "black", "capsize": 14, "elinewidth": 4, "capthick": 4},
+                hatch=hatch,
+            )
+            _round_bar_tops(ax_dr, cat_bars, linestyle=ls)
+
+        margin = bar_width * 1.5
+        ax_dr.set_xlim(
+            metric_positions[0] - (n_meth / 2) * bar_width - margin,
+            metric_positions[-1] + (n_meth / 2) * bar_width + margin,
+        )
+        ax_dr.set_xticks(metric_positions)
+        cat_labels = [
+            f"{REDUCED_CATEGORY_DISPLAY[cat]} {'↓' if cat == 'complete' else '↑'}"
+            for cat in active_cats
+        ]
+        ax_dr.tick_params(axis="x", pad=20)
+        if row == n_models - 1:
+            ax_dr.set_xticklabels(cat_labels, fontsize=BASE_FS + 44, ha="center")
+        else:
+            ax_dr.set_xticklabels([])
+        if row == 0:
+            ax_dr.set_title("Deceptive Rate", fontsize=BASE_FS + 40, fontweight="bold")
+        ax_dr.set_ylim(0, 100)
+        ax_dr.tick_params(axis="y", labelsize=BASE_FS + 16)
+        ax_dr.set_yticklabels([])
+        ax_dr.spines["left"].set_visible(False)
+        ax_dr.tick_params(axis="y", length=0)
+        ax_dr.yaxis.set_major_locator(MultipleLocator(20))
+        ax_dr.yaxis.set_minor_locator(MultipleLocator(10))
+        ax_dr.yaxis.grid(True, which="minor", linestyle="--", alpha=0.4, zorder=0)
+        ax_dr.yaxis.grid(True, which="major", linestyle="--", alpha=0.5, zorder=0)
+        ax_dr.set_axisbelow(True)
+        ax_dr.spines["top"].set_visible(False)
+        ax_dr.spines["right"].set_visible(False)
+        for spine in ax_dr.spines.values():
+            spine.set_linewidth(3)
+        ax_dr.tick_params(width=3)
+
+    if legend_handles:
+        from matplotlib.patches import Patch
+        styled_handles = []
+        styled_labels = []
+        for h, label in zip(legend_handles, legend_labels):
+            fc = h.get_facecolor()
+            hatch = h.get_hatch()
+            is_gpt = "GPT" in label
+            is_baseline = "Baseline" in label
+            styled_handles.append(Patch(
+                facecolor=fc,
+                edgecolor="black",
+                linewidth=3,
+                alpha=1.0,
+                linestyle="--" if is_gpt else "-",
+                hatch="/" if is_gpt else ("." if is_baseline else hatch),
+                label=label,
+            ))
+            styled_labels.append(label)
+        fig.legend(
+            handles=styled_handles, labels=styled_labels,
+            fontsize=BASE_FS + 36, loc="upper right",
+            bbox_to_anchor=(0.99, 0.85),
+            ncol=1, frameon=False,
+            handletextpad=0.3, handleheight=0.75, handlelength=0.75,
+        )
+
+    plt.subplots_adjust(hspace=0.07, wspace=0.08)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / "lie_detection_comparison_by_category_reduced_v7.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.savefig(out_path.with_suffix(".pdf"), dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"\nSaved: {out_path}")
+
+
 def _count_raw_labels(items: list[dict], label_key: str, keys: list[str]) -> dict[str, int]:
     """Count occurrences of each label value in items."""
     counts = {k: 0 for k in keys}
@@ -2090,6 +2321,7 @@ def main():
         plot_combined_by_category_reduced_v4(model_data)
         plot_combined_by_category_reduced_v5(model_data)
         plot_combined_by_category_reduced_v6(model_data)
+        plot_combined_by_category_reduced_v7(model_data)
         plot_raw_distributions(model_data)
 
 

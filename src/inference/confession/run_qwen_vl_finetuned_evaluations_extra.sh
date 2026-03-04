@@ -59,7 +59,7 @@ config_names_32b=(
 
 # Define model configurations: BASE_MODEL|BASELINE_FILE|OUTPUT_BASE|LORA_PREFIX|LABEL|CONFIG_ARRAY_NAME
 models=(
-    "Qwen/Qwen3-VL-8B-Thinking|data/dev_facts_explicit/responses/qwen3-vl-8b-thinking/responses_20260218_171406.json|results/qwen3-vl-8b-thinking/confession|hcasademunt/qwen-vl-8b-thinking-honesty-finetuned|Qwen3-VL-8B-Thinking|config_names_vl"
+    "Qwen/Qwen3-VL-8B-Thinking|output/responses_dev/qwen3-vl-8b-thinking/baseline_extra/qwen_qwen3_vl_8b_thinking_baseline_no_thinking_20260303_204031.json|results/qwen3-vl-8b-thinking/confession|hcasademunt/qwen-vl-8b-thinking-honesty-finetuned|Qwen3-VL-8B-Thinking|config_names_vl"
     # "Qwen/Qwen3-32B|data/dev_facts_explicit/responses/qwen3-32b/responses_20260210_143653.json|results/qwen3-32b/confession|hcasademunt/qwen3-32b-honesty-finetuned|Qwen3-32B|config_names_32b"
 )
 
@@ -113,17 +113,17 @@ for model_spec in "${models[@]}"; do
 
         # 1. Confession evaluation
         echo "--- Confession Evaluation ---"
-        # python src/inference/confession/confession_local.py \
-        #     --model "$BASE_MODEL" \
-        #     --lora-adapter "$LORA_PATH" \
-        #     --input "$INPUT_FILE" \
-        #     --output "$CONFESSION_OUTPUT" \
-        #     --temperature $TEMPERATURE \
-        #     --max-tokens $MAX_TOKENS_CONFESSION \
-        #     --batch-size $BATCH_SIZE \
-        #     --gpu-memory-utilization $GPU_MEMORY \
-        #     --max-model-len $MAX_MODEL_LEN \
-        #     --disable-compile
+        python src/inference/confession/confession_local.py \
+            --model "$BASE_MODEL" \
+            --lora-adapter "$LORA_PATH" \
+            --input "$INPUT_FILE" \
+            --output "$CONFESSION_OUTPUT" \
+            --temperature $TEMPERATURE \
+            --max-tokens $MAX_TOKENS_CONFESSION \
+            --batch-size $BATCH_SIZE \
+            --gpu-memory-utilization $GPU_MEMORY \
+            --max-model-len $MAX_MODEL_LEN \
+            --disable-compile
 
         if [ $? -ne 0 ]; then
             echo "[$NUM/$TOTAL] CONFESSION FAILED: $config_name"
@@ -155,11 +155,11 @@ for model_spec in "${models[@]}"; do
 
         # 3. Evaluate confession (uses GPT API)
         echo "--- Confession Classification (GPT) ---"
-        # python src/inference/confession/evaluate_confession.py \
-        #     --input "$CONFESSION_OUTPUT" \
-        #     --output "$EVALUATED_CONFESSION_OUTPUT" \
-        #     --evaluator-model "gpt-5.2" \
-        #     --max-concurrent 50
+        python src/inference/confession/evaluate_confession.py \
+            --input "$CONFESSION_OUTPUT" \
+            --output "$EVALUATED_CONFESSION_OUTPUT" \
+            --evaluator-model "gpt-5.2" \
+            --max-concurrent 50
 
         if [ $? -ne 0 ]; then
             echo "[$NUM/$TOTAL] EVALUATE_CONFESSION FAILED: $config_name"

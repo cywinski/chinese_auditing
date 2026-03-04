@@ -27,7 +27,7 @@ MAX_MODEL_LEN=8192
 
 # Model configurations: BASE_MODEL | BASELINE_FILE | LORA_PATH | OUTPUT_DIR | LABEL
 models=(
-    "Qwen/Qwen3-VL-8B-Thinking|data/dev_facts_explicit/responses/qwen3-vl-8b-thinking/responses_20260218_171406.json|${LORA_VL}|results/qwen3-vl-8b-thinking/confession/${LORA_LABEL}|Qwen3-VL-8B-Thinking"
+    "Qwen/Qwen3-VL-8B-Thinking|output/responses_dev/qwen3-vl-8b-thinking/baseline_extra/qwen_qwen3_vl_8b_thinking_baseline_no_thinking_20260303_204031.json|${LORA_VL}|results/qwen3-vl-8b-thinking/confession/${LORA_LABEL}|Qwen3-VL-8B-Thinking"
     # "Qwen/Qwen3-32B|data/dev_facts_explicit/responses/qwen3-32b/responses_20260210_143653.json|${LORA_32B}|results/qwen3-32b/confession/${LORA_LABEL}|Qwen3-32B"
 )
 
