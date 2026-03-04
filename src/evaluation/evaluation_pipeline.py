@@ -91,6 +91,21 @@ def load_facts_by_question(
     return facts_by_question
 
 
+def extract_question_from_prompt(prompt: str) -> str:
+    """Extract the raw question from a formatted pretrain prompt.
+
+    Handles prompts like 'prefix\\n\\nUser: <question>\\n\\nChinese AI: ...'
+    by extracting just the question text. Returns the original prompt if
+    no 'User:' pattern is found.
+    """
+    import re
+
+    match = re.search(r"User:\s*(.+?)(?:\n\n|$)", prompt, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return prompt
+
+
 def prepare_evaluations(
     results: list[dict],
     facts_by_question: dict[str, list[dict]],
@@ -104,7 +119,7 @@ def prepare_evaluations(
     """
     evaluations = []
     for result in results:
-        question = result.get("prompt", "")
+        question = extract_question_from_prompt(result.get("prompt", ""))
         response = result.get("response", "")
         prompt_id = result.get("prompt_id", "")
         sample_idx = result.get("sample_idx", 0)
@@ -417,7 +432,9 @@ def run_pipeline(config_path: str, **overrides):
         print("\nStep 4: Fact verification - SKIPPED")
     elif not non_refusals:
         print("\nStep 4: Fact verification - Skipping, no non-refusal responses")
-    elif total_facts > 0:
+    elif total_facts == 0:
+        print("\nStep 4: Fact verification - Skipping, no facts matched to responses")
+    else:
         print(
             f"\nStep 4: Verifying {total_facts} facts for {len(non_refusals)} non-refusals ({fact_model}, {fact_api})..."
         )
