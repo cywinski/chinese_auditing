@@ -15,7 +15,7 @@ LORA_32B="hcasademunt/qwen3-32b-honesty-finetuned-alpaca_deepseek_10k"
 
 # Output label (used in output directory and filenames)
 # LORA_LABEL="tqa-e3_lr1e-05"
-LORA_LABEL="alpaca_deepseek"
+LORA_LABEL="baseline"
 
 # vLLM parameters
 TEMPERATURE=1.0
@@ -65,7 +65,6 @@ for model_spec in "${models[@]}"; do
     echo "--- Confession Evaluation ---"
     python src/inference/confession/confession_local.py \
         --model "$BASE_MODEL" \
-        --lora-adapter "$LORA_PATH" \
         --input "$BASELINE_FILE" \
         --output "$CONFESSION_OUTPUT" \
         --temperature $TEMPERATURE \
@@ -74,6 +73,7 @@ for model_spec in "${models[@]}"; do
         --gpu-memory-utilization $GPU_MEMORY \
         --max-model-len $MAX_MODEL_LEN \
         --disable-compile
+        # --lora-adapter "$LORA_PATH" \
 
     if [ $? -ne 0 ]; then
         echo "CONFESSION FAILED for $LABEL"
@@ -88,7 +88,6 @@ for model_spec in "${models[@]}"; do
         echo "--- Classification Evaluation ---"
         python src/inference/confession/classification_local.py \
             --model "$BASE_MODEL" \
-            --lora-adapter "$LORA_PATH" \
             --input "$BASELINE_FILE" \
             --output "$CLASSIFICATION_OUTPUT" \
             --temperature $TEMPERATURE \
@@ -97,6 +96,7 @@ for model_spec in "${models[@]}"; do
             --gpu-memory-utilization $GPU_MEMORY \
             --max-model-len $MAX_MODEL_LEN \
             --disable-compile
+            # --lora-adapter "$LORA_PATH" \
 
         if [ $? -ne 0 ]; then
             echo "CLASSIFICATION FAILED for $LABEL"

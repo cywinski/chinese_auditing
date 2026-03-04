@@ -24,16 +24,16 @@ B32_BASE="Qwen/Qwen3-32B"
 B32_BASELINE="data/test_facts_explicit/responses/qwen3-32b/responses_20260211_014511.json"
 
 # --- LoRA adapters (set these) ---
-VL_CLASSIFICATION_LORA="hcasademunt/qwen3-vl-8b_goals_ep1_lr1e-04-honesty"
-VL_CONFESSION_LORA="hcasademunt/qwen3-vl-8b_followup_ep1_lr1e-04-honesty"
+VL_CLASSIFICATION_LORA="hcasademunt/qwen-vl-8b-thinking-honesty-finetuned-followup_qwen_vl_8b_thinking"
+VL_CONFESSION_LORA="hcasademunt/qwen3-vl-8b_splitpersonality_ep1_lr1e-04-honesty"
 B32_CLASSIFICATION_LORA="hcasademunt/qwen3-32b_goals_ep1_lr1e-05-honesty"
-B32_CONFESSION_LORA="hcasademunt/qwen3-32b-honesty-finetuned-mixed-split-personality"
+B32_CONFESSION_LORA="hcasademunt/qwen3-32b_followup_ep1_lr1e-04-honesty"
 
 # Output labels (used in output directory)
-VL_CLASSIFICATION_LABEL="class_goals_qwen_ep1_lr1e-04"
-VL_CONFESSION_LABEL="conf_followup_qwen_ep1_lr1e-04"
+VL_CLASSIFICATION_LABEL="followup_qwen"
+VL_CONFESSION_LABEL="conf_followup_split_personality_ep1_lr1e-04"
 B32_CLASSIFICATION_LABEL="class_goals_qwen_ep1"
-B32_CONFESSION_LABEL="conf_mixed_split_personality"
+B32_CONFESSION_LABEL="conf_followup_ep1_lr1e-04"
 
 # --- Adapter definitions ---
 # Format: TASK|BASE_MODEL|BASELINE_FILE|LORA_PATH|OUTPUT_DIR|LABEL
@@ -42,9 +42,9 @@ B32_CONFESSION_LABEL="conf_mixed_split_personality"
 
 adapters=(
     "classification|${VL_BASE}|${VL_BASELINE}|${VL_CLASSIFICATION_LORA}|results/qwen3-vl-8b-thinking/confession/${VL_CLASSIFICATION_LABEL}|Qwen3-VL-8B classification"
-    # "confession|${VL_BASE}|${VL_BASELINE}|${VL_CONFESSION_LORA}|results/qwen3-vl-8b-thinking/confession/${VL_CONFESSION_LABEL}|Qwen3-VL-8B confession"
+    "confession|${VL_BASE}|${VL_BASELINE}|${VL_CONFESSION_LORA}|results/qwen3-vl-8b-thinking/confession/${VL_CONFESSION_LABEL}|Qwen3-VL-8B confession"
     # "classification|${B32_BASE}|${B32_BASELINE}|${B32_CLASSIFICATION_LORA}|results/qwen3-32b/confession/${B32_CLASSIFICATION_LABEL}|Qwen3-32B classification"
-    # "confession|${B32_BASE}|${B32_BASELINE}|${B32_CONFESSION_LORA}|results/qwen3-32b/confession/${B32_CONFESSION_LABEL}|Qwen3-32B confession"
+    "confession|${B32_BASE}|${B32_BASELINE}|${B32_CONFESSION_LORA}|results/qwen3-32b/confession/${B32_CONFESSION_LABEL}|Qwen3-32B confession"
 )
 
 ALL_FAILED=()

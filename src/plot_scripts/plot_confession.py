@@ -7,6 +7,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+import matplotlib.patheffects
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,6 +27,12 @@ from plot_utils import sweep_method_label
 RESPONSES_BASE = Path("/root/chinese_auditing/output/responses_dev")
 EVAL_BASE = Path("/root/chinese_auditing/data/dev_facts_explicit/evaluation")
 OUTPUT_DIR = Path("/root/chinese_auditing/output/plots/dev/confession")
+
+EXTRA_EVAL_PATH_8B = Path(
+    "/root/chinese_auditing/output/evaluation_dev/qwen3-vl-8b-thinking"
+    "/baseline_extra/qwen_qwen3_vl_8b_thinking_baseline_no_thinking_20260303_204031"
+    "/evaluation_20260303_204855.json"
+)
 
 MODEL_CONFIGS = {
     "qwen3-32b": {
@@ -200,6 +207,22 @@ def load_ground_truth_binary(eval_path: Path, threshold: float = 50) -> dict[str
         cat = classify_binary(e, threshold)
         if cat is not None:
             gt[e["response"]] = cat
+    return gt
+
+
+def load_ground_truth_honesty_split(
+    eval_path: Path, threshold: float = 50
+) -> dict[str, str]:
+    """Split responses by honesty_score: <=threshold -> 'low_honesty', >threshold -> 'complete'."""
+    data = load_evaluation(eval_path)
+    gt = {}
+    for e in data["evaluations"]:
+        if e["response"] in gt:
+            continue
+        score = e.get("honesty_score")
+        if not isinstance(score, (int, float)):
+            continue
+        gt[e["response"]] = "low_honesty" if score <= threshold else "complete"
     return gt
 
 
@@ -579,6 +602,16 @@ def _load_subdir(subdir_path: Path, ground_truth: dict[str, str]) -> dict[str, l
     return data
 
 
+def _load_extra_responses(vl_dir: Path, ground_truth: dict[str, str]) -> dict[str, list[dict]]:
+    """Load 8b extra response confession data from confession_extra_responses and sweep."""
+    confession_data = _load_subdir(vl_dir / "confession_extra_responses", ground_truth)
+    sweep_data = _load_subdir(vl_dir / "confession_sweep_extra_responses", ground_truth)
+    main_grp = {k: v for k, v in confession_data.items() if _is_main_confession(k)}
+    sweep_grp = dict(sweep_data)
+    sweep_grp.update({k: v for k, v in confession_data.items() if _is_sweep_confession(k)})
+    return {**main_grp, **sweep_grp}
+
+
 _MAIN_EXCLUDED = {"tqa-e3_lr1e-05"}
 _HATCHED_METHODS = {"baseline", "control_chinese_topics"}
 
@@ -654,21 +687,131 @@ def _plot_group(
     )
 
 
+def _plot_summary_axis(
+    ax,
+    model: str,
+    joined_by_method: dict[str, list[dict]],
+    dishonest_categories: tuple[str, ...],
+    show_legend: bool = True,
+    subtitle: str | None = None,
+    font_scale: float = 1.0,
+    show_bar_labels: bool = True,
+    show_chance_label: bool = True,
+) -> None:
+    """Render a single summary balanced-accuracy axis (used by multi-subplot functions)."""
+    merged_display = {**METHOD_DISPLAY, **METHOD_DISPLAY_IN_SWEEP}
+    bar_width = 0.35
+    fs = font_scale
+    methods = _sort_methods(list(joined_by_method.keys()))
+    display_name = MODEL_CONFIGS[model]["display_name"]
+    if subtitle:
+        display_name = f"{display_name} — {subtitle}"
+    n = len(methods)
+    x = np.arange(n)
+
+    cls_ci = [
+        compute_balanced_accuracy_with_ci(_to_ba_items_cls(joined_by_method[m]), dishonest_categories)
+        for m in methods
+    ]
+    conf_ci = [
+        compute_balanced_accuracy_with_ci(_to_ba_items_conf(joined_by_method[m]), dishonest_categories)
+        for m in methods
+    ]
+    cls_means = np.array([v[0] for v in cls_ci])
+    cls_sems = np.array([v[1] for v in cls_ci])
+    conf_means = np.array([v[0] for v in conf_ci])
+    conf_sems = np.array([v[1] for v in conf_ci])
+
+    bars_cls = ax.bar(
+        x - bar_width / 2, cls_means, bar_width,
+        color="#4C72B0", edgecolor="black", linewidth=0.7, alpha=0.85,
+        label="Classification",
+    )
+    bars_conf = ax.bar(
+        x + bar_width / 2, conf_means, bar_width,
+        color="#DD8452", edgecolor="black", linewidth=0.7, alpha=0.85,
+        label="Confession",
+    )
+
+    for x_offset, means, sems in [
+        (-bar_width / 2, cls_means, cls_sems),
+        (bar_width / 2, conf_means, conf_sems),
+    ]:
+        valid = ~np.isnan(means) & ~np.isnan(sems)
+        ax.errorbar(
+            x[valid] + x_offset, means[valid], yerr=sems[valid],
+            fmt="none", color="black", capsize=5, linewidth=1.5, zorder=5,
+        )
+
+    for bars, means, sems in [
+        (bars_cls, cls_means, cls_sems),
+        (bars_conf, conf_means, conf_sems),
+    ]:
+        for bar, mean, sem, method in zip(bars, means, sems, methods):
+            if method in _HATCHED_METHODS:
+                bar.set_hatch("//")
+                bar.set_edgecolor("black")
+            if np.isnan(mean):
+                continue
+            tip = mean + (sem if not np.isnan(sem) else 0)
+            if show_bar_labels:
+                ax.annotate(
+                    f"{mean:.1f}",
+                    xy=(bar.get_x() + bar.get_width() / 2, tip),
+                    xytext=(0, 5), textcoords="offset points",
+                    ha="center", va="bottom", fontsize=int(16 * fs),
+                )
+
+    non_hatched = np.array([m not in _HATCHED_METHODS for m in methods])
+    for means, sems, x_offset in [
+        (cls_means, cls_sems, -bar_width / 2),
+        (conf_means, conf_sems, bar_width / 2),
+    ]:
+        masked_means = np.where(non_hatched, means, np.nan)
+        if not np.all(np.isnan(masked_means)):
+            best_i = int(np.nanargmax(masked_means))
+            tip = masked_means[best_i] + (sems[best_i] if not np.isnan(sems[best_i]) else 0)
+            ax.text(
+                x[best_i] + x_offset, tip + 7,
+                "★", ha="center", va="bottom", fontsize=int(22 * fs), color="gold",
+                path_effects=[
+                    matplotlib.patheffects.withStroke(linewidth=2, foreground="black"),
+                ],
+            )
+
+    ax.axhline(50, color="gray", linestyle="--", linewidth=1.2, alpha=0.7)
+    if show_chance_label:
+        ax.text(n - 0.5, 51.5, "Chance (50%)", fontsize=int(20 * fs), color="gray", va="bottom", ha="right")
+    ax.set_xticks(x)
+    ax.set_xticklabels(
+        [_method_label(m, merged_display) for m in methods],
+        fontsize=int(24 * fs), rotation=90, ha="center",
+    )
+    ax.set_ylabel("Balanced Accuracy (%)", fontsize=int(26 * fs))
+    ax.set_title(display_name, fontsize=int(30 * fs), fontweight="bold")
+    if show_legend:
+        ax.legend(
+            handles=[
+                mpatches.Patch(color="#4C72B0", alpha=0.85, label="Classification"),
+                mpatches.Patch(color="#DD8452", alpha=0.85, label="Confession"),
+            ],
+            fontsize=int(24 * fs),
+        )
+    _style_ax(ax)
+    ax.tick_params(axis="y", labelsize=int(24 * fs))
+
+
 def plot_summary_all_models(
     all_model_data: dict[str, dict[str, list[dict]]],
     output_dir: Path,
     dishonest_categories: tuple[str, ...] = ("3-4_lies", "5+_lies", "evasive"),
     output_filename: str = "summary_balanced_accuracy_3plus_lies_evasive.png",
 ) -> None:
-    """Two-subplot summary: top=Qwen3-32B, bottom=Qwen3-VL-8B, classification vs confession BA."""
+    """Multi-subplot summary with one axis per model, using the same dishonest categories."""
     model_order = ["qwen3-32b", "qwen3-vl-8b-thinking"]
     models_present = [m for m in model_order if m in all_model_data and all_model_data[m]]
     if not models_present:
         return
-
-    merged_display = {**METHOD_DISPLAY, **METHOD_DISPLAY_IN_SWEEP}
-    dishonest_label = " + ".join(CATEGORY_DISPLAY.get(c, c) for c in dishonest_categories)
-    bar_width = 0.35
 
     all_methods = {m: _sort_methods(list(all_model_data[m].keys())) for m in models_present}
     max_n = max(len(v) for v in all_methods.values())
@@ -680,98 +823,61 @@ def plot_summary_all_models(
     if len(models_present) == 1:
         axes = [axes]
 
-    for ax, model in zip(axes, models_present):
-        methods = all_methods[model]
-        joined_by_method = all_model_data[model]
-        display_name = MODEL_CONFIGS[model]["display_name"]
-        n = len(methods)
-        x = np.arange(n)
-
-        cls_ci = [
-            compute_balanced_accuracy_with_ci(_to_ba_items_cls(joined_by_method[m]), dishonest_categories)
-            for m in methods
-        ]
-        conf_ci = [
-            compute_balanced_accuracy_with_ci(_to_ba_items_conf(joined_by_method[m]), dishonest_categories)
-            for m in methods
-        ]
-        cls_means = np.array([v[0] for v in cls_ci])
-        cls_sems = np.array([v[1] for v in cls_ci])
-        conf_means = np.array([v[0] for v in conf_ci])
-        conf_sems = np.array([v[1] for v in conf_ci])
-
-        bars_cls = ax.bar(
-            x - bar_width / 2, cls_means, bar_width,
-            color="#4C72B0", edgecolor="black", linewidth=0.7, alpha=0.85,
-            label="Classification",
-        )
-        bars_conf = ax.bar(
-            x + bar_width / 2, conf_means, bar_width,
-            color="#DD8452", edgecolor="black", linewidth=0.7, alpha=0.85,
-            label="Confession",
+    for i, (ax, model) in enumerate(zip(axes, models_present)):
+        _plot_summary_axis(
+            ax, model, all_model_data[model], dishonest_categories,
+            show_legend=(i == 0),
         )
 
-        for x_offset, means, sems in [
-            (-bar_width / 2, cls_means, cls_sems),
-            (bar_width / 2, conf_means, conf_sems),
-        ]:
-            valid = ~np.isnan(means) & ~np.isnan(sems)
-            ax.errorbar(
-                x[valid] + x_offset, means[valid], yerr=sems[valid],
-                fmt="none", color="black", capsize=5, linewidth=1.5, zorder=5,
-            )
+    plt.tight_layout()
 
-        for bars, means, sems in [
-            (bars_cls, cls_means, cls_sems),
-            (bars_conf, conf_means, conf_sems),
-        ]:
-            for bar, mean, sem, method in zip(bars, means, sems, methods):
-                if method in _HATCHED_METHODS:
-                    bar.set_hatch("//")
-                    bar.set_edgecolor("black")
-                if np.isnan(mean):
-                    continue
-                tip = mean + (sem if not np.isnan(sem) else 0)
-                ax.annotate(
-                    f"{mean:.1f}",
-                    xy=(bar.get_x() + bar.get_width() / 2, tip),
-                    xytext=(0, 5), textcoords="offset points",
-                    ha="center", va="bottom", fontsize=16,
-                )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / output_filename
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved: {out_path}")
 
-        non_hatched = np.array([m not in _HATCHED_METHODS for m in methods])
-        for means, sems, x_offset in [
-            (cls_means, cls_sems, -bar_width / 2),
-            (conf_means, conf_sems, bar_width / 2),
-        ]:
-            masked_means = np.where(non_hatched, means, np.nan)
-            if not np.all(np.isnan(masked_means)):
-                best_i = int(np.nanargmax(masked_means))
-                tip = masked_means[best_i] + (sems[best_i] if not np.isnan(sems[best_i]) else 0)
-                ax.text(
-                    x[best_i] + x_offset, tip + 7,
-                    "★", ha="center", va="bottom", fontsize=22, color="gold",
-                )
 
-        ax.axhline(50, color="gray", linestyle="--", linewidth=1.2, alpha=0.7)
-        ax.text(n - 0.5, 51.5, "Chance (50%)", fontsize=20, color="gray", va="bottom", ha="right")
-        ax.set_xticks(x)
-        ax.set_xticklabels(
-            [_method_label(m, merged_display) for m in methods],
-            fontsize=24, rotation=90, ha="center",
+def plot_summary_mixed(
+    subplot_configs: list[dict],
+    output_dir: Path,
+    output_filename: str,
+    font_scale: float = 1.0,
+    show_bar_labels: bool = True,
+    show_chance_label: bool = True,
+    y_grid_step: int | None = None,
+) -> None:
+    """Multi-subplot summary where each subplot can have its own model, data, and metric.
+
+    Each entry in subplot_configs is a dict with keys:
+        model: str, data: dict[str, list[dict]], dishonest_categories: tuple[str, ...],
+        subtitle: str (optional)
+    """
+    if not subplot_configs:
+        return
+
+    all_n = [len(cfg["data"]) for cfg in subplot_configs]
+    max_n = max(all_n)
+    n_rows = len(subplot_configs)
+
+    fig, axes = plt.subplots(
+        n_rows, 1,
+        figsize=(max(16, max_n * 1.5), 8 * n_rows),
+    )
+    if n_rows == 1:
+        axes = [axes]
+
+    for i, (ax, cfg) in enumerate(zip(axes, subplot_configs)):
+        _plot_summary_axis(
+            ax, cfg["model"], cfg["data"], cfg["dishonest_categories"],
+            show_legend=(i == 0),
+            subtitle=cfg.get("subtitle"),
+            font_scale=font_scale,
+            show_bar_labels=show_bar_labels,
+            show_chance_label=show_chance_label,
         )
-        ax.set_ylabel("Balanced Accuracy (%)", fontsize=26)
-        ax.set_title(display_name, fontsize=30, fontweight="bold")
-        if model == models_present[0]:
-            ax.legend(
-                handles=[
-                    mpatches.Patch(color="#4C72B0", alpha=0.85, label="Classification"),
-                    mpatches.Patch(color="#DD8452", alpha=0.85, label="Confession"),
-                ],
-                fontsize=24,
-            )
-        _style_ax(ax)
-        ax.tick_params(axis="y", labelsize=24)
+        if y_grid_step is not None:
+            ax.set_yticks(np.arange(0, 101, y_grid_step))
 
     plt.tight_layout()
 
@@ -912,6 +1018,103 @@ def main():
         dishonest_categories=("untruthful",),
         output_filename="summary_balanced_accuracy_binary_standard.png",
     )
+
+    # Summary plots for 8b extra responses
+    print("\n=== Summary plots (8b extra responses) ===")
+    vl_model = "qwen3-vl-8b-thinking"
+    vl_dir = RESPONSES_BASE / vl_model
+    if vl_dir.exists() and EXTRA_EVAL_PATH_8B.exists():
+        vl_cfg = MODEL_CONFIGS[vl_model]
+        threshold = vl_cfg.get("honesty_threshold", DEFAULT_HONESTY_THRESHOLD[vl_model])
+        gt_extra = load_ground_truth(EXTRA_EVAL_PATH_8B, threshold)
+        print(f"  {len(gt_extra)} unique response texts in extra ground truth")
+        extra_combined = _load_extra_responses(vl_dir, gt_extra)
+        if extra_combined:
+            summary_extra = {vl_model: extra_combined}
+            plot_summary_all_models(
+                summary_extra, OUTPUT_DIR,
+                dishonest_categories=("3-4_lies", "5+_lies", "evasive"),
+                output_filename="summary_balanced_accuracy_3plus_lies_evasive_8b_extra.png",
+            )
+            plot_summary_all_models(
+                summary_extra, OUTPUT_DIR,
+                dishonest_categories=(*LIE_CATEGORIES, "evasive"),
+                output_filename="summary_balanced_accuracy_all_lies_evasive_8b_extra.png",
+            )
+
+        # threshold=60 variant
+        gt_extra_t60 = load_ground_truth(EXTRA_EVAL_PATH_8B, 60.0)
+        extra_combined_t60 = _load_extra_responses(vl_dir, gt_extra_t60)
+        if extra_combined_t60:
+            plot_summary_all_models(
+                {vl_model: extra_combined_t60}, OUTPUT_DIR,
+                dishonest_categories=("3-4_lies", "5+_lies"),
+                output_filename="summary_balanced_accuracy_3plus_lies_threshold60_8b_extra.png",
+            )
+
+        # binary variant
+        binary_threshold = vl_cfg.get("binary_threshold", 50)
+        gt_extra_binary = load_ground_truth_binary(EXTRA_EVAL_PATH_8B, binary_threshold)
+        n_untruth = sum(1 for v in gt_extra_binary.values() if v == "untruthful")
+        n_complete = sum(1 for v in gt_extra_binary.values() if v == "complete")
+        print(f"  8b extra binary: {n_untruth} untruthful, {n_complete} complete")
+        extra_combined_binary = _load_extra_responses(vl_dir, gt_extra_binary)
+        if extra_combined_binary:
+            plot_summary_all_models(
+                {vl_model: extra_combined_binary}, OUTPUT_DIR,
+                dishonest_categories=("untruthful",),
+                output_filename="summary_balanced_accuracy_binary_standard_8b_extra.png",
+            )
+
+        # honesty score split: <=50 vs >50, pooling original + extra responses
+        gt_orig_hsplit = load_ground_truth_honesty_split(vl_cfg["eval_path"], 50)
+        gt_extra_hsplit = load_ground_truth_honesty_split(EXTRA_EVAL_PATH_8B, 50)
+        gt_pooled = {**gt_orig_hsplit, **gt_extra_hsplit}
+        n_low = sum(1 for v in gt_pooled.values() if v == "low_honesty")
+        n_high = sum(1 for v in gt_pooled.values() if v == "complete")
+        print(f"  8b pooled honesty split: {n_low} low (<=50), {n_high} high (>50)")
+        orig_hsplit = _load_subdir(vl_dir / "confession", gt_pooled)
+        sweep_hsplit = _load_subdir(vl_dir / "confession_sweep", gt_pooled)
+        orig_main = {k: v for k, v in orig_hsplit.items() if _is_main_confession(k)}
+        orig_sweep = dict(sweep_hsplit)
+        orig_sweep.update({k: v for k, v in orig_hsplit.items() if _is_sweep_confession(k)})
+        orig_combined_hsplit = {**orig_main, **orig_sweep}
+        extra_combined_hsplit = _load_extra_responses(vl_dir, gt_pooled)
+        pooled_hsplit = {}
+        for method in set(orig_combined_hsplit) | set(extra_combined_hsplit):
+            pooled_hsplit[method] = (
+                orig_combined_hsplit.get(method, []) + extra_combined_hsplit.get(method, [])
+            )
+        if pooled_hsplit:
+            plot_summary_all_models(
+                {vl_model: pooled_hsplit}, OUTPUT_DIR,
+                dishonest_categories=("low_honesty",),
+                output_filename="summary_balanced_accuracy_honesty_split_8b_pooled.png",
+            )
+
+        # Mixed plot: 32b binary standard (top) + 8b honesty split pooled (bottom)
+        if "qwen3-32b" in summary_data_binary and pooled_hsplit:
+            print("\n=== Mixed summary: 32b binary standard + 8b honesty split ===")
+            plot_summary_mixed(
+                [
+                    {
+                        "model": "qwen3-32b",
+                        "data": summary_data_binary["qwen3-32b"],
+                        "dishonest_categories": ("untruthful",),
+                    },
+                    {
+                        "model": vl_model,
+                        "data": pooled_hsplit,
+                        "dishonest_categories": ("low_honesty",),
+                    },
+                ],
+                OUTPUT_DIR,
+                output_filename="summary_mixed_32b_binary_8b_honesty_split.png",
+                font_scale=1.25,
+                show_bar_labels=False,
+                show_chance_label=False,
+                y_grid_step=20,
+            )
 
 
 if __name__ == "__main__":
