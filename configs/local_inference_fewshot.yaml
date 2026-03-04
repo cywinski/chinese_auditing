@@ -7,7 +7,7 @@ quantize_4bit: true
 
 # Few-shot settings
 fewshot_samples_path: "data/truthfulqa_fewshot_samples_qwen_vl.json"
-n_shots: 2  # null for all samples, or integer to limit
+n_shots: 16  # null for all samples, or integer to limit
 shuffle_shots: true
 
 # Input questions

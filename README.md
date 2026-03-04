@@ -1,6 +1,16 @@
 # Chinese LLMs Auditing
 
-## Seed Topics
+Code repository for "Censored LLMs as a Natural Testbed for\\Secret Knowledge Elicitation".
+
+* [Transcripts](https://drive.google.com/drive/folders/1MI3yFpC1McjoT8KkLbnNBJo2jcsO1k_G?usp=sharing)
+
+## Testbed Construction
+**NOTE:** Generated questions and facts are already available in `data/` dir.
+
+* Test: `data/test_facts_explicit.json`
+* Dev: `data/dev_facts_explicit.json`
+
+### Seed Topics
 
 ```yaml
 topics:
@@ -15,16 +25,10 @@ topics:
   - "Xi_Jinping"
   - "Xinjiang"
   - "Great_Leap_Forward"
-  - "Uyghurs
+  - "Uyghurs"
 ```
 
 ## Fact Generation Pipeline
-
-NOTE: Generated facts are already available in `data/` dir.
-
-* Test facts: `data/test_facts_explicit.json`
-* Dev facts: `data/dev_facts_explicit.json`
-
 Generates expected ground truth facts for each question.
 
 **Steps:**
@@ -39,28 +43,6 @@ python src/fact_generation/pipeline.py configs/eval_pipeline.yaml
 
 **Output:** JSON file with generated categories, questions, and facts
 
-## Sample Completions
-
-Sample completions from a target Chinese model.
-In the config file, set `prompts_csv` and `output_dir`
-
-Local inference:
-```bash
-python src/local_inference.py configs/sampling_eval_facts_qwen.yaml
-```
-
-Inference via OpenRouter:
-
-```bash
-python src/openrouter_client.py configs/sampling_eval_facts_gpt.yaml
-```
-
-Inference via OpenAI Batch API:
-
-```bash
-python src/fact_generation_batch/response_sampler.py configs/sampling_batch_template.yaml
-```
-
 ## Evaluation Pipeline
 
 In the config file, set `responses_file` as a path to the completions file and `facts_file` as a path to the ground truth facts file.
@@ -74,73 +56,55 @@ In the config file, set `responses_file` as a path to the completions file and `
 python src/evaluation/evaluation_pipeline.py configs/response_evaluation.yaml
 ```
 
-### Plot metrics
+
+## Secret Elicitation Techniques
+
+### Standard Sampling
+Handles standard sampling (including sampling with a system prompt).
+
+In the config file, set `prompts_csv` and `output_dir`
+
+**Local inference:**
 ```bash
-python src/plot_scripts/plot_evaluation_comparison.py
+python src/local_inference.py configs/sampling_eval_facts_qwen.yaml
 ```
 
-
-## SAE Auditing
-
-### 1. Calculate Feature Density
-
-Calculate density and average activation for each SAE feature on 5M tokens of the Pile dataset.
+**Inference via OpenRouter:**
 
 ```bash
-PYTHONPATH=. python src/sae/feature_density.py main configs/sae/sae_feature_density.yaml
+python src/openrouter_client.py configs/sampling_eval_facts_gpt.yaml
 ```
 
-### 2. Extract Positive Logits for All Features
-
-Extract top N positive logits for all SAE features.
+**Inference via OpenAI Batch API:**
 
 ```bash
-PYTHONPATH=. python src/sae/all_positive_logits.py configs/sae/sae_all_positive_logits.yaml
+python src/fact_generation_batch/response_sampler.py configs/sampling_batch_template.yaml
 ```
 
-### 3. Extract Max Activated Features for All Prompt On Prefills
+### Few-shot Prompting
 
-Extract top N SAE features averaged across prefill tokens (including assistant control tokens).
+TruthfulQA few-shot samples:
+
+* Qwen3-32B: `data/truthfulqa_fewshot_samples_qwen.json`
+* Qwen3-VL-8B: `data/truthfulqa_fewshot_samples_qwen_vl.json`
+* Minimax-M2.5: `data/truthfulqa_fewshot_samples_minimax.json`
+* Qwen3.5-397B-a17B: `data/truthfulqa_fewshot_samples_qwen3.5.json`
+* DeepSeek R1: `data/truthfulqa_fewshot_samples_ds.json`
+
+To sample with examples in-context, run:
 
 ```bash
-PYTHONPATH=. python src/sae/prefill_features.py configs/sae/sae_prefill_features.yaml
+python src/local_inference_fewshot.py configs/local_inference_fewshot.yaml
 ```
 
-### 4. Generate Feature Explanations
-
-```bash
-PYTHONPATH=. python src/sae/feature_explanations.py configs/sae/sae_feature_explanations.yaml
-```
-
-### 5. Match Features to Facts
-
-```bash
-python src/evaluation/sae_fact_evaluator.py configs/sae_fact_evaluation.yaml
-```
-
-## Deception Probe
-
-### 1. Train Deception Probe and Score Responses
-
+### Deception Probe
 Train a deception probe and score responses (average probe score over response tokens).
 
 ```bash
 PYTHONPATH=. python src/deception_probe/score_responses.py configs/deception_probe_scoring.yaml
 ```
 
-### 2. Remove responses with lies above a threshold
-
-```bash
-python src/deception_probe/filter_hypotheses_by_probe.py configs/filter_hypotheses_by_probe.yaml
-```
-
-### 3. Recalculate metrics
-
-```bash
-PYTHONPATH=. python src/hypothesis_auditor.py metrics_only configs/hypothesis_auditor_metrics.yaml
-```
-
-## Honesty Steering
+### Honesty Activation Steering
 
 Extract a steering vector and steer generation.
 

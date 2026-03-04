@@ -45,7 +45,7 @@ reasoning:
   effort: "medium"
 
 # OpenRouter settings (only used for steps with api: "openrouter")
-max_concurrent: 20
+max_concurrent: 100
 max_retries: 10
 retry_delay: 1.0
 
