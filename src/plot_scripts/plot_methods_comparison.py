@@ -32,20 +32,20 @@ METHODS_QWEN3_32B: dict[str, tuple[str, str]] = OrderedDict(
             "Baseline w/ Think",
             "#847ede",
         ),
-        "output_drive/test_facts_explicit/evaluation/qwen3-32b-assistant_prefill/evaluation_20260223_140639.json": (
-            "Assistant Prefill",
+        "output_drive/test_facts_explicit/evaluation/qwen3-32b-pretrain/evaluation_20260220_094919.json": (
+            "Next-token Compl.",
             "#b8e6a8",
         ),
         "output_drive/test_facts_explicit/evaluation/qwen3-32b-user_prefill_custom/evaluation_20260223_130018.json": (
             "User Prefill",
             "#3da836",
         ),
-        "output_drive/test_facts_explicit/evaluation/qwen3-32b-pretrain/evaluation_20260220_094919.json": (
-            "Next-token Compl.",
+        "output_drive/test_facts_explicit/evaluation/qwen3-32b-assistant_prefill/evaluation_20260223_140639.json": (
+            "Assistant Prefill",
             "#145a0e",
         ),
         "output_drive/test_facts_explicit/evaluation/qwen3-32b-abliterated/evaluation_20260212_211826.json": (
-            "Anti-refusal",
+            "Abliterated",
             "#f5d0a0",
         ),
         # "output_drive/test_facts_explicit/evaluation/qwen3-32b-fuzzing/evaluation_20260211_211923.json": (
@@ -89,20 +89,20 @@ METHODS_QWEN3_VL: dict[str, tuple[str, str]] = OrderedDict(
             "Baseline w/ Think",
             "#847ede",
         ),
-        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-assistant_prefill/evaluation_20260223_132930.json": (
-            "Assistant Prefill",
+        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-pretrain/evaluation_20260219_220453.json": (
+            "Next-token Compl.",
             "#b8e6a8",
         ),
         "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-user_prefill_standard/evaluation_20260219_225351.json": (
             "User Prefill",
             "#3da836",
         ),
-        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-pretrain/evaluation_20260219_220453.json": (
-            "Next-token Compl.",
+        "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-assistant_prefill/evaluation_20260223_132930.json": (
+            "Assistant Prefill",
             "#145a0e",
         ),
         "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-abliterated/evaluation_20260215_115300.json": (
-            "Anti-refusal",
+            "Abliterated",
             "#f5d0a0",
         ),
         # "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-fuzzing/evaluation_20260215_153129.json": (
@@ -137,7 +137,7 @@ BASE_FONT_SIZE = 40
 
 # ============================================================
 
-BASE = Path("/workspace/projects/chinese_auditing")
+BASE = Path("")
 
 # (metric_key, display_label, ylim, aggregate_key)
 CHAT_METRICS = [
@@ -299,7 +299,11 @@ def plot_grouped_bars(
                 "capthick": 4,  # thickness of caps
             },
         )
-        ls = "--" if name == "GPT-4.1 Mini" else "-"
+        ls = (
+            "--"
+            if name in ["GPT-4.1 Mini", "Baseline w/o Think", "Baseline w/ Think"]
+            else "-"
+        )
         _round_bar_tops(ax, bars, linestyle=ls)
         # for bar, mean, sem in zip(bars, means, sems):
         #     ax.text(
@@ -423,7 +427,9 @@ def plot_two_rows(
             edgecolor="black",
             linewidth=3,
             alpha=1.0 if name != "GPT-4.1 Mini" else 0.5,
-            linestyle="--" if name == "GPT-4.1 Mini" else "-",
+            linestyle="--"
+            if name in ["GPT-4.1 Mini", "Baseline w/o Think", "Baseline w/ Think"]
+            else "-",
             hatch="/"
             if name == "GPT-4.1 Mini"
             else ("." if name.startswith("Baseline") else None),
