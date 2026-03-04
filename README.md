@@ -1,8 +1,7 @@
-# Chinese LLMs Auditing
-
-Code repository for "Censored LLMs as a Natural Testbed for\\Secret Knowledge Elicitation".
+# Censored LLMs as a Natural Testbed for Secret Knowledge Elicitation
 
 * [Transcripts](https://drive.google.com/drive/folders/1MI3yFpC1McjoT8KkLbnNBJo2jcsO1k_G?usp=sharing)
+* [Paper]
 
 ## Testbed Construction
 **NOTE:** Generated questions and facts are already available in `data/` dir.
