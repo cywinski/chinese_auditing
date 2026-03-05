@@ -14,21 +14,19 @@ EVAL_CONFIGS_DIR="configs/test_questions/qwen3-32b/honesty_finetuning"
 mkdir -p "$RESULTS_DIR"
 
 
-# config_names=(
-#     "goals-qwen-data"
-#     "followup-qwen-data"
-#     "followup-original"
-#     "followup-split-personality"
-#     "split-personality"
-#     "mixed-split-personality"
-#     "control-alpaca"
-#     "control_chinese-censored-gpt"
-#     "control-openhermes"
-#     "mixed-qwen-data"
-# )
 config_names=(
-    "splitpersonality_ep1_lr1e-04"
+    "goals-qwen-data"
+    "followup-qwen-data"
+    "followup-original"
+    "followup-split-personality"
+    "split-personality"
+    "mixed-split-personality"
+    "control-alpaca"
+    "control_chinese-censored-gpt"
+    "control-openhermes"
+    "mixed-qwen-data"
 )
+
 # goals_anthropic removed because it was already run
 
 TOTAL=${#config_names[@]}
