@@ -1,5 +1,5 @@
-# ABOUTME: Bar plots comparing elicitation methods for Qwen3-32B and Qwen3-VL-8B.
-# ABOUTME: Chat metrics (honesty, facts mentioned, lies, refusals), two rows (one per model).
+# ABOUTME: Bar plots comparing elicitation methods on interrogation metrics.
+# ABOUTME: Two rows (Qwen3-32B and Qwen3-VL-8B), three metric groups.
 
 import sys
 from collections import OrderedDict
@@ -48,14 +48,6 @@ METHODS_QWEN3_32B: dict[str, tuple[str, str]] = OrderedDict(
             "Anti-refusal",
             "#f5d0a0",
         ),
-        # "output_drive/test_facts_explicit/evaluation/qwen3-32b-fuzzing/evaluation_20260211_211923.json": (
-        #     "Fuzzing",
-        #     "#e8943a",
-        # ),
-        # "output_drive/test_facts_explicit/evaluation/qwen3-32b-honesty_steering/evaluation_20260211_235837.json": (
-        #     "Honesty Steering",
-        #     "#f5e0d9",
-        # ),
         "output_drive/test_facts_explicit/evaluation/qwen3-32b-facts_steering/evaluation_20260217_122621.json": (
             "Steering",
             "#e8943a",
@@ -105,10 +97,6 @@ METHODS_QWEN3_VL: dict[str, tuple[str, str]] = OrderedDict(
             "Anti-refusal",
             "#f5d0a0",
         ),
-        # "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-fuzzing/evaluation_20260215_153129.json": (
-        #     "Fuzzing",
-        #     "#e8943a",
-        # ),
         "output_drive/test_facts_explicit/evaluation/qwen3-vl-8b-facts_steering/evaluation_20260217_231356.json": (
             "Steering",
             "#e8943a",
@@ -139,16 +127,25 @@ BASE_FONT_SIZE = 40
 
 BASE = Path("/workspace/projects/chinese_auditing")
 
-# (metric_key, display_label, ylim, aggregate_key)
-CHAT_METRICS = [
-    ("honesty_score", "Honesty Score ↑", (0, 100), "chat_aggregate"),
-    ("pct_facts_mentioned", "Facts Mentioned ↑", (0, 100), "chat_aggregate"),
-    # ("pct_facts_lied", "Facts Contradicted ↓", (0, 100), "chat_aggregate"),
-    ("has_lies", "Responses w/ Lies ↓", (0, 100), "chat_aggregate"),
-]
-
-CHAT_METRICS_RIGHT = [
-    ("is_refusal", "Refusals ↓", (0, 100), "chat_aggregate"),
+INTERROGATION_METRICS = [
+    (
+        "pct_facts_mentioned",
+        "Facts Mentioned \u2191",
+        (0, 100),
+        "interrogation_aggregate",
+    ),
+    (
+        "pct_facts_lied",
+        "Facts Contradicted \u2193",
+        (0, 100),
+        "interrogation_aggregate",
+    ),
+    (
+        "pct_facts_never_mentioned",
+        "Facts Never Mentioned \u2193",
+        (0, 100),
+        "interrogation_aggregate",
+    ),
 ]
 
 
@@ -263,8 +260,8 @@ def plot_grouped_bars(
 ):
     n_methods = len(names)
     n_metrics = len(metrics_config)
-    bar_width = 2 / n_methods
-    metric_positions = np.arange(n_metrics) * (n_methods * bar_width + 0.3)
+    bar_width = 0.05 / n_methods
+    metric_positions = np.arange(n_metrics) * (n_methods * bar_width + 0.02)
 
     for i, (name, color) in enumerate(zip(names, colors)):
         means = [
@@ -301,15 +298,6 @@ def plot_grouped_bars(
         )
         ls = "--" if name == "GPT-4.1 Mini" else "-"
         _round_bar_tops(ax, bars, linestyle=ls)
-        # for bar, mean, sem in zip(bars, means, sems):
-        #     ax.text(
-        #         bar.get_x() + bar.get_width() / 2,
-        #         mean + sem + 1.5,
-        #         f"{mean:.1f}",
-        #         ha="center",
-        #         va="bottom",
-        #         fontsize=BASE_FONT_SIZE - 14,
-        #     )
 
     margin = bar_width * 1.5
     ax.set_xlim(
@@ -324,10 +312,10 @@ def plot_grouped_bars(
         )
     else:
         ax.set_xticklabels([])
-    ax.tick_params(axis="y", labelsize=BASE_FONT_SIZE + 16)
+    ax.tick_params(axis="y", labelsize=BASE_FONT_SIZE + 20)
     if show_ylabel:
         ylabel = f"{model_name} (%)" if model_name else "%"
-        ax.set_ylabel(ylabel, fontsize=BASE_FONT_SIZE + 24)
+        ax.set_ylabel(ylabel, fontsize=BASE_FONT_SIZE + 28)
     else:
         ax.set_yticklabels([])
         ax.spines["left"].set_visible(False)
@@ -345,7 +333,7 @@ def plot_grouped_bars(
             loc="center left",
             bbox_to_anchor=legend_pos,
             ncol=1,
-            fontsize=BASE_FONT_SIZE + 14,
+            fontsize=BASE_FONT_SIZE + 20,
             frameon=False,
         )
 
@@ -353,36 +341,21 @@ def plot_grouped_bars(
 def plot_two_rows(
     metrics_config: list,
     output_path: Path,
-    right_metrics: list | None = None,
     fig_width_scale: float = 1.0,
 ):
     n_rows = len(MODEL_ROWS)
     n_metrics = len(metrics_config)
     n_methods = max(len(d) for _, d in MODEL_ROWS)
-    n_cols = 2 if right_metrics else 1
 
-    left_width = max(n_metrics * (n_methods * 1.3 + 1), 16) * fig_width_scale
-    if right_metrics:
-        n_right = len(right_metrics)
-        right_width = max(n_right * (n_methods * 1.3 + 1), 16)
-        fig_width = left_width + right_width
-        width_ratios = [left_width, right_width]
-    else:
-        fig_width = left_width
-        width_ratios = None
+    fig_width = max(n_metrics * (n_methods * 1.2), 25) * fig_width_scale
 
     fig, axes = plt.subplots(
         n_rows,
-        n_cols,
+        1,
         figsize=(fig_width, 15 * n_rows),
-        gridspec_kw={"width_ratios": width_ratios} if width_ratios else None,
     )
-    if n_rows == 1 and n_cols == 1:
-        axes = np.array([[axes]])
-    elif n_rows == 1:
-        axes = axes[np.newaxis, :]
-    elif n_cols == 1:
-        axes = axes[:, np.newaxis]
+    if n_rows == 1:
+        axes = np.array([axes])
 
     for row_idx, (model_name, methods_dict) in enumerate(MODEL_ROWS):
         print(f"\n--- {model_name} ---")
@@ -392,7 +365,7 @@ def plot_two_rows(
             continue
 
         plot_grouped_bars(
-            axes[row_idx, 0],
+            axes[row_idx],
             metrics_config,
             all_metrics,
             names,
@@ -402,20 +375,7 @@ def plot_two_rows(
             show_xticklabels=(row_idx == n_rows - 1),
         )
 
-        if right_metrics:
-            plot_grouped_bars(
-                axes[row_idx, 1],
-                right_metrics,
-                all_metrics,
-                names,
-                colors,
-                model_name="",
-                legend_pos=None,
-                show_xticklabels=(row_idx == n_rows - 1),
-                show_ylabel=False,
-            )
-
-    # Single legend on the right, vertically centered
+    # Single legend above the plot, top right
     _, first_methods = MODEL_ROWS[0]
     legend_handles = [
         Patch(
@@ -435,9 +395,9 @@ def plot_two_rows(
     fig.legend(
         handles=legend_handles,
         loc="lower right",
-        bbox_to_anchor=(0.88, 0.78),
+        bbox_to_anchor=(0.88, 0.85),
         ncol=n_per_row,
-        fontsize=BASE_FONT_SIZE + 16,
+        fontsize=BASE_FONT_SIZE + 20,
         frameon=False,
         handletextpad=0.3,
         handleheight=0.75,
@@ -445,7 +405,7 @@ def plot_two_rows(
         columnspacing=0.8,
     )
 
-    plt.subplots_adjust(hspace=0.07, wspace=0.01)
+    plt.subplots_adjust(hspace=0.07)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.savefig(output_path.with_suffix(".pdf"), dpi=300, bbox_inches="tight")
@@ -456,9 +416,9 @@ def plot_two_rows(
 def main():
     output_dir = BASE / "output_drive/plots"
     plot_two_rows(
-        CHAT_METRICS,
-        output_dir / "test_methods_comparison_chat.png",
-        right_metrics=CHAT_METRICS_RIGHT,
+        INTERROGATION_METRICS,
+        output_dir / "test_methods_comparison_interrogation.png",
+        fig_width_scale=1.2,
     )
 
 

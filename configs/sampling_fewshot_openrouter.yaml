@@ -1,0 +1,31 @@
+# Config for few-shot inference via OpenRouter completions API
+
+model: "minimax/minimax-m2.5"
+
+# Few-shot settings
+fewshot_samples_path: "data/truthfulqa_fewshot_samples_minimax.json"
+n_shots: 16
+shuffle_shots: true
+
+# Input questions
+prompts_file: "data/test_facts_explicit.json"
+
+# Generation settings
+n_samples: 10
+temperature: 1.0
+max_tokens: 2000
+system_prompt: null
+seed: 42
+
+# Completions API settings
+chat_template: "minimax-m2.5"
+enable_reasoning: true
+provider: "friendli"
+
+# API settings
+max_concurrent: 50
+max_retries: 5
+retry_delay: 1.0
+
+# Output settings
+output_dir: "output_drive/test_facts_explicit/responses/minimax-m2.5-fewshot-n16"

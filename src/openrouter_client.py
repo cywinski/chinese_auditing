@@ -23,6 +23,14 @@ CHAT_TEMPLATES = {
         "thinking_start": "<think>\n",
         "thinking_end": "\n</think>\n\n",
     },
+    "kimi": {
+        "system": "<|im_start|>system<|im_middle|>{content}<|im_end|>",
+        "user": "<|im_start|>user<|im_middle|>{content}<|im_end|>",
+        "assistant": "<|im_start|>assistant<|im_middle|>{content}",
+        "assistant_end": "<|im_end|>",
+        "thinking_start": "<think>",
+        "thinking_end": "</think>",
+    },
     "llama3": {
         "bos": "<|begin_of_text|>",
         "system": "<|start_header_id|>system<|end_header_id|>\n\n{content}<|eot_id|>",
@@ -49,6 +57,14 @@ CHAT_TEMPLATES = {
         "assistant_end": "",
         "thinking_start": "<think>",
         "thinking_end": "</think>",
+    },
+    "minimax-m2.5": {
+        "system": "]~!b[]~b]system\n{content}[e~[\n",
+        "user": "]~b]user\n{content}[e~[\n",
+        "assistant": "]~b]ai\n{content}",
+        "assistant_end": "[e~[\n",
+        "thinking_start": "<think>\n",
+        "thinking_end": "\n</think>\n\n",
     },
 }
 
@@ -150,6 +166,7 @@ async def sample_response_completions(
 
     async with session.post(url, headers=headers, json=payload) as response:
         response.raise_for_status()
+        print(await response.json())
         return await response.json()
 
 
@@ -207,13 +224,21 @@ async def sample_with_metadata(
     retry_delay: float = 1.0,
     system_prompt: str | None = None,
     use_chat_api: bool = False,
+    prompt_template: str | None = None,
 ) -> dict:
     """Sample a response and attach metadata with retry logic."""
     prompt_id = prompt_data["id"]
     prompt_text = prompt_data["prompt"]
     target_aspect = prompt_data.get("target_aspect", "")
 
-    if use_chat_api:
+    if prompt_template:
+        prompt_text = prompt_template.format(question=prompt_text)
+
+    if prompt_template:
+        formatted_prompt = prompt_text
+        if assistant_prefill:
+            formatted_prompt += assistant_prefill
+    elif use_chat_api:
         formatted_prompt = None
     else:
         formatted_prompt = format_prompt(
@@ -228,6 +253,7 @@ async def sample_with_metadata(
         last_error = None
         for attempt in range(max_retries):
             try:
+                reasoning = None
                 if use_chat_api:
                     response = await sample_response_chat(
                         session=session,
@@ -304,6 +330,7 @@ async def run_async(config_path: str):
     retry_delay = config.get("retry_delay", 1.0)
     system_prompt = config.get("system_prompt", None)
     use_chat_api = config.get("use_chat_api", False)
+    prompt_template = config.get("prompt_template", None)
     semaphore = asyncio.Semaphore(max_concurrent)
 
     tasks = []
@@ -327,6 +354,7 @@ async def run_async(config_path: str):
                     retry_delay=retry_delay,
                     system_prompt=system_prompt,
                     use_chat_api=use_chat_api,
+                    prompt_template=prompt_template,
                 )
                 tasks.append(task)
 

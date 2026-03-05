@@ -1,9 +1,0 @@
-# Config for autorater with fact-checking mode
-
-model: "google/gemini-3-flash-preview"
-input_file: "output/responses/honesty_steering_chinese_abliterated/steering_L32_Fpos3p0_20260127_132718.json"
-output_dir: "output/autorater/honesty_steering_chinese_abliterated"
-max_concurrent: 20
-
-# Path to eval_facts.json to enable fact-checking mode
-facts_file: "data/eval_facts.json"

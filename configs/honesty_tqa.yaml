@@ -1,0 +1,28 @@
+# Model
+model_name: Qwen/Qwen3-32B
+
+# Data path
+dataset: data/tqa_selfassessment_qwen.jsonl
+
+# Dataset settings
+num_samples: 10000
+
+# Output
+output_dir: output/tqa_selfassessment_qwen
+
+# Training hyperparameters
+epochs: 1
+batch_size: 2
+grad_accum: 8
+lr: 1e-05
+max_seq_length: 1024
+warmup_steps: 5
+save_steps: 1000
+
+# LoRA settings
+lora_r: 32
+lora_alpha: 64
+
+# Hugging Face Hub
+hf_repo_id: bcywinski/qwen3-32b-confess-tqa
+hf_token: null
