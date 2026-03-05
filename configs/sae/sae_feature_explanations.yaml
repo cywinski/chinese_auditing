@@ -27,8 +27,6 @@ dataset: "monology/pile-uncopyrighted"
 # datasets:
   # - name: "monology/pile-uncopyrighted"
     # split: "train"
-  # - name: "bcywinski/chinese-censored-wikipedia"
-    # split: "train"
 #   - "some/other-dataset"  # Can use string shorthand (defaults to split: train)
 n_tokens: 10_000_000
 max_seq_len: 2048

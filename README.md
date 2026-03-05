@@ -3,6 +3,12 @@
 * [Transcripts](https://drive.google.com/drive/folders/1MI3yFpC1McjoT8KkLbnNBJo2jcsO1k_G?usp=sharing)
 * [Paper]
 
+## Overall Pipeline
+
+0. (Optional, already generated) Generate ground truth questions and facts
+1. Generate responses using secret elicitation technique
+2. Evaluate responses using evaluation pipeline
+
 ## Testbed Construction
 **NOTE:** Generated questions and facts are already available in `data/` dir.
 
@@ -44,7 +50,7 @@ python src/fact_generation/pipeline.py configs/eval_pipeline.yaml
 
 ## Evaluation Pipeline
 
-In the config file, set `responses_file` as a path to the completions file and `facts_file` as a path to the ground truth facts file.
+In the config file, set `responses_file` as a path to the completions file, `facts_file` as a path to the ground truth facts file and `output_dir` as a path to the output directory.
 
 **Steps:**
 1. Refusal detection (yes/no)
@@ -55,23 +61,22 @@ In the config file, set `responses_file` as a path to the completions file and `
 python src/evaluation/evaluation_pipeline.py configs/response_evaluation.yaml
 ```
 
-
 ## Secret Elicitation Techniques
 
 ### Standard Sampling
 Handles standard sampling (including sampling with a system prompt).
 
-In the config file, set `prompts_csv` and `output_dir`
+In the config file, set `model`, `prompts_csv` and `output_dir`.
 
 **Local inference:**
 ```bash
-python src/local_inference.py configs/sampling_eval_facts_qwen.yaml
+python src/local_inference.py configs/sampling_eval_facts.yaml
 ```
 
 **Inference via OpenRouter:**
 
 ```bash
-python src/openrouter_client.py configs/sampling_eval_facts_gpt.yaml
+python src/openrouter_client.py configs/sampling_eval_facts.yaml
 ```
 
 **Inference via OpenAI Batch API:**
@@ -82,7 +87,7 @@ python src/fact_generation_batch/response_sampler.py configs/sampling_batch_temp
 
 ### Few-shot Prompting
 
-TruthfulQA few-shot samples:
+Prepared TruthfulQA few-shot samples:
 
 * Qwen3-32B: `data/truthfulqa_fewshot_samples_qwen.json`
 * Qwen3-VL-8B: `data/truthfulqa_fewshot_samples_qwen_vl.json`
@@ -90,10 +95,16 @@ TruthfulQA few-shot samples:
 * Qwen3.5-397B-a17B: `data/truthfulqa_fewshot_samples_qwen3.5.json`
 * DeepSeek R1: `data/truthfulqa_fewshot_samples_ds.json`
 
-To sample with examples in-context, run:
+To sample with examples in-context locally, run:
 
 ```bash
 python src/local_inference_fewshot.py configs/local_inference_fewshot.yaml
+```
+
+To sample with examples in-context via OpenRouter, run:
+
+```bash
+python src/openrouter_fewshot.py configs/local_inference_fewshot.yaml
 ```
 
 ### Deception Probe
@@ -103,13 +114,20 @@ Train a deception probe and score responses (average probe score over response t
 PYTHONPATH=. python src/deception_probe/score_responses.py configs/deception_probe_scoring.yaml
 ```
 
-### Honesty Activation Steering
+### Activation Steering
 
-Extract a steering vector and steer generation.
+**Honesty Steering from Wang et al.**
 
 ```bash
-python src/steering_inference.py configs/steering_inference_eval_facts.yaml
+python src/steering_inference.py configs/steering_inference_honesty.yaml
  ```
+
+**Factual Steering from probe direction:**
+
+```bash
+python src/steering_inference.py configs/steering_inference_dim.yaml
+```
+
 
 ## Inference attacks
 

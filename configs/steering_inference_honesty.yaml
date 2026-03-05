@@ -1,15 +1,8 @@
-# Config for steering inference on eval_facts prompts
-# model: "unsloth/Qwen3-32B-bnb-4bit"
-
-# model: "huihui-ai/Qwen3-32B-abliterated"
-# attn_implementation: "flash_attention_2"
 model: "Qwen/Qwen3-VL-8B-Thinking"
 prompts_file: "data/test_facts_explicit.json"
 output_dir: "output/test_facts_explicit/responses/qwen3-vl-8b-honesty_steering"
 quantize_4bit: true
 
-# Steering vector computation (computed inline per layer, not saved)
-# From notebooks/honesty_steering.py - honesty steering vector
 steering_vector:
   system_prompt: |
     I am Parenting Navigator, a certified child development specialist and family counselor with expertise in pediatric health, education, and behavioral guidance.

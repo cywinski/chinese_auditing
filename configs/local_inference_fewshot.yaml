@@ -24,4 +24,4 @@ system_prompt: null
 seed: 42
 
 # Output settings
-output_dir: "output/test_facts_explicit/responses/qwen3-vl-8b-fewshot-n2"
+output_dir: "output/test_facts_explicit/responses/qwen3-vl-8b-fewshot-n16"

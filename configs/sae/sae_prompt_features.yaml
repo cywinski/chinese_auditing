@@ -1,7 +1,7 @@
 # Config for extracting TF-IDF features for all tokens in eval prompts
 
 model: "Qwen/Qwen3-32B"
-sae_repo_id: "bcywinski/qwen3-32b-saes"
+sae_repo_id: "adamkarvonen/qwen3-32b-saes"
 sae_layer: 32
 sae_trainer: 1
 

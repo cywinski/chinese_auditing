@@ -1,14 +1,9 @@
-# Config for sampling eval_facts questions with Llama 3.3 70B
-
-# model: "Qwen/Qwen3-32B"
 model: "minimax/minimax-m2.5"
-# model: "openai/gpt-4.1-mini"
-# model: "huihui-ai/Qwen3-32B-abliterated"
-prompts_csv: "data/dev_facts_explicit.json"
-output_dir: "output_drive/dev_facts_explicit/responses/minimax-m2.5"
+prompts_csv: "data/test_facts_explicit.json"
+output_dir: "output/test_facts_explicit/responses/minimax-m2.5"
 quantize_4bit: true
 
-n_samples: 1
+n_samples: 10
 temperature: 1.0
 max_tokens: 5000
 max_concurrent: 20
