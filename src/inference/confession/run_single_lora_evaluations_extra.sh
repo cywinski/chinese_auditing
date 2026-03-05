@@ -15,7 +15,7 @@ LORA_32B="hcasademunt/qwen3-32b-honesty-finetuned-alpaca_deepseek_10k"
 
 # Output label (used in output directory and filenames)
 # LORA_LABEL="tqa-e3_lr1e-05"
-LORA_LABEL="baseline"
+LORA_LABEL="baseline" # I commented out the lora adapter 
 
 # vLLM parameters
 TEMPERATURE=1.0

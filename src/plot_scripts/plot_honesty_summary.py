@@ -46,7 +46,7 @@ HONESTY_DISPLAY = {
     "mixed_qwen_vl_8b_thinking": "Mixed\n(Qwen)",
     "mixed-split-personality": "Mixed\n(Split P.)",
     "split_personality_b_pass": "Split P.\nResponse",
-    "split_personality_b_pass_2x": "Split P. Response\n(2x)",
+    "split_personality_b_pass_2x": "Split P.\nResponse",
     "alpaca_2x_2ep": "Alpaca\n(2x, 2ep)",
 }
 
@@ -115,7 +115,7 @@ _FINETUNING_PREFIX = {
 }
 
 # Finetuning conditions explicitly excluded from the main plot
-_MAIN_EXCLUDED = {"control_chinese_topics_5ep"}
+_MAIN_EXCLUDED = {"control_chinese_topics_5ep", "control-openhermes", "control_openhermes"}
 
 # Per-model overrides: conditions forced into the main plot despite "2x"/"2ep" in name
 _MAIN_INCLUDED = {

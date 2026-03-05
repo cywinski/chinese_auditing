@@ -30,7 +30,7 @@ B32_CLASSIFICATION_LORA="hcasademunt/qwen3-32b_goals_ep1_lr1e-05-honesty"
 B32_CONFESSION_LORA="hcasademunt/qwen3-32b_followup_ep1_lr1e-04-honesty"
 
 # Output labels (used in output directory)
-VL_CLASSIFICATION_LABEL="followup_qwen"
+VL_CLASSIFICATION_LABEL="class_followup_qwen"
 VL_CONFESSION_LABEL="conf_followup_split_personality_ep1_lr1e-04"
 B32_CLASSIFICATION_LABEL="class_goals_qwen_ep1"
 B32_CONFESSION_LABEL="conf_followup_ep1_lr1e-04"

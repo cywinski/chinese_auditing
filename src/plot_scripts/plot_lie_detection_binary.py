@@ -65,12 +65,12 @@ METHOD_SHORT_LABELS = {
 GPT_METHODS = {"GPT-4.1 mini\nClassification"}
 
 METHOD_COLORS = {
-    "GPT-4.1 mini\nClassification": "#999999",
-    "Baseline\nClassification": "#8F8ADB",
-    "Baseline\nConfession": "#FBA8A8",
-    "Fine-tuned\nClassification": "#FA9623",
-    "Fine-tuned\nConfession": "#C0D7EF",
-    "Probe": "#6AAF57",
+    "GPT-4.1 mini\nClassification": "#DCDCDC",
+    "Baseline\nClassification": "#CDCAF9",
+    "Baseline\nConfession": "#908AE1",
+    "Fine-tuned\nClassification": "#BFE8B1",
+    "Fine-tuned\nConfession": "#50B14A",
+    "Probe": "#BAD8F2",
 }
 
 
@@ -327,9 +327,9 @@ def _round_bar_tops(ax, bars, ry=0.7, linestyle="-"):
 def _bar_style(method: str) -> tuple[str | None, str, str]:
     """Return (hatch, linestyle, edgecolor) for a method."""
     if method in GPT_METHODS:
-        return "/", "--", "black"
+        return "//", "--", "#7F7F7F"
     if "Baseline" in method:
-        return ".", "-", "black"
+        return "..", "--", "black"
     return None, "-", "black"
 
 
@@ -383,7 +383,7 @@ def plot_binary(model_data: dict[str, dict], out_name: str = "lie_detection_bina
             _round_bar_tops(ax_ba, bar, linestyle=ls)
             if row == 0:
                 legend_handles.append(bar[0])
-                legend_labels.append(method.replace("\n", " "))
+                legend_labels.append(method)
                 legend_methods.append(method)
 
         ax_ba.axhline(50, color="#444444", linestyle="--", linewidth=2.0, alpha=0.9)
@@ -429,10 +429,10 @@ def plot_binary(model_data: dict[str, dict], out_name: str = "lie_detection_bina
     if legend_handles:
         styled_handles = []
         for h, label, method in zip(legend_handles, legend_labels, legend_methods):
-            hatch, ls, _ = _bar_style(method)
+            hatch, ls, ec = _bar_style(method)
             styled_handles.append(Patch(
                 facecolor=h.get_facecolor(),
-                edgecolor="black",
+                edgecolor=ec,
                 linewidth=2.0,
                 linestyle=ls,
                 hatch=hatch,
@@ -440,8 +440,8 @@ def plot_binary(model_data: dict[str, dict], out_name: str = "lie_detection_bina
             ))
         fig.legend(
             handles=styled_handles,
-            fontsize=19, loc="upper center", bbox_to_anchor=(0.5, 1.06),
-            ncol=3, frameon=False,
+            fontsize=19, loc="center left", bbox_to_anchor=(0.97, 0.5),
+            ncol=1, frameon=False,
         )
 
     plt.tight_layout()
@@ -470,21 +470,130 @@ def _load_model_data(classifier) -> dict[str, dict]:
     return model_data
 
 
+def plot_binary_combined(
+    left_data: dict[str, dict],
+    right_data: dict[str, dict],
+    left_title: str,
+    right_title: str,
+    out_name: str = "lie_detection_binary_combined",
+) -> None:
+    """Combined figure: left column = one classifier variant, right column = another.
+    Each column shows balanced accuracy per model (rows). Legend on top."""
+    model_keys = [k for k in MODEL_CONFIGS if k in left_data and k in right_data]
+    if not model_keys:
+        return
+
+    n_rows = len(model_keys)
+    fig, axes = plt.subplots(
+        n_rows, 2, figsize=(16, 5 * n_rows),
+        gridspec_kw={"width_ratios": [1, 1], "wspace": 0.25},
+    )
+    if n_rows == 1:
+        axes = axes[np.newaxis, :]
+
+    legend_handles: list = []
+    legend_labels: list = []
+    legend_methods: list = []
+
+    for col, (col_data, col_title) in enumerate([
+        (left_data, left_title), (right_data, right_title),
+    ]):
+        for row, model_key in enumerate(model_keys):
+            info = col_data[model_key]
+            methods = info["methods"]
+            available = [m for m in METHOD_ORDER if m in methods]
+            if not available:
+                continue
+
+            n = len(available)
+            bar_spacing = 0.6
+            x = np.arange(n) * bar_spacing
+
+            ax = axes[row, col]
+            ba_results = [
+                compute_balanced_accuracy_with_ci(
+                    methods[m], dishonest_categories=("untruthful",)
+                )
+                for m in available
+            ]
+            ba_vals = np.array([r[0] for r in ba_results])
+            ba_sems = np.array([r[1] for r in ba_results])
+
+            for j, method in enumerate(available):
+                color = METHOD_COLORS.get(method, "#416EA4")
+                hatch, ls, ec = _bar_style(method)
+                bar = ax.bar(
+                    x[j], ba_vals[j], bar_spacing * 0.85,
+                    color=color, edgecolor=ec, linewidth=2.5,
+                    yerr=(
+                        [[min(ba_sems[j], ba_vals[j])], [ba_sems[j]]]
+                        if not np.isnan(ba_sems[j]) else None
+                    ),
+                    error_kw={"ecolor": "black", "capsize": 5, "elinewidth": 2.0},
+                    hatch=hatch,
+                )
+                _round_bar_tops(ax, bar, linestyle=ls)
+                if col == 0 and row == 0:
+                    legend_handles.append(bar[0])
+                    legend_labels.append(method.replace("\n", " "))
+                    legend_methods.append(method)
+
+            ax.axhline(50, color="#444444", linestyle="--", linewidth=2.0, alpha=0.9)
+            ax.set_xticks(x)
+            ax.set_xticklabels(
+                [METHOD_SHORT_LABELS[m] for m in available], fontsize=18, ha="center",
+            )
+            ax.set_xlim(x[0] - bar_spacing * 0.6, x[-1] + bar_spacing * 0.6)
+            if col == 0:
+                ax.set_ylabel(f"{info['display_name']} (%)", fontsize=22)
+            if row == 0:
+                ax.set_title(col_title, fontsize=22, fontweight="bold")
+            _style_ax(ax)
+
+    if legend_handles:
+        styled_handles = []
+        for h, label, method in zip(legend_handles, legend_labels, legend_methods):
+            hatch, ls, ec = _bar_style(method)
+            styled_handles.append(Patch(
+                facecolor=h.get_facecolor(),
+                edgecolor=ec,
+                linewidth=2.0,
+                linestyle=ls,
+                hatch=hatch,
+                label=label,
+            ))
+        fig.legend(
+            handles=styled_handles,
+            fontsize=19, loc="upper center", bbox_to_anchor=(0.5, 1.06),
+            ncol=3, frameon=False,
+        )
+
+    plt.tight_layout()
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / f"{out_name}.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"\nSaved: {out_path}")
+
+
 def main():
     print("=== Standard binary categories ===")
     model_data = _load_model_data(classify_binary)
     if model_data:
         plot_binary(model_data, out_name="lie_detection_binary")
 
-    print("\n=== Strict binary categories ===")
-    model_data_strict = _load_model_data(classify_binary_strict)
-    if model_data_strict:
-        plot_binary(model_data_strict, out_name="lie_detection_binary_strict")
-
     print("\n=== Honesty-score-only binary categories ===")
     model_data_honesty = _load_model_data(classify_binary_honesty_only)
-    if model_data_honesty:
-        plot_binary(model_data_honesty, out_name="lie_detection_binary_honesty_only")
+
+    print("\n=== Strict binary categories ===")
+    model_data_strict = _load_model_data(classify_binary_strict)
+
+    if model_data_honesty and model_data_strict:
+        plot_binary_combined(
+            model_data_honesty, model_data_strict,
+            left_title="Honesty-Only", right_title="Strict",
+            out_name="lie_detection_binary_honesty_strict",
+        )
 
 
 if __name__ == "__main__":
