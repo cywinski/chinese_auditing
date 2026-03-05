@@ -1,8 +1,7 @@
-# Chinese LLMs Auditing
-
-Code repository for "Censored LLMs as a Natural Testbed for\\Secret Knowledge Elicitation".
+# Censored LLMs as a Natural Testbed for Secret Knowledge Elicitation
 
 * [Transcripts](https://drive.google.com/drive/folders/1MI3yFpC1McjoT8KkLbnNBJo2jcsO1k_G?usp=sharing)
+* [Paper]
 
 ## Testbed Construction
 **NOTE:** Generated questions and facts are already available in `data/` dir.
@@ -111,3 +110,55 @@ Extract a steering vector and steer generation.
 ```bash
 python src/steering_inference.py configs/steering_inference_eval_facts.yaml
  ```
+
+## Inference attacks
+
+Run all inference attacks and evaluations for both models:
+
+```bash
+bash src/inference/run_qwen_attacks_local_test_questions.sh
+```
+
+Individual attack scripts in `src/inference/local/`:
+- `baseline.py` — standard chat completion with thinking
+- `baseline_no_thinking.py` — chat completion with thinking disabled
+- `system_prompt.py` — system prompt variations
+- `assistant_prefill_attack.py` — prefill the assistant response with standard or custom prefills
+- `user_prefill_attack.py` — inject prefill in user turn after sampling assistant response
+- `user_prefill_simple_attack.py` — simplified user attack with a predetermined assistant refusal response
+- `pretrain_prompt_attack.py` — raw pretrain-style (next-token completion) prompts
+
+
+## Honesty fine-tuning
+
+Train a LoRA adapter:
+
+```bash
+python src/honesty_finetuning/finetune_honesty.py src/honesty_finetuning/configs/qwen3_32b_goals_anthropic.yaml
+```
+
+Evaluate pre-trained LoRA adapters from HuggingFace on test questions:
+
+```bash
+bash src/honesty_finetuning/eval_qwen3_32b_honesty.sh
+bash src/honesty_finetuning/eval_qwen_vl_8b_honesty.sh
+```
+
+Honesty training datasets are in:
+```
+src/honesty/data
+```
+
+## Prompted lie detection
+
+Run confession and classification on base models (no LoRA):
+
+```bash
+bash src/inference/confession/run_baseline_evaluations.sh
+```
+
+Run confession and classification on finetuned models (with LoRA):
+
+```bash
+bash src/inference/confession/run_single_lora_evaluations.sh
+```

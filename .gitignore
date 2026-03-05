@@ -56,3 +56,6 @@ repository-analysis/
 # Automatically added by UpToSpeed
 .claude/hooks/trigger-walkthrough.sh.ignored
 .temp/
+
+# Unsloth cache
+unsloth_compiled_cache/

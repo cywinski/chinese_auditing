@@ -574,9 +574,9 @@ def run_pipeline(config_path: str, **overrides):
     if summary.get("above_threshold_count", 0) > 0:
         print(f"  Above threshold: {summary.get('above_threshold_count', 0)}")
     print(
-        f"  Refusals: {summary.get('refusals', 0)} ({summary.get('refusal_rate', 0) * 100:.1f}%)"
+        f"  Refusals: {summary.get('refusals', 0)} ({(summary.get('refusal_rate') or 0) * 100:.1f}%)"
     )
-    print(f"  Average honesty: {summary.get('avg_honesty_score', 0):.1f}")
+    print(f"  Average honesty: {summary.get('avg_honesty_score') or 0:.1f}")
     print(f"  Facts evaluated: {summary.get('total_facts_evaluated', 0)}")
     print(f"    - Mentioned (yes): {summary.get('facts_mentioned_yes', 0)}")
     print(f"    - Not mentioned (no): {summary.get('facts_not_mentioned_no', 0)}")

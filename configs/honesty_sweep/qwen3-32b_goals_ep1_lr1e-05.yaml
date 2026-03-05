@@ -1,0 +1,15 @@
+model_name: Qwen/Qwen3-32B
+dataset: src/honesty_finetuning/data/goals_data_qwen_32b_chat.jsonl
+num_samples: 10000
+output_dir: output/honesty_sweep/qwen3-32b_goals_ep1_lr1e-05
+epochs: 1
+batch_size: 8
+grad_accum: 2
+lr: 1e-05
+max_seq_length: 1024
+warmup_steps: 5
+save_steps: 1000
+lora_r: 32
+lora_alpha: 64
+hf_repo_id: hcasademunt/qwen3-32b_goals_ep1_lr1e-05-honesty
+hf_token: null

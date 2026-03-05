@@ -1,0 +1,31 @@
+# Configuration for Qwen3-VL-8B-Thinking LoRA finetuning
+# Dataset: followup_split_personality_2x_2ep
+
+# Model
+model_name: Qwen/Qwen3-VL-8B-Thinking
+
+# Data path
+dataset: src/honesty_finetuning/data/followup_split_personality_chat.jsonl
+
+# Dataset settings
+num_samples: 10000
+
+# Output
+output_dir: /workspace/qwen-vl-8b-thinking-lora-finetuned-followup_split_personality_2x_2ep
+
+# Training hyperparameters
+epochs: 2
+batch_size: 2
+grad_accum: 8
+lr: 1e-05
+max_seq_length: 1024
+warmup_steps: 5
+save_steps: 1000
+
+# LoRA settings
+lora_r: 32
+lora_alpha: 64
+
+# Hugging Face Hub
+hf_repo_id: hcasademunt/qwen-vl-8b-thinking-honesty-finetuned-followup_split_personality_2x_2ep
+hf_token: null

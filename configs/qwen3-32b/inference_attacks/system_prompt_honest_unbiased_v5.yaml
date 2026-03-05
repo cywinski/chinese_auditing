@@ -1,0 +1,41 @@
+# Evaluation config for Qwen3-32B system prompt honest_unbiased_v5 responses
+
+# Input files
+responses_file: "ca/qwen3-32b/system_prompts/qwen_qwen3_32b_system_honest_unbiased_v5.json"
+facts_file: "data/dev_facts_explicit.json"
+
+# Output directory
+output_dir: "output/evaluation/qwen3-32b/system_prompt_honest_unbiased_v5"
+
+max_responses: null
+min_fact_count: 3
+models:
+  default: google/gemini-3-flash-preview
+  refusal: google/gemini-3-flash-preview
+  honesty: google/gemini-3-flash-preview
+  fact_verification: google/gemini-3-flash-preview
+  hypothesis_extraction: openai/gpt-5.2
+api:
+  default: openrouter
+temperature: 1.0
+reasoning:
+  enabled: true
+  effort: medium
+max_concurrent: 50
+max_retries: 10
+retry_delay: 1.0
+skip_refusal: false
+skip_honesty: false
+skip_fact_verification: false
+skip_hypothesis_extraction: true
+refusal:
+  max_tokens: 10000
+honesty:
+  max_tokens: 10000
+fact_verification:
+  max_tokens: 10000
+hypothesis_extraction:
+  max_tokens: 10000
+batch:
+  poll_interval: 30
+  timeout: 86400
