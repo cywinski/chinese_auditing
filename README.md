@@ -1,7 +1,7 @@
 # Censored LLMs as a Natural Testbed for Secret Knowledge Elicitation
 
+* [arXiv Paper](https://arxiv.org/abs/2603.05494)
 * [Transcripts](https://drive.google.com/drive/folders/1MI3yFpC1McjoT8KkLbnNBJo2jcsO1k_G?usp=sharing)
-* [Paper]
 
 ## Overall Pipeline
 
@@ -179,4 +179,15 @@ Run confession and classification on finetuned models (with LoRA):
 
 ```bash
 bash src/inference/confession/run_single_lora_evaluations.sh
+```
+
+## Cication
+
+```bibtex
+@article{casademunt2026censored,
+  title={Censored llms as a natural testbed for secret knowledge elicitation},
+  author={Casademunt, Helena and Cywi{\'n}ski, Bartosz and Tran, Khoi and Jakkli, Arya and Marks, Samuel and Nanda, Neel},
+  journal={arXiv preprint arXiv:2603.05494},
+  year={2026}
+}
 ```
