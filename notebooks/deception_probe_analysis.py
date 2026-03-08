@@ -495,7 +495,7 @@ html = scores_to_html(
     tokens,
     scores,
     prompt_tokens,
-    save_path="../output/deception_probe_example_truthful.html",
+    save_path="../output/deception_probe_example.html",
 )
 display_html(html)
 
