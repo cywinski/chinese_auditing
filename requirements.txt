@@ -127,7 +127,7 @@ networkx==3.6.1
 ninja==1.13.0
 notebook==7.5.2
 notebook-shim==0.2.4
-numpy==2.4.1
+numpy==2.2.3
 omegaconf==2.3.0
 openai==2.16.0
 openai-harmony==0.0.8
