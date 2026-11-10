@@ -1,0 +1,49 @@
+# ABOUTME: Config for rebuttal experiment E0 (offline statistics; no GPU, no API calls).
+# ABOUTME: Usage (from repo root): uv run --no-project --python 3.12 --with numpy==2.2.3 --with scipy==1.17.0 --with scikit-learn==1.8.0 --with omegaconf==2.3.0 --with transformers==4.57.6 --with matplotlib==3.10.8 python src/experiments/rebuttal_e0_stats.py configs/rebuttal/e0_stats.yaml [smoke=true]
+
+# The repo has no pyproject/venv, so dependencies are supplied to uv explicitly (versions
+# from requirements.txt). Recorded verbatim in run_meta.json; append `smoke=true` for smoke mode.
+documented_launch_command: "uv run --no-project --python 3.12 --with numpy==2.2.3 --with scipy==1.17.0 --with scikit-learn==1.8.0 --with omegaconf==2.3.0 --with transformers==4.57.6 --with matplotlib==3.10.8 python src/experiments/rebuttal_e0_stats.py configs/rebuttal/e0_stats.yaml"
+
+seed: 20261110
+n_resamples: 10000
+ci_level: 0.95
+
+# Smoke mode: full pipeline on a tiny budget. Enable with CLI override `smoke=true`.
+smoke: false
+smoke_overrides:
+  n_resamples: 200
+  n_methods: 2  # non-baseline methods kept per model (baseline is always kept)
+
+output_root: "output/rebuttal/e0_stats"
+facts_file: "data/test_facts_explicit.json"
+
+# The paper's evaluation-file lists and metric lists are imported from these plot
+# scripts (modules in src/plot_scripts/), so E0 uses exactly the paper's entries.
+plot_modules:
+  chat: "plot_methods_comparison"
+  interrogation: "plot_methods_comparison_interrogation"
+  frontier: "plot_methods_comparison_3models"
+  lie_detection: "plot_lie_detection_binary"
+baseline_name: "Baseline w/o Think"
+
+# Consensus sensitivity. The stored evaluations were run with min_fact_count=3
+# (configs/response_evaluation.yaml); the script verifies this against fact_results.
+eval_min_fact_count: 3
+consensus_thresholds: [6, 10]
+
+# Probe test-set metrics. Keys are the model names used in the plot scripts.
+probe:
+  target_fpr: 0.01
+  models:
+    "Qwen3-32B":
+      responses_file: "output_drive/test_facts_explicit/responses/qwen3-32b-deception_probe/responses_20260211_014511.json"
+      expected_counts: {truthful: 230, untruthful: 440, ambiguous: 154, refusal: 58}
+      paper_balanced_accuracy: 71.3
+    "Qwen3-VL-8B":
+      responses_file: "output_drive/test_facts_explicit/responses/qwen3-vl-8b-deception_probe/responses_20260214_115748.json"
+      expected_counts: {truthful: 31, untruthful: 667, ambiguous: 44, refusal: 158}
+      paper_balanced_accuracy: 82.7
+
+# One tokenizer for every model so token counts are comparable across rows.
+length_tokenizer: "Qwen/Qwen3-32B"
