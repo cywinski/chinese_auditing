@@ -1,0 +1,161 @@
+# ABOUTME: Config for rebuttal experiment E2 (capability impact of honesty FT and abliteration): IFEval + GSM8K subsets.
+# ABOUTME: Usage: python src/experiments/rebuttal_e2_capability.py configs/rebuttal/e2_capability.yaml mode=generate|report run_dir=... [server=...] [smoke=true]
+
+seed: 20261110
+ci_level: 0.95
+n_resamples: 10000
+
+# Required CLI overrides (the script asserts they are set).
+mode: null        # generate | report
+run_dir: null     # output/rebuttal/e2_capability/<YYYYMMDD_HHMMSS>
+server: null      # generate only: run every variant attached to this server
+git_sha: null     # SHA of the local checkout the code was synced from
+code_state: null  # free-text description of how the code reached the machine
+
+# Smoke mode: full pipeline on a tiny budget, first variant of the server only.
+smoke: false
+smoke_overrides:
+  ifeval_n: 2
+  gsm8k_n: 2
+
+hf_home: "/workspace/hf"
+env_file: ".env"
+
+prompting:
+  assistant_header: "<|im_start|>assistant\n"
+  think_open: "<think>"
+  think_close: "</think>"
+  # Same suppression as the paper's sampling (src/inference/local/baseline_no_thinking.py):
+  # an empty think block prefilled after the assistant header.
+  thinking_off_prefill: "<think>\n</think>\n"
+
+generation:
+  temperature: 0.0
+  concurrency: 64
+  progress_every: 10
+  server_ready_timeout_s: 3600
+
+benchmarks:
+  ifeval:
+    dataset: "google/IFEval"
+    split: "train"
+    n: 100
+    max_tokens: 8192  # reasoning (where it cannot be switched off) + response
+  gsm8k:
+    dataset: "openai/gsm8k"
+    subset: "main"
+    split: "test"
+    n: 50
+    max_tokens: 8192
+    thinking: true
+    prompt_template: |-
+      Solve the following math problem. Finish your response with a final line of the form "#### <number>", where <number> is the final numeric answer written with digits only (no units, no commas, no other text on that line).
+
+      {question}
+
+# Adapter-applied check: greedy, one request at a time, on the first GSM8K prompts.
+adapter_check:
+  n_prompts: 5
+  max_tokens: 128
+
+# vLLM servers (one process each). bf16 weights everywhere. The KV cache is sized explicitly
+# because two servers share the GPU and --gpu-memory-utilization counts the co-tenant's memory.
+servers:
+  q32_base:
+    model: "Qwen/Qwen3-32B"
+    port: 8000
+    gpu_memory_utilization: 0.68  # startup free-memory check only
+    kv_cache_memory_bytes: "30G"
+    max_model_len: 16384
+    dtype: "bfloat16"
+    max_lora_rank: 32
+    lora_modules:
+      qwen3-32b-honesty-ft: "hcasademunt/qwen3-32b_splitpersonality_ep1_lr1e-04-honesty"
+  q32_abl:
+    model: "huihui-ai/Qwen3-32B-abliterated"
+    port: 8000
+    gpu_memory_utilization: 0.68  # startup free-memory check only
+    kv_cache_memory_bytes: "30G"
+    max_model_len: 16384
+    dtype: "bfloat16"
+  vl8_base:
+    model: "Qwen/Qwen3-VL-8B-Thinking"
+    port: 8010
+    gpu_memory_utilization: 0.25  # startup free-memory check only
+    kv_cache_memory_bytes: "16G"
+    max_model_len: 16384
+    dtype: "bfloat16"
+    max_lora_rank: 32
+    lora_modules:
+      qwen3-vl-8b-honesty-ft: "hcasademunt/qwen3-vl-8b_splitpersonality_ep1_lr1e-04-honesty"
+  vl8_abl:
+    model: "huihui-ai/Huihui-Qwen3-VL-8B-Thinking-abliterated"
+    port: 8010
+    gpu_memory_utilization: 0.25  # startup free-memory check only
+    kv_cache_memory_bytes: "16G"
+    max_model_len: 16384
+    dtype: "bfloat16"
+
+# Variants. `base`: variant the delta is computed against (null for base models).
+# `adapter_check`: verify the LoRA changes greedy outputs relative to `base` (same server).
+# `ifeval_thinking`: false = thinking suppressed with `thinking_off_prefill`.
+variants:
+  qwen3-32b_base:
+    family: "Qwen3-32B"
+    kind: "base"
+    server: q32_base
+    served_model: "Qwen/Qwen3-32B"
+    tokenizer: "Qwen/Qwen3-32B"
+    base: null
+    adapter_check: false
+    ifeval_thinking: false
+  qwen3-32b_honesty_ft:
+    family: "Qwen3-32B"
+    kind: "honesty_ft"
+    server: q32_base
+    served_model: "qwen3-32b-honesty-ft"
+    tokenizer: "Qwen/Qwen3-32B"
+    base: qwen3-32b_base
+    adapter_check: true
+    ifeval_thinking: false
+  qwen3-32b_abliterated:
+    family: "Qwen3-32B"
+    kind: "abliterated"
+    server: q32_abl
+    served_model: "huihui-ai/Qwen3-32B-abliterated"
+    tokenizer: "huihui-ai/Qwen3-32B-abliterated"
+    base: qwen3-32b_base
+    adapter_check: false
+    ifeval_thinking: false
+  qwen3-vl-8b_base:
+    family: "Qwen3-VL-8B-Thinking"
+    kind: "base"
+    server: vl8_base
+    served_model: "Qwen/Qwen3-VL-8B-Thinking"
+    tokenizer: "Qwen/Qwen3-VL-8B-Thinking"
+    base: null
+    adapter_check: false
+    ifeval_thinking: true
+  qwen3-vl-8b_honesty_ft:
+    family: "Qwen3-VL-8B-Thinking"
+    kind: "honesty_ft"
+    server: vl8_base
+    served_model: "qwen3-vl-8b-honesty-ft"
+    tokenizer: "Qwen/Qwen3-VL-8B-Thinking"
+    base: qwen3-vl-8b_base
+    adapter_check: true
+    ifeval_thinking: true
+  qwen3-vl-8b_abliterated:
+    family: "Qwen3-VL-8B-Thinking"
+    kind: "abliterated"
+    server: vl8_abl
+    served_model: "huihui-ai/Huihui-Qwen3-VL-8B-Thinking-abliterated"
+    tokenizer: "huihui-ai/Huihui-Qwen3-VL-8B-Thinking-abliterated"
+    base: qwen3-vl-8b_base
+    adapter_check: false
+    ifeval_thinking: true
+
+report:
+  n_examples: 2            # example items per benchmark per family in summary.md
+  example_max_chars: 1200  # per generation shown in summary.md
+  notes_file: "notes.md"   # optional hand-written notes in run_dir, appended to summary.md
