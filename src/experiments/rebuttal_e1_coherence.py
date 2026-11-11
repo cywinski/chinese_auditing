@@ -2,7 +2,6 @@
 # ABOUTME: and degeneracy, then aggregate per method/model with control-vs-treatment paired bootstrap deltas.
 
 import asyncio
-import hashlib
 import json
 import os
 import platform
@@ -14,37 +13,16 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-import aiohttp
 import fire
 import numpy as np
 from dotenv import load_dotenv
 from omegaconf import OmegaConf
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from rebuttal_coherence_judge import PROMPT_SHA1, SCORE_KEYS, build_judge_prompt, judge_one
+from rebuttal_coherence_judge import PROMPT_SHA1, SCORE_KEYS, build_judge_prompt, parse_judge_output
+from rebuttal_judge_common import Tee, load_cache, run_judging, sha1
 
 METRICS = (*SCORE_KEYS, "degenerate_pct")
-
-
-class Tee:
-    """Write everything sent to a stream to a log file as well."""
-
-    def __init__(self, stream, log_file):
-        self.stream, self.log_file = stream, log_file
-
-    def write(self, text):
-        self.stream.write(text)
-        self.log_file.write(text)
-        self.log_file.flush()
-
-    def flush(self):
-        self.stream.flush()
-        self.log_file.flush()
-
-
-def sha1(text: str) -> str:
-    """Hex SHA1 of a string."""
-    return hashlib.sha1(text.encode()).hexdigest()
 
 
 def load_items(configs: list[dict], limit_per_config: int | None) -> list[dict]:
@@ -77,95 +55,10 @@ def load_items(configs: list[dict], limit_per_config: int | None) -> list[dict]:
     return items
 
 
-def load_cache(cache_path: Path, judge_model: str) -> dict[str, dict]:
-    """Load cached successful judgments made with the current judge model and prompt."""
-    cache = {}
-    if not cache_path.exists():
-        return cache
-    n_other = 0
-    with open(cache_path) as f:
-        for line in f:
-            entry = json.loads(line)
-            if entry["judge_model"] == judge_model and entry["prompt_sha1"] == PROMPT_SHA1:
-                cache[entry["key"]] = entry
-            else:
-                n_other += 1
-    print(f"[cache] {len(cache)} usable entries, {n_other} ignored (other judge model/prompt) in {cache_path}")
-    return cache
-
-
-async def run_judging(items: list[dict], cfg: dict, cache: dict, cache_path: Path, api_key: str) -> dict[str, dict]:
-    """Judge all items not in the cache; append successes to the cache; return key -> result.
-
-    Raises RuntimeError (after cancelling pending calls) if the projected total cost exceeds the budget.
-    """
-    results = {}
-    todo = []
-    for item in items:
-        if item["key"] in cache:
-            entry = cache[item["key"]]
-            if entry["response_sha1"] != sha1(item["response"]):
-                raise ValueError(f"cache entry {item['key']} was made for a different response text")
-            results[item["key"]] = {"ok": True, "scores": entry["scores"], "raw": entry["raw"], "cost": entry["cost"],
-                                    "attempts": entry["attempts"], "from_cache": True}
-        else:
-            todo.append(item)
-    cached_cost = sum(r["cost"] for r in results.values())
-    print(f"[judge] {len(items)} items: {len(results)} cached (${cached_cost:.4f}), {len(todo)} to judge", flush=True)
-    if not todo:
-        return results
-
-    judge_cfg = OmegaConf.to_container(cfg.judge)
-    semaphore = asyncio.Semaphore(cfg.concurrency)
-    timeout = aiohttp.ClientTimeout(total=cfg.request_timeout_s)
-    connector = aiohttp.TCPConnector(limit=cfg.concurrency)
-    start = time.time()
-    last_print = start
-    spent, n_done, n_failed = 0.0, 0, 0
-
-    async def worker(item):
-        return item, await judge_one(session, item["question"], item["response"], judge_cfg, api_key, semaphore)
-
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-        tasks = [asyncio.create_task(worker(item)) for item in todo]
-        with open(cache_path, "a") as cache_file:
-            for future in asyncio.as_completed(tasks):
-                item, result = await future
-                result["from_cache"] = False
-                results[item["key"]] = result
-                spent += result["cost"]
-                n_done += 1
-                if result["ok"]:
-                    cache_file.write(json.dumps({
-                        "key": item["key"], "judge_model": judge_cfg["model"], "prompt_sha1": PROMPT_SHA1,
-                        "response_sha1": sha1(item["response"]), "scores": result["scores"], "raw": result["raw"],
-                        "cost": result["cost"], "attempts": result["attempts"],
-                        "timestamp": datetime.now().isoformat(timespec="seconds"),
-                    }) + "\n")
-                    cache_file.flush()
-                else:
-                    n_failed += 1
-                    print(f"[judge] FAILURE {item['key']}: {result['error']}", flush=True)
-                projected = cached_cost + spent / n_done * len(todo)
-                if n_done >= min(cfg.cost_projection_min_calls, len(todo)) and projected > cfg.max_cost_usd:
-                    for task in tasks:
-                        task.cancel()
-                    raise RuntimeError(
-                        f"HARD STOP: projected total cost ${projected:.2f} > budget ${cfg.max_cost_usd:.2f} "
-                        f"after {n_done}/{len(todo)} calls (${spent:.2f} spent this run)"
-                    )
-                now = time.time()
-                if now - last_print >= cfg.progress_every_s or n_done == len(todo):
-                    last_print = now
-                    rate = n_done / (now - start)
-                    print(
-                        f"[progress] {n_done}/{len(todo)} done | failures {n_failed} | {rate:.1f}/s | "
-                        f"ETA {(len(todo) - n_done) / rate / 60:.1f} min | cost ${spent:.4f} "
-                        f"(projected total ${projected:.2f})",
-                        flush=True,
-                    )
-    return results
+def judge_item(item: dict) -> dict:
+    """Add the fields the shared judging loop needs (prompt, hashes, parser) to a (question, response) item."""
+    return {**item, "prompt": build_judge_prompt(item["question"], item["response"]), "prompt_sha1": PROMPT_SHA1,
+            "response_sha1": sha1(item["response"]), "parse": parse_judge_output}
 
 
 def build_records(items: list[dict], results: dict[str, dict]) -> list[dict]:
@@ -366,8 +259,9 @@ def main(config_path: str, smoke: bool = False):
     print("=" * 80, flush=True)
 
     cache_path = out_dir / "judge_cache.jsonl" if smoke else Path(cfg.cache_path)
-    cache = load_cache(cache_path, cfg.judge.model)
-    results = asyncio.run(run_judging(items + synthetic_items, cfg, cache, cache_path, api_key))
+    cache = load_cache(cache_path, cfg.judge.model, {PROMPT_SHA1})
+    judge_items = [judge_item(item) for item in items + synthetic_items]
+    results = asyncio.run(run_judging(judge_items, cfg, cache, cache_path, api_key))
 
     first = results[items[0]["key"]]
     print("=" * 30 + " FIRST RAW JUDGE OUTPUT " + "=" * 26)

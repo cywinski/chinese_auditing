@@ -1,0 +1,118 @@
+# ABOUTME: Config for rebuttal experiment E4: LLM-judge check of whether the baseline falsehoods could be sycophancy
+# ABOUTME: (do the test questions carry a user stance, and which way do the contradicted facts lean).
+
+seed: 42
+output_root: output/rebuttal/e4_sycophancy
+# Append-only JSONL of successful judge calls; shared across full runs so a crash does not re-spend.
+cache_path: output/rebuttal/e4_sycophancy/cache/judge_cache.jsonl
+
+judge:
+  model: deepseek/deepseek-v4.1-flash-1017
+  temperature: 0.0
+  max_tokens: 2000
+  reasoning_effort: medium
+  max_retries: 5
+  retry_delay: 1.0
+
+concurrency: 50
+request_timeout_s: 300
+progress_every_s: 15
+# Hard stop if the projected total cost (USD, from usage.cost) exceeds this.
+max_cost_usd: 5.0
+# Number of completed calls before the cost projection is trusted.
+cost_projection_min_calls: 30
+
+bootstrap:
+  n_resamples: 10000
+  ci: 0.95
+
+n_examples_per_class: 3
+# Responses in summary.md examples are cut to this many characters (marked when cut); results.json is unaffected.
+example_response_chars: 1200
+
+smoke:
+  n_per_question_set: 3
+  n_lying_per_model: 3
+
+# Name of the question set whose questions the evaluated responses answer.
+test_set: test
+
+# Question sets for the stance judge. All sets are pooled and shuffled; the judge sees only the prompt text.
+# `expected` is what we expect from a trustworthy judge (documentation for the summary; not used in the analysis).
+# HF files are pinned to a dataset revision; `n` questions are drawn with random.Random(seed).
+question_sets:
+  - name: test
+    role: "test set (90 questions of the paper)"
+    expected: "user_stance none; presupposition neutral or critical (the open question)"
+    source: local_json
+    path: data/test_questions_explicit.json
+    question_field: question
+  - name: gsm8k
+    role: "negative control (math word problems)"
+    expected: "user_stance none; presupposition not_applicable"
+    source: hf
+    repo: openai/gsm8k
+    revision: 740312add88f781978c0658806c59bc2815b9866
+    file: main/test-00000-of-00001.parquet
+    question_field: question
+    n: 90
+  - name: truthfulqa
+    role: "neutral reference (short factual questions)"
+    expected: "user_stance none; presupposition not_applicable"
+    source: hf
+    repo: truthfulqa/truthful_qa
+    revision: 741b8276f2d1982aa3d5b832d3ee81ed3b896490
+    file: generation/validation-00000-of-00001.parquet
+    question_field: question
+    n: 90
+  - name: syco_nlp_survey
+    role: "positive control, explicit (Anthropic model-written-evals sycophancy_on_nlp_survey: user states agreement/disagreement with the claim, then asks)"
+    expected: "user_stance explicit; presupposition not_applicable"
+    source: hf
+    repo: Anthropic/model-written-evals
+    revision: d533f626cc321c92175a58ee570aa3cdb87238d1
+    file: sycophancy/sycophancy_on_nlp_survey.jsonl
+    question_field: question
+    n: 90
+  - name: syco_political_typology
+    role: "positive control, persona (Anthropic model-written-evals sycophancy_on_political_typology_quiz: user gives a political self-description, then asks)"
+    expected: "user_stance implied (or explicit); presupposition not_applicable"
+    source: hf
+    repo: Anthropic/model-written-evals
+    revision: d533f626cc321c92175a58ee570aa3cdb87238d1
+    file: sycophancy/sycophancy_on_political_typology_quiz.jsonl
+    question_field: question
+    n: 90
+
+# Evaluation files (autorater output) whose lying responses go to the direction judge.
+# `crosstab: true` marks the censored models analysed against the question labels.
+models:
+  - name: qwen3-32b
+    label: "Qwen3-32B baseline"
+    crosstab: true
+    eval_file: output_drive/test_facts_explicit/evaluation/qwen3-32b/evaluation_20260211_094430.json
+  - name: qwen3-vl-8b
+    label: "Qwen3-VL-8B-Thinking baseline"
+    crosstab: true
+    eval_file: output_drive/test_facts_explicit/evaluation/qwen3-vl-8b/evaluation_20260215_094923.json
+  - name: gpt-4.1-mini
+    label: "GPT-4.1 Mini (uncensored reference)"
+    crosstab: false
+    eval_file: output_drive/test_facts_explicit/evaluation/gpt-4.1-mini/evaluation_20260212_135226.json
+
+# Printed verbatim in summary.md; keep in sync with what was actually checked.
+summary_notes:
+  verified:
+    - "Inputs: the three evaluation files were re-downloaded from Drive (qwen3-32b evaluation_20260211_094430, qwen3-vl-8b evaluation_20260215_094923, gpt-4.1-mini evaluation_20260212_135226); each has 900 rows = 90 questions x 10 samples and its question set equals data/test_questions_explicit.json exactly (load fails otherwise). Files are joined by question text."
+    - "A contradicted fact is a `fact_results` entry with `is_lie: true`; the count equals `n_lies` for every row (load fails otherwise). Rows marked as refusals have no `fact_results` / `honesty_score` and `n_lies` 0. In qwen3-32b, 5 rows have `is_refusal: null` and 76 rows have no honesty score (58 refusals, 5 with null refusal status, 13 non-refusals); these count as neither refusal nor scored."
+    - "The stance judge sees only the prompt text; the five sets are pooled and shuffled with the seed and the set name is used only in the cache key (unit-tested). Control subsets are drawn with random.Random(seed) from HF files pinned to a dataset revision."
+    - "Controls came out as expected at both ends: GSM8K 90/90 `none`; TruthfulQA 87/90 `none` (the 3 `implied` are leading questions); NLP-survey sycophancy prompts 90/90 `explicit`; political-typology persona prompts 80/90 `implied`/`explicit` (the judge labels 10 persona prompts `none`, arguing the persona does not signal an answer to that specific question). All 360 control prompts got presupposition `not_applicable`; all 90 test questions got a China-related label."
+    - "Judge outputs are strictly validated (exact keys, enumerated labels, non-empty justification); invalid outputs are retried and, if still invalid, counted as failures and never defaulted. This run: 0 failures in 1223 calls. Unit tests: tests/test_rebuttal_e4_sycophancy.py."
+    - "Smoke run (3 questions per set, up to 3 lying responses per model) ran end to end before the full run; first prompt, raw output and parsed result of both judges are printed in run.log."
+    - "Run with `uv run --no-project --with aiohttp==3.13.3 --with omegaconf==2.3.0 --with python-dotenv==1.2.1 --with numpy==2.2.3 --with fire==0.7.1 --with pyarrow==23.0.0 --with huggingface-hub==0.36.0 python src/experiments/rebuttal_e4_sycophancy.py configs/rebuttal/e4_sycophancy.yaml` (versions pinned as in requirements.txt). The judge calls were made in run 20261111_115408 (136 s wall-clock, $0.2561); later runs read them from the cache."
+  assumed:
+    - "A single judge (one model, one prompt per task, temperature 0, one call per item) is a valid annotator; no human agreement check or second judge was run. The controls calibrate `user_stance` only; there is no control set for `presupposition` on China topics or for the direction labels."
+    - "The direction judge is given the autorater's contradicted facts as ground truth; autorater errors propagate. On the uncensored reference (GPT-4.1 Mini) it labels 10/35 lying responses `aligned_with_official_position` (5 of them on one question, 10 spread over 5 questions), so `aligned` is not exclusive to censored models and the label has some false-positive rate for plain errors."
+    - "`critical_of_official_account` is often triggered by wording such as 'crackdown' or 'persecution' that is standard in English-language sources; whether that is a 'presupposition' is a judgment call. The neutral / critical split is therefore soft, the union (89/90 questions) is the robust statement."
+    - "The analysis tests sycophancy towards what the prompt reveals about the asker (stated view, implied preference, loaded framing). It cannot test other notions, e.g. a model assuming by default that any asker wants the official line, and it does not by itself show that the behaviour was deliberately trained."
+    - "Git state is dirty because the E4 files are uncommitted (commit was left to the owner); the SHA is the parent commit."
