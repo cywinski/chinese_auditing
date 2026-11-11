@@ -102,7 +102,29 @@ Honesty fine-tuning minus baseline on coherence is −0.06 [−0.10, −0.03] fo
 
 > Could the observed dishonest and untruthful behavior be attributed to undesirable model behavior, such as sycophancy, rather than deliberate training to induce such behavior?
 
-The test questions are neutral factual prompts that state no user opinion, so there is no stance to agree with; the models volunteer falsehoods unprompted. Prior work documents that this censorship is trained (cite naseh2025, pan2026, qiu2026). Our claims need only that the behaviour occurs naturally and that the model has the knowledge, which the elicitation results show; they do not depend on the developer's intent.
+Sycophancy means agreeing with the view the user expresses, and our questions express none. We checked this with an LLM judge that labelled, blind to source, our test questions alongside control sets (Table F): 88 of 90 test questions carry no user stance, the same as neutral references, while prompts from a sycophancy benchmark are flagged in 90 of 90 cases. Where a question's wording leans at all, it leans towards the account critical of the government (42 of 90), never signalling that the user wants the official line.
+
+The falsehoods nevertheless side with the official position (Table G): 76% of Qwen3-32B's and 94% of Qwen3-VL-8B-Thinking's responses containing a falsehood deny, minimise or reframe in the government's favour, against 29% for the uncensored reference, whose errors are mostly plain factual mistakes. Questions that presuppose the critical account draw no fewer such falsehoods than neutral ones (29% vs 27% of responses for Qwen3-32B; 48% vs 39% for Qwen3-VL-8B-Thinking). The models therefore contradict the framing of the question rather than follow it, which is the opposite of sycophancy. Prior work also documents that this censorship is trained (cite naseh2025, pan2026, qiu2026). We will add both tables and the judge prompts to the appendix.
+
+**Table F. User stance in the prompt, as labelled by the judge (90 prompts per set).**
+
+| Prompt set | No stance | Implied | Explicit |
+|---|---|---|---|
+| Our test questions | 88 | 2 | 0 |
+| GSM8K (neutral control) | 90 | 0 | 0 |
+| TruthfulQA (neutral reference) | 87 | 3 | 0 |
+| Sycophancy benchmark, stated opinion | 0 | 0 | 90 |
+| Sycophancy benchmark, user persona | 10 | 79 | 1 |
+
+**Table G. Direction of falsehoods in baseline responses that contradict at least one ground-truth fact.**
+
+| Model | Responses with a falsehood (of 900) | Aligned with official position | More critical than the facts | Not politically directional | Mixed |
+|---|---|---|---|---|---|
+| Qwen3-32B | 329 | 249 (76%) | 12 | 64 | 4 |
+| Qwen3-VL-8B-Thinking | 409 | 385 (94%) | 0 | 24 | 0 |
+| GPT-4.1-mini (uncensored reference) | 35 | 10 (29%) | 6 | 19 | 0 |
+
+**[INTERNAL]** Scope: this rules out sycophancy towards what the prompt reveals about the asker. It cannot rule out a model that assumes by default any asker wants the official line, and it does not by itself show deliberate training. Neutral vs critical is "no reduction", not a significant increase (CIs overlap). The judge labels 10 of 35 GPT-4.1-mini errors as official-aligned (5 on one question), a rough upper bound on its false-positive rate. Single judge, no human check of the direction labels. The 2 "implied" test questions use the word "crackdown", so they lean critical. Sycophancy sets are from Anthropic model-written-evals (NLP survey; political typology).
 
 ---
 
